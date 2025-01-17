@@ -1,9 +1,11 @@
 package bungie
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 const (
@@ -15,14 +17,21 @@ func GetPGCR(client *http.Client, baseURL string, instanceId int64, apiKey strin
 	req, _ := http.NewRequest("GET", instanceUrl, nil)
 	req.Header.Set("X-API-KEY", apiKey)
 
+	// Create a context that will cancel the request if it takes longer than 60 seconds
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+
+	req = req.WithContext(ctx)
+
 	resp, err := client.Do(req)
 	if err != nil {
+		cancel()
 		return nil, -1, nil, err
 	}
 
 	decoder := json.NewDecoder(resp.Body)
 	return decoder, resp.StatusCode, func() {
 		resp.Body.Close()
+		cancel()
 	}, nil
 
 }

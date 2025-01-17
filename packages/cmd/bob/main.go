@@ -100,7 +100,7 @@ func main() {
 		log.Fatalf("Error refreshing materialized view p_stats_cache: %s", err)
 	}
 	log.Printf("Materialized View p_stats_cache updated in %s", time.Since(start))
-	
+
 	// This update the player_stats and global_stats tables
 	wg.Add(1)
 	go func() {
@@ -122,7 +122,7 @@ func main() {
 		}
 		log.Printf("player_stats updated in %s", time.Since(start))
 	}()
-	
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

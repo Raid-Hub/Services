@@ -84,7 +84,10 @@ func main() {
 		log.Fatalf("Error connecting to the database: %s", err)
 	}
 	defer db.Close()
-	stmnt, err := db.Prepare("SELECT instance_id FROM activity INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
+	stmnt, err := db.Prepare("SELECT instance_id FROM instance INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
+	if err != nil {
+		log.Fatalf("Error preparing statement: %s", err)
+	}
 	var numbers []int64
 	for num := range uniqueNumbers {
 		var foo int64

@@ -23,6 +23,7 @@ func offloadWorker(ch chan int64, rabbitChannel *amqp.Channel, db *sql.DB) {
 		// Spawn a worker for each instanceId
 		go func(instanceId int64) {
 			log.Printf("Offloading instanceId %d", instanceId)
+			time.Sleep(15 * time.Second)
 			startTime := time.Now()
 			for i := 1; i <= 5; i++ {
 				result, activity, raw, err := pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)

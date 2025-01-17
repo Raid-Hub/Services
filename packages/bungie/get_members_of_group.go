@@ -20,11 +20,11 @@ type SearchResultOfGroupMember struct {
 	Results []GroupMember `json:"results"`
 }
 
-func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, error) {
+func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, int, error) {
 	url := fmt.Sprintf("%s/Platform/GroupV2/%d/Members/?currentpage=%d&memberType=0", getBungieURL(), groupId, page)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	apiKey := os.Getenv("BUNGIE_API_KEY") // Read the API key from the BUNGIE_API_KEY environment variable
@@ -32,7 +32,7 @@ func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, err
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 	defer resp.Body.Close()
 
@@ -41,7 +41,7 @@ func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, err
 	if resp.StatusCode != http.StatusOK {
 		var data BungieError
 		if err := decoder.Decode(&data); err != nil {
-			return nil, err
+			return nil, data.ErrorCode, err
 		}
 
 		defer func() {
@@ -50,13 +50,13 @@ func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, err
 			}
 		}()
 
-		return nil, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
+		return nil, data.ErrorCode, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}
 
 	var data GetMembersOfGroupResponse
 	if err := decoder.Decode(&data); err != nil {
-		return nil, err
+		return nil, data.ErrorCode, err
 	}
 
-	return &data.Response, nil
+	return &data.Response, data.ErrorCode, nil
 }

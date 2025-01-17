@@ -52,7 +52,9 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 				endDate := pgcr.CalculateDateCompleted(startDate, raw.Entries[0])
 
 				lag := time.Since(endDate)
-				monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+				if lag >= 0 {
+					monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+				}
 				break
 			} else if result == pgcr.Success {
 				lag, committed, err := pgcr.StorePGCR(activity, raw, db, rabbitChannel)
@@ -72,9 +74,9 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 					}
 					break
 				}
-			} else if result == pgcr.InternalError {
+			} else if result == pgcr.InternalError || result == pgcr.DecodingError {
 				errCount++
-				time.Sleep(10 * time.Second)
+				time.Sleep(time.Duration(10*errCount) * time.Second)
 			} else if result == pgcr.NotFound {
 				notFoundCount++
 			} else if result == pgcr.SystemDisabled {

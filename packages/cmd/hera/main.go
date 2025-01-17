@@ -95,7 +95,11 @@ func main() {
 			for player := range queue {
 				res, err := bungie.GetGroupsForMember(player.membershipType, player.membershipId)
 				if err != nil {
-					log.Fatalf("Error getting groups for player %d: %s", player.membershipId, err)
+					// retry
+					res, err = bungie.GetGroupsForMember(player.membershipType, player.membershipId)
+					if err != nil {
+						log.Fatalf("Error getting groups for player %d: %s", player.membershipId, err)
+					}
 				}
 				atomic.AddInt32(playerCountPointer, 1)
 
@@ -178,13 +182,18 @@ func main() {
 				}
 
 				for page := 1; ; page++ {
-					results, err := bungie.GetMembersOfGroup(group.GroupId, page)
+					results, _, err := bungie.GetMembersOfGroup(group.GroupId, page)
+
 					if err != nil {
 						time.Sleep(5 * time.Second)
-						results, err = bungie.GetMembersOfGroup(group.GroupId, page)
+						results2, errCode, err := bungie.GetMembersOfGroup(group.GroupId, page)
+						if errCode == 686 { // Group not found
+							break
+						}
 						if err != nil {
 							log.Fatalf("Error getting members of group %d: %s", group.GroupId, err)
 						}
+						results = results2
 					}
 
 					atomic.AddInt32(clanMemberCountPointer, int32(len(results.Results)))

@@ -22,6 +22,7 @@ const (
 	InsufficientPrivileges PGCRResult = 5
 	BadFormat              PGCRResult = 6
 	InternalError          PGCRResult = 7
+	DecodingError          PGCRResult = 8
 )
 
 var (
@@ -59,7 +60,7 @@ func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (
 				// Rate Limit
 				time.Sleep(120 * time.Second)
 			}
-			return BadFormat, nil, nil, err
+			return DecodingError, nil, nil, err
 		}
 		monitoring.GetPostGameCarnageReportRequest.WithLabelValues(data.ErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 
@@ -87,13 +88,13 @@ func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (
 			return InsufficientPrivileges, nil, nil, fmt.Errorf("%s", data.ErrorStatus)
 		}
 
-		return BadFormat, nil, nil, nil
+		return DecodingError, nil, nil, nil
 	}
 
 	var data bungie.DestinyPostGameCarnageReportResponse
 	if err := decoder.Decode(&data); err != nil {
 		log.Printf("Error decoding response for instanceId %d: %s", instanceID, err)
-		return BadFormat, nil, nil, err
+		return DecodingError, nil, nil, err
 	}
 	monitoring.GetPostGameCarnageReportRequest.WithLabelValues(data.ErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 
