@@ -1,67 +1,52 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"raidhub/packages/async/pgcr_clickhouse"
-	"raidhub/packages/bungie"
-	"raidhub/packages/pgcr"
+	"raidhub/packages/cheat_detection"
 	"raidhub/packages/postgres"
-	"raidhub/packages/rabbit"
+	"sync"
 )
 
 func main() {
-	conn, err := rabbit.Init()
-	defer rabbit.Cleanup()
-	if err != nil {
-		panic(err)
-	}
-
-	ch, err := conn.Channel()
-	if err != nil {
-		panic(err)
-	}
-
 	db, err := postgres.Connect()
 	if err != nil {
-		panic(err)
+		log.Fatal("Error connecting to postgres", err)
 	}
 	defer db.Close()
 
-	rows, err := db.Query(`select data from pgcr join instance using (instance_id) where hash = 2192826039`)
+	rows, err := db.Query("SELECT instance_id FROM instance WHERE completed ORDER BY instance_id DESC")
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error getting instance_ids: %s", err)
 	}
 	defer rows.Close()
 
-	log.Println("done querying")
+	log.Println("Starting cheat check")
 
-	for rows.Next() {
-		var data bungie.DestinyPostGameCarnageReport
-		var bytes []byte
-		err = rows.Scan(&bytes)
-		if err != nil {
-			panic(err)
-		}
-
-		// Decompress the JSON data
-		decompressedJSON, err := pgcr.GzipDecompress(bytes)
-		if err != nil {
-			panic(err)
-		}
-
-		// Unmarshal the JSON back to a struct
-		err = json.Unmarshal(decompressedJSON, &data)
-		if err != nil {
-			panic(err)
-		}
-
-		processed, err := pgcr.ProcessDestinyReport(&data)
-		if err != nil {
-			panic(err)
-		}
-
-		log.Println(processed.InstanceId)
-		pgcr_clickhouse.SendToClickhouse(ch, processed)
+	workers := 50
+	var wg sync.WaitGroup
+	ch := make(chan int64, workers*1024)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for instanceId := range ch {
+				_, _, _, err := cheat_detection.CheckForCheats(instanceId, db)
+				if err != nil {
+					log.Printf("Failed to process cheat_check for instance %d: %v", instanceId, err)
+					ch <- instanceId
+				}
+			}
+		}()
 	}
+	for rows.Next() {
+		var instanceId int64
+		err = rows.Scan(&instanceId)
+		if err != nil {
+			log.Fatalf("Error getting instance_id: %s", err)
+		}
+		ch <- instanceId
+	}
+	close(ch)
+	wg.Wait()
+
 }

@@ -52,11 +52,16 @@ func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (
 	if statusCode != http.StatusOK {
 		var data bungie.BungieError
 		if err := decoder.Decode(&data); err != nil {
-			log.Printf("Error decoding response for instanceId %d: %s", instanceID, err)
+			log.Printf("Error decoding %d response for instanceId %d: %s", statusCode, instanceID, err)
 			monitoring.GetPostGameCarnageReportRequest.WithLabelValues(fmt.Sprintf("Unknown%d", statusCode)).Observe(float64(time.Since(start).Milliseconds()))
+			// Handle a few cases here
 			if statusCode == 404 {
 				return NotFound, nil, nil, err
-			} else if statusCode == 403 {
+			} else if statusCode == 429 {
+				return SystemDisabled, nil, nil, err
+			}
+			
+			if statusCode == 403 {
 				// Rate Limit
 				time.Sleep(120 * time.Second)
 			}

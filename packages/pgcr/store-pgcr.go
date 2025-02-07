@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"raidhub/packages/async/character_fill"
+	"raidhub/packages/async/pgcr_cheat_check"
 	"raidhub/packages/async/pgcr_clickhouse"
 	"raidhub/packages/async/player_crawl"
 	"raidhub/packages/bungie"
@@ -383,6 +384,8 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 	for _, req := range characterRequests {
 		character_fill.SendMessage(channel, &req)
 	}
+
+	err = pgcr_cheat_check.SendMessage(channel, pgcr.InstanceId)
 
 	return &lag, true, nil
 }

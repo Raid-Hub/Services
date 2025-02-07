@@ -6,6 +6,7 @@ import (
 	"raidhub/packages/async/bonus_pgcr"
 	"raidhub/packages/async/character_fill"
 	"raidhub/packages/async/clan_crawl"
+	"raidhub/packages/async/pgcr_cheat_check"
 	"raidhub/packages/async/pgcr_clickhouse"
 	"raidhub/packages/async/player_crawl"
 	"raidhub/packages/bungie"
@@ -79,6 +80,11 @@ func main() {
 	clanQueue.Wg = &readonlyGroupsApiWg
 	go clanQueue.Register(1)
 
+	cheatDetectionQueue := pgcr_cheat_check.Create()
+	cheatDetectionQueue.Db = db
+	cheatDetectionQueue.Conn = conn
+	go cheatDetectionQueue.Register(1)
+
 	monitoring.RegisterPrometheus(8083)
 
 	// Set up Bungie API monitoring
@@ -93,7 +99,11 @@ func main() {
 				time.Sleep(5 * time.Second)
 				res, err = bungie.GetCommonSettings()
 				if err != nil {
-					log.Fatalf("[Fatal] Failed to get common settings: %s", err)
+					destiny2ApiWg.Add(1)
+					destiny2Enabled = false
+					log.Printf("Destiny 2 API is down or erroring")
+					time.Sleep(90 * time.Second)
+					continue
 				}
 			}
 

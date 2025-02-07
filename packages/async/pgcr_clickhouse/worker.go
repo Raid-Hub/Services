@@ -46,25 +46,10 @@ func process_queue(clickhouse *driver.Conn, msgs <-chan amqp.Delivery) {
 			}
 		case <-timer.C:
 			if len(batch) > 0 {
-				// Process 2^n messages at a time
-				chunkSize := 1
-				for chunkSize*2 <= len(batch) {
-					chunkSize *= 2
-				}
-				chunk := batch[0:chunkSize]
-				process(chunk, clickhouse)
-				batch = batch[chunkSize:]
+				process(batch, clickhouse)
+				batch = batch[:0]
 			}
 
-			if len(batch) > 0 {
-				var request pgcr_types.ProcessedActivity
-				msg := batch[0]
-				if err := json.Unmarshal(msg.Body, &request); err != nil {
-					log.Fatal("Failed to unmarshal activity:", err)
-				} else {
-					log.Printf("Left %d messages in the queue. Peeking ahead: %d", len(batch), request.InstanceId)
-				}
-			}
 			timer.Reset(batchTime)
 		}
 
