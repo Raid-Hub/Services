@@ -39,17 +39,42 @@ var GetPostGameCarnageReportRequest = prometheus.NewHistogramVec(
 	[]string{"status"},
 )
 
-// Track the count of each Bungie error code returned by the API
-func RegisterPrometheus(port int) {
-	prometheus.MustRegister(ActiveWorkers)
-	prometheus.MustRegister(PGCRCrawlLag)
-	prometheus.MustRegister(PGCRCrawlStatus)
-	prometheus.MustRegister(GetPostGameCarnageReportRequest)
+var PGCRStoreActivity = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "pgcr_instance_type",
+	},
+	[]string{"activity_name", "version_name", "completed"},
+)
 
+var FloodgatesRecent = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "floodgates_recent_pgcr",
+	},
+)
+
+func serveMetrics(port int) {
 	http.Handle("/metrics", promhttp.Handler())
 
 	go func() {
 		port := fmt.Sprintf(":%d", port)
 		log.Fatal(http.ListenAndServe(port, nil))
 	}()
+}
+
+// Track the count of each Bungie error code returned by the API
+func RegisterAtlas(port int) {
+	prometheus.MustRegister(ActiveWorkers)
+	prometheus.MustRegister(PGCRCrawlLag)
+	prometheus.MustRegister(PGCRCrawlStatus)
+	prometheus.MustRegister(GetPostGameCarnageReportRequest)
+	prometheus.MustRegister(PGCRStoreActivity)
+
+	serveMetrics(port)
+}
+
+func RegisterHermes(port int) {
+	prometheus.MustRegister(FloodgatesRecent)
+	prometheus.MustRegister(PGCRStoreActivity)
+
+	serveMetrics(port)
 }

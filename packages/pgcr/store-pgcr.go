@@ -2,12 +2,14 @@ package pgcr
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"raidhub/packages/async/character_fill"
 	"raidhub/packages/async/pgcr_cheat_check"
 	"raidhub/packages/async/pgcr_clickhouse"
 	"raidhub/packages/async/player_crawl"
 	"raidhub/packages/bungie"
+	"raidhub/packages/monitoring"
 	"raidhub/packages/pgcr_types"
 	"raidhub/packages/postgres"
 	"sync"
@@ -22,11 +24,14 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 	// Identify the raid which this PGCR belongs to
 	var activityId int
 	var isRaid bool
-	err := db.QueryRow(`SELECT activity_id, is_raid 
+	var activityName string
+	var versionName string
+	err := db.QueryRow(`SELECT activity_id, is_raid, activity_definition.name, version_definition.name
 			FROM activity_version 
 			JOIN activity_definition ON activity_version.activity_id = activity_definition.id 
+			JOIN version_definition ON activity_version.version_id = version_definition.id
 			WHERE hash = $1`,
-		pgcr.Hash).Scan(&activityId, &isRaid)
+		pgcr.Hash).Scan(&activityId, &isRaid, &activityName, &versionName)
 	if err != nil {
 		log.Printf("Error finding activity_id for %d", pgcr.Hash)
 		return nil, false, err
@@ -303,6 +308,10 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 				log.Printf("Error updating first clear for instanceId, membershipId %d, %d", pgcr.InstanceId, membershipId)
 				return nil, false, err
 			}
+
+			// crawl the player on first clear
+			log.Printf("Crawling player %d on first clear in instance %d", membershipId, pgcr.InstanceId)
+			player_crawl.SendMessage(channel, playerActivity.Player.MembershipId)
 		}
 
 		// raid specific stats
@@ -383,6 +392,11 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 
 	for _, req := range characterRequests {
 		character_fill.SendMessage(channel, &req)
+	}
+
+	if pgcr.DateCompleted.After(time.Now().Add(-5 * time.Hour)) {
+		// If the PGCR is newer than 5 hours, we consider it a new PGCR
+		monitoring.PGCRStoreActivity.WithLabelValues(activityName, versionName, fmt.Sprintf("%v", pgcr.Completed)).Inc()
 	}
 
 	err = pgcr_cheat_check.SendMessage(channel, pgcr.InstanceId)

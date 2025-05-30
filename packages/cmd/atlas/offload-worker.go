@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
 
+	"raidhub/packages/async/pgcr_blocked"
 	"raidhub/packages/monitoring"
 	"raidhub/packages/pgcr"
 
@@ -33,7 +35,7 @@ func offloadWorker(ch chan int64, rabbitChannel *amqp.Channel, db *sql.DB) {
 				monitoring.PGCRCrawlStatus.WithLabelValues(statusStr, attemptsStr).Inc()
 
 				if err != nil {
-					log.Println(err)
+					log.Printf("[Offload Worker] Error fetching instanceId %d: %s", instanceId, err)
 				}
 
 				if result == pgcr.NonRaid {
@@ -54,6 +56,12 @@ func offloadWorker(ch chan int64, rabbitChannel *amqp.Channel, db *sql.DB) {
 					i--
 					time.Sleep(60 * time.Second)
 					continue
+				} else if result == pgcr.InsufficientPrivileges {
+					pgcr_blocked.SendMessage(rabbitChannel, instanceId)
+					return
+				} else if result == pgcr.ExternalError {
+					i--
+					continue
 				}
 
 				if i == 3 {
@@ -61,10 +69,10 @@ func offloadWorker(ch chan int64, rabbitChannel *amqp.Channel, db *sql.DB) {
 				}
 
 				// Exponential Backoff
-				time.Sleep(time.Duration(10*i*i) * time.Second)
+				time.Sleep(time.Duration(i*(2*i+rand.Intn(5*(i)))) * time.Second)
 			}
-			go logMissedInstance(instanceId, startTime)
 
+			logMissedInstance(instanceId, startTime)
 		}(id)
 	}
 }

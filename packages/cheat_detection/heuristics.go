@@ -13,14 +13,33 @@ const (
 	Master      = 4
 )
 
+func stringOfVersion(version int) string {
+	switch version {
+	case Any:
+		return "Any"
+	case Standard:
+		return "Standard"
+	case Prestige:
+		return "Prestige"
+	case GuidedGames:
+		return "Guided Games"
+	case Master:
+		return "Master"
+	default:
+		return "Unknown"
+	}
+}
+
 type DateRange struct {
 	Start time.Time
 	End   time.Time
 }
 
 type LowmanData struct {
-	MinPlayers int
-	Range      []DateRange
+	MinPlayers    int
+	Range         []DateRange
+	CheatedChance float64
+	MinTime       time.Duration
 }
 
 type SpeedrunData struct {
@@ -51,22 +70,30 @@ var SalvationsEdgeHeuristic = ActivityHeuristic{
 				MinPlayers: 1,
 				Range: []DateRange{
 					{Start: time.Date(2024, time.July, 11, 9, 36, 31, 0, time.UTC), End: time.Date(2024, time.July, 23, 17, 0, 0, 0, time.UTC)},
+					{Start: time.Date(2025, time.March, 28, 14, 0, 0, 0, time.UTC), End: time.Date(2099, time.December, 31, 17, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.20,
+				MinTime:       9 * time.Minute,
 			},
 			{
-				MinPlayers: 2,
+				MinPlayers:    2,
+				CheatedChance: 0.10,
+				MinTime:       4 * time.Minute,
 			},
 		},
 		Master: {
 			{
-				MinPlayers: 2,
+				MinPlayers:    2,
+				CheatedChance: 0.15,
+				MinTime:       5 * time.Minute,
 			},
 		},
 	},
 	FreshLowman: map[int][]LowmanData{
-		0: {
+		Any: {
 			{
-				MinPlayers: 4,
+				MinPlayers:    4,
+				CheatedChance: 0.04,
 			},
 		},
 	},
@@ -122,7 +149,7 @@ var CrotasEndHeuristic = ActivityHeuristic{
 	SpeedrunCurve: func(daysAfterRelease float64) float64 {
 		return 1288.97 - (38.84 * math.Log10(math.Pow(daysAfterRelease+1.00, 9.50)))
 	},
-	MinFreshKills:      900,
+	MinFreshKills:      760,
 	MinCheckpointKills: 1, // finishers :(
 }
 
@@ -137,7 +164,7 @@ var RootOfNightmaresHeuristic = ActivityHeuristic{
 		return 924.81 - (40.46 * math.Log10(math.Pow(daysAfterRelease+1.00, 4.11)))
 	},
 	MinFreshKills:      430,
-	MinCheckpointKills: 40,
+	MinCheckpointKills: 33,
 }
 
 var KingsFallHeuristic = ActivityHeuristic{
@@ -148,7 +175,9 @@ var KingsFallHeuristic = ActivityHeuristic{
 	CheckpointLowman: map[int][]LowmanData{
 		0: {
 			{
-				MinPlayers: 2,
+				MinPlayers:    2,
+				CheatedChance: 0.05,
+				MinTime:       5 * time.Minute,
 			},
 		},
 	},
@@ -175,6 +204,7 @@ var VowOfTheDiscipleHeuristic = ActivityHeuristic{
 		0: {
 			{
 				MinPlayers: 3,
+				MinTime:    3 * time.Minute,
 			},
 		},
 	},
@@ -186,10 +216,10 @@ var VowOfTheDiscipleHeuristic = ActivityHeuristic{
 		},
 	},
 	SpeedrunCurve: func(daysAfterRelease float64) float64 {
-		return 1887.74 - (38.67 * math.Log10(math.Pow(daysAfterRelease+5.00, 8.16)))
+		return 1887.74 - (38.67 * math.Log10(math.Pow(daysAfterRelease+5.00, 8.05)))
 	},
-	MinFreshKills:      775,
-	MinCheckpointKills: 120,
+	MinFreshKills:      770,
+	MinCheckpointKills: 125,
 }
 
 var VaultOfGlassHeuristic = ActivityHeuristic{
@@ -205,9 +235,12 @@ var VaultOfGlassHeuristic = ActivityHeuristic{
 					{Start: time.Date(2021, time.July, 14, 0, 0, 0, 0, time.UTC), End: time.Date(2021, time.December, 7, 0, 0, 0, 0, time.UTC)},
 					{Start: time.Date(2023, time.October, 20, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.15,
+				MinTime:       5 * time.Minute,
 			},
 			{
 				MinPlayers: 2,
+				MinTime:    105 * time.Second, // 1 minute 45 seconds
 			},
 		},
 		Master: {
@@ -216,22 +249,32 @@ var VaultOfGlassHeuristic = ActivityHeuristic{
 				Range: []DateRange{
 					{Start: time.Date(2024, time.February, 12, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.December, 7, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.20,
+				MinTime:       2 * time.Minute,
 			},
 			{
 				MinPlayers: 2,
+				MinTime:    2 * time.Minute,
 			},
 		},
 	},
 	FreshLowman: map[int][]LowmanData{
-		0: {
+		Any: {
 			{
 				MinPlayers: 1,
 				Range: []DateRange{
 					{Start: time.Date(2024, time.July, 14, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.20,
 			},
 			{
 				MinPlayers: 2,
+			},
+		},
+		Master: {
+			{
+				MinPlayers:    2,
+				CheatedChance: 0.04,
 			},
 		},
 	},
@@ -255,19 +298,23 @@ var DeepStoneCryptHeuristic = ActivityHeuristic{
 					{Start: time.Date(2021, time.March, 1, 0, 0, 0, 0, time.UTC), End: time.Date(2021, time.March, 31, 0, 0, 0, 0, time.UTC)},
 					{Start: time.Date(2024, time.September, 12, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.10,
+				MinTime:       15 * time.Minute,
 			},
 			{
 				MinPlayers: 2,
+				MinTime:    5 * time.Minute,
 			},
 		},
 	},
 	FreshLowman: map[int][]LowmanData{
-		0: {
+		Any: {
 			{
 				MinPlayers: 1,
 				Range: []DateRange{
 					{Start: time.Date(2024, time.September, 12, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.20,
 			},
 			{
 				MinPlayers: 2,
@@ -293,9 +340,12 @@ var GardenOfSalvationHeuristic = ActivityHeuristic{
 				Range: []DateRange{
 					{Start: time.Date(2023, time.April, 30, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.15,
+				MinTime:       10 * time.Minute,
 			},
 			{
 				MinPlayers: 2,
+				MinTime:    5 * time.Minute,
 			},
 		},
 	},
@@ -309,7 +359,7 @@ var GardenOfSalvationHeuristic = ActivityHeuristic{
 	SpeedrunCurve: func(daysAfterRelease float64) float64 {
 		return 1304.29 - (28.15 * math.Log10(math.Pow(daysAfterRelease+5.00, 9.56)))
 	},
-	MinFreshKills:      375,
+	MinFreshKills:      385,
 	MinCheckpointKills: 120,
 }
 
@@ -369,7 +419,7 @@ var LastWishHeuristic = ActivityHeuristic{
 	ActivityId:     4,
 	RaidBit:        LastWish,
 	RaidName:       "Last Wish",
-	CheckpointName: "Riven",
+	CheckpointName: "Queenswalk",
 	CheckpointLowman: map[int][]LowmanData{
 		Any: {
 			{
@@ -378,6 +428,7 @@ var LastWishHeuristic = ActivityHeuristic{
 					{Start: time.Date(2019, time.November, 25, 2, 0, 0, 0, time.UTC), End: time.Date(2020, time.November, 10, 17, 0, 0, 0, time.UTC)},
 					{Start: time.Date(2021, time.September, 3, 19, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				MinTime: 2 * time.Minute,
 			},
 		},
 	},
@@ -389,14 +440,15 @@ var LastWishHeuristic = ActivityHeuristic{
 					{Start: time.Date(2019, time.November, 25, 2, 0, 0, 0, time.UTC), End: time.Date(2020, time.November, 10, 17, 0, 0, 0, time.UTC)},
 					{Start: time.Date(2021, time.September, 3, 19, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
 				},
+				CheatedChance: 0.05,
 			},
 		},
 	},
 	SpeedrunCurve: func(daysAfterRelease float64) float64 {
 		return 645.33 - (38.31 * math.Log10(math.Pow(daysAfterRelease+1.00, 3.24)))
 	},
-	MinFreshKills:      15,
-	MinCheckpointKills: 10,
+	MinFreshKills:      18,
+	MinCheckpointKills: 9,
 }
 
 var SpireOfStarsHeuristic = ActivityHeuristic{

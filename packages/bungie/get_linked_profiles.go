@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 )
 
 type LinkedProfilesResponse struct {
@@ -42,12 +41,6 @@ func GetLinkedProfiles(membershipType int, membershipId int64, getAllMemberships
 		if err := decoder.Decode(&data); err != nil {
 			return []DestinyUserInfo{}, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return []DestinyUserInfo{}, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

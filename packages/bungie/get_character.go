@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 )
 
 type GetCharacterResponse struct {
@@ -46,12 +45,6 @@ func GetCharacter(membershipType int32, membershipId int64, characterId int64) (
 		if err := decoder.Decode(&data); err != nil {
 			return nil, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return nil, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

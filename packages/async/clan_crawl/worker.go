@@ -35,10 +35,13 @@ func process_request(qw *async.QueueWorker, msg amqp.Delivery) {
 	}
 
 	if err != nil || !lastCrawled.Valid || time.Since(lastCrawled.Time) > 3*time.Hour {
-		res, err := bungie.GetGroup(request.GroupId)
+		res, code, err := bungie.GetGroup(request.GroupId)
 		if err != nil {
-			log.Printf("Error getting group %d: %s", request.GroupId, err)
-			return
+			if code == 622 {
+				log.Printf("Group %d not found", request.GroupId)
+			} else {
+				log.Printf("Error getting group %d: %s", request.GroupId, err)
+			}
 		}
 
 		if res.Detail.GroupType != 1 {

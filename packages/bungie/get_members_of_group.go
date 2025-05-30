@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 )
 
 type GetMembersOfGroupResponse struct {
@@ -43,12 +42,6 @@ func GetMembersOfGroup(groupId int64, page int) (*SearchResultOfGroupMember, int
 		if err := decoder.Decode(&data); err != nil {
 			return nil, data.ErrorCode, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return nil, data.ErrorCode, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

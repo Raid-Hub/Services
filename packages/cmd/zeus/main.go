@@ -24,7 +24,7 @@ import (
 
 var (
 	ipv6interface = flag.String("interface", "enp1s0", "ipv6 interface")
-	ipv6n         = flag.Int("v6_n", 1, "number of sequential ipv6 addresses")
+	ipv6n         = flag.Int("v6_n", 16, "number of sequential ipv6 addresses")
 	port          = flag.Int("port", 7777, "port to listen on")
 	printAddrs    = flag.Bool("print_addrs", false, "print ipv6 addresses")
 	verbose       = flag.Bool("verbose", false, "print logs")
@@ -89,13 +89,13 @@ func main() {
 	}
 	rp := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
+			r.URL.Scheme = "https"
+			r.Header.Set("User-Agent", "RaidHub-Zeus/1.0.0 (contact=admin@raidhub.io)")
 			if strings.Contains(r.URL.Path, "Destiny2/Stats/PostGameCarnageReport") {
 				r.URL.Host = "stats.bungie.net"
 			} else {
 				r.URL.Host = "www.bungie.net"
 			}
-			r.URL.Scheme = "https"
-			r.Header.Set("User-Agent", "")
 			r.Header.Del("x-forwarded-for")
 		},
 		Transport: proxyTransport,

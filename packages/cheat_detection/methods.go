@@ -3,6 +3,7 @@ package cheat_detection
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -12,208 +13,145 @@ var crafteningEnd = time.Date(2023, 9, 18, 4, 00, 9, 0, time.UTC)
 func (h ActivityHeuristic) apply(instance *Instance) (ResultTuple, map[int64]ResultTuple) {
 	if instance.DateCompleted.After(crafteningStart) && instance.DateStarted.Before(crafteningEnd) {
 		// We cannot apply any heuristics to instances that are part of the craftening
-		a, b, _ := nilResult()
-		return a, b
+		return ResultTuple{}, map[int64]ResultTuple{}
 	}
 
 	if !instance.Completed && (instance.Activity == 4 || instance.Activity == 11) {
 		// lot's of shuro and golgy false positive flags here potentially
-		a, b, _ := nilResult()
-		return a, b
+		return ResultTuple{}, map[int64]ResultTuple{}
 	}
+
+	var lowmanPrb float64
+	var lowmanReasonBit uint64
+	var lowmanExplanation string
 
 	if instance.Completed {
 		if instance.Fresh != nil && *instance.Fresh {
-			a, b, isAppplied := h.applyFreshLowman(instance)
-			if isAppplied {
-				return a, b
-			}
-
-			a, b, isAppplied = h.applySpeedrun(instance)
-			if isAppplied {
-				return a, b
-			}
-		}
-
-		a, b, isAppplied := h.applyCheckpointLowman(instance)
-		if isAppplied {
-			return a, b
+			lowmanPrb, lowmanReasonBit, lowmanExplanation = h.applyFreshLowman(instance)
+		} else {
+			lowmanPrb, lowmanReasonBit, lowmanExplanation = h.applyCheckpointLowman(instance)
 		}
 	}
 
-	return h.applyGeneral(instance)
+	a, b := h.applyGeneral(instance, lowmanPrb, lowmanReasonBit, lowmanExplanation)
+
+	return resultsAdjustedIfSolo(instance, a, b)
+
 }
 
-func (h ActivityHeuristic) applyFreshLowman(instance *Instance) (ResultTuple, map[int64]ResultTuple, bool) {
+func (h ActivityHeuristic) applyFreshLowman(instance *Instance) (float64, uint64, string) {
 	versionH, versionExists := h.FreshLowman[instance.Version]
 	if versionExists {
-		a, b, isApplied := h.iterateLowmanData(versionH, instance, false)
-		if isApplied {
-			return a, b, isApplied
-		}
+		return h.iterateLowmanData(stringOfVersion(instance.Version), versionH, instance, false)
 	}
 
 	anyVersionH, anyVersionExists := h.FreshLowman[Any]
 	if anyVersionExists {
-		a, b, isApplied := h.iterateLowmanData(anyVersionH, instance, false)
-		if isApplied {
-			return a, b, isApplied
-		}
+		return h.iterateLowmanData(stringOfVersion(Any), anyVersionH, instance, false)
 	}
 
 	return nilResult()
 }
 
-func (h ActivityHeuristic) applyCheckpointLowman(instance *Instance) (ResultTuple, map[int64]ResultTuple, bool) {
+func (h ActivityHeuristic) applyCheckpointLowman(instance *Instance) (float64, uint64, string) {
 	versionH, versionExists := h.CheckpointLowman[instance.Version]
 	if versionExists {
-		a, b, isApplied := h.iterateLowmanData(versionH, instance, true)
-		if isApplied {
-			return a, b, isApplied
-		}
+		return h.iterateLowmanData(stringOfVersion(instance.Version), versionH, instance, true)
 	}
 
 	anyVersionH, anyVersionExists := h.CheckpointLowman[Any]
 	if anyVersionExists {
-		a, b, isApplied := h.iterateLowmanData(anyVersionH, instance, true)
-		if isApplied {
-			return a, b, isApplied
-		}
+		return h.iterateLowmanData(stringOfVersion(Any), anyVersionH, instance, true)
 	}
 
 	return nilResult()
 }
 
-func (h ActivityHeuristic) iterateLowmanData(arr []LowmanData, instance *Instance, isCheckpoint bool) (ResultTuple, map[int64]ResultTuple, bool) {
+func (h ActivityHeuristic) iterateLowmanData(key string, arr []LowmanData, instance *Instance, isCheckpoint bool) (float64, uint64, string) {
 	for _, data := range arr {
 		var explanation string
-		var reasonBit uint64
+		var reasonBit = h.RaidBit
 		if instance.PlayerCount < data.MinPlayers {
 			if isCheckpoint {
-				explanation = fmt.Sprintf("Cleared %s with %d players, expected at least %d",
-					h.CheckpointName, instance.PlayerCount, data.MinPlayers)
-				reasonBit = TooFewPlayersFresh
+				if instance.DurationSeconds < int(data.MinTime.Seconds()) {
+					reasonBit |= FastLowmanCheckpoint
+				}
+				explanation = fmt.Sprintf("cleared %s (%s) with %d players, expected at least %d",
+					h.CheckpointName, key, instance.PlayerCount, data.MinPlayers)
+				reasonBit |= TooFewPlayersFresh
 			} else {
 				explanation = fmt.Sprintf(
-					"Cleared fresh %s with %d players, expected at least %d",
-					h.RaidName, instance.PlayerCount, data.MinPlayers,
+					"cleared fresh %s (%s) with %d players, expected at least %d",
+					h.RaidName, key, instance.PlayerCount, data.MinPlayers,
 				)
-				reasonBit = TooFewPlayersCheckpoint
+				reasonBit |= TooFewPlayersCheckpoint
 			}
-			return resultForSharedFate(1.0, h.RaidBit|reasonBit, explanation, instance.Players)
+
+			return 0.995, reasonBit, explanation
 		} else if instance.PlayerCount == data.MinPlayers {
+			rawCheatedChance := data.CheatedChance
+			if instance.Flawless != nil && *instance.Flawless {
+				rawCheatedChance = math.Pow(rawCheatedChance, 0.5)
+			}
+
+			if isCheckpoint && instance.DurationSeconds < int(data.MinTime.Seconds()) {
+				reasonBit |= FastLowmanCheckpoint
+				prbFastCp := varLowmanCheckpointDurationRatioCurve(float64(instance.DurationSeconds) / float64(data.MinTime.Seconds()))
+				rawCheatedChance = cumulativeProbability(rawCheatedChance, prbFastCp)
+			}
+
+			if rawCheatedChance > Threshold {
+				flawlessStr := ""
+				if instance.Flawless != nil && *instance.Flawless {
+					flawlessStr = "flawless "
+				}
+				reasonBit |= UnlikelyLowman
+				clearName := h.RaidName
+				if isCheckpoint {
+					clearName = h.CheckpointName
+				}
+				explanation = fmt.Sprintf(
+					"cleared %s%s (%s) with exactly %d players in %.2f minutes (%.3f)",
+					flawlessStr, clearName, key, instance.PlayerCount,
+					float64(instance.DurationSeconds)/60, rawCheatedChance,
+				)
+			}
+
 			if len(data.Range) == 0 {
-				return nilResult()
+				return rawCheatedChance, reasonBit, explanation
 			}
 
 			for _, r := range data.Range {
 				if instance.DateCompleted.After(r.Start) && instance.DateCompleted.Before(r.End) {
-					return nilResult()
+					return rawCheatedChance, reasonBit, explanation
 				}
 			}
 
 			if isCheckpoint {
-				explanation = fmt.Sprintf("Cleared %s with %d players outside of the window",
+				explanation = fmt.Sprintf("cleared %s with %d players outside of the window",
 					h.CheckpointName, instance.PlayerCount)
-				reasonBit = TooFewPlayersCheckpoint
+				reasonBit |= TooFewPlayersCheckpoint
 			} else {
 				explanation = fmt.Sprintf(
-					"Cleared fresh %s with %d players outside of the window",
+					"cleared fresh %s with %d players outside of the window",
 					h.RaidName, instance.PlayerCount,
 				)
-				reasonBit = TooFewPlayersFresh
+				reasonBit |= TooFewPlayersFresh
 			}
-			return resultForSharedFate(1.0, h.RaidBit|reasonBit, explanation, instance.Players)
+			return 0.995, reasonBit, explanation
 		}
 	}
 
 	return nilResult()
 }
 
-func buildLogisticCurve(k, x0 float64) func(x float64) float64 {
-	return func(x float64) float64 {
-		return 1 / (1 + math.Exp(k*(x-x0)))
-	}
-}
-
-var (
-	killsCurve                       = buildLogisticCurve(-0.15, 40)
-	grenadeCurve                     = buildLogisticCurve(-0.35, 20)
-	superCurve                       = buildLogisticCurve(-0.75, 6)
-	completionTimeCurve              = buildLogisticCurve(40, 0.93)
-	totalInstanceKillsCurve          = buildLogisticCurve(20, 0.83)
-	totalInstanceKillsSecondaryCurve = buildLogisticCurve(-0.04, 60)
-)
-
-func (h ActivityHeuristic) applySpeedrun(instance *Instance) (ResultTuple, map[int64]ResultTuple, bool) {
-	estimatedWorldRecordAtClearTime := h.SpeedrunCurve(instance.DaysAfterRelease)
-	if float64(instance.DurationSeconds)-estimatedWorldRecordAtClearTime <= -45 {
-		explanation := fmt.Sprintf(
-			"Cleared %s significantly faster than %02d:%02d",
-			h.RaidName, int(estimatedWorldRecordAtClearTime/60), int(estimatedWorldRecordAtClearTime)%60,
-		)
-		return resultForSharedFate(1.0, h.RaidBit|TooFast, explanation, instance.Players)
-	}
-
-	return nilResult()
-}
-
-func (h ActivityHeuristic) applyGeneral(instance *Instance) (ResultTuple, map[int64]ResultTuple) {
-	var cheatedTimePrb float64 = 0.0
-	var cheatedTimeExplanation string
+func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, lowmanReasonBit uint64, lowmanExplanation string) (ResultTuple, map[int64]ResultTuple) {
 
 	isFresh := instance.Fresh != nil && *instance.Fresh
 
-	if instance.Completed && isFresh {
-		estimatedWorldRecordAtClearTime := h.SpeedrunCurve(instance.DaysAfterRelease)
-		totalTimeForAllPlayers := 0
-		for _, player := range instance.Players {
-			totalTimeForAllPlayers += player.TimePlayedSeconds
-		}
-
-		bodies := float64(totalTimeForAllPlayers) / float64(instance.DurationSeconds)
-		if bodies > 6 {
-			bodies = 6
-		}
-		adjustedExpectedRecordTime := estimatedWorldRecordAtClearTime * math.Pow(6/bodies, 0.2)
-
-		// timeRatio < 1 means the instance was cleared faster than expected
-		completionTimeRatio := float64(instance.DurationSeconds-25) / adjustedExpectedRecordTime
-
-		cheatedTimePrb = completionTimeCurve(completionTimeRatio)
-
-		cheatedTimeExplanation = fmt.Sprintf(
-			"Cleared %s in %02d:%02d, expected %02d:%02d (adjusted for player count: %d:%d)",
-			h.RaidName, instance.DurationSeconds/60, instance.DurationSeconds%60,
-			int(estimatedWorldRecordAtClearTime/60), int(estimatedWorldRecordAtClearTime)%60,
-			int(adjustedExpectedRecordTime/60), int(adjustedExpectedRecordTime)%60,
-		)
-	}
-
-	results := make(map[int64]ResultTuple)
+	totalTimeForAllPlayers := 0
 	for _, player := range instance.Players {
-		if player.TimePlayedSeconds < 70 {
-			continue
-		}
-
-		player_prb, reason, explanation := player.killsCheatProbability()
-
-		prb := (1 - (1-player_prb)*(1-cheatedTimePrb))
-
-		if !player.Finished {
-			prb /= 2
-		} else if player.IsFirstClear {
-			prb = math.Pow(prb, 3)
-		}
-
-		if prb > PlayerThreshold {
-			results[player.MembershipId] = ResultTuple{
-				MembershipId: player.MembershipId,
-				Probability:  prb,
-				Explanation:  explanation,
-				Reason:       reason,
-			}
-		}
+		totalTimeForAllPlayers += player.TimePlayedSeconds
 	}
 
 	totalInstanceKills := 0
@@ -223,61 +161,208 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance) (ResultTuple, map[in
 		}
 	}
 
-	if isFresh && instance.Completed {
+	actualVersusMeasuredTime := float64(totalTimeForAllPlayers) / float64(instance.DurationSeconds)
+
+	isMaxIntTimePlayed := false
+	for _, player := range instance.Players {
+		for _, char := range player.Characters {
+			if char.TimePlayedSeconds == 32767 {
+				isMaxIntTimePlayed = true
+				break
+			}
+		}
+	}
+
+	var finalResult ResultTuple
+	finalResult.Reason = h.RaidBit
+	finalExplanations := make([]string, 0)
+	var cheatedTimePrb float64 = 0.0
+	var timeDilationPrb float64 = 0.0
+	var totalKillsCheatPrb float64 = 0.0
+	var cheatedTimeExplanation string
+	var timeDilationExplanation string
+	var totalKillsCheatExplanation string
+
+	// instance level
+	if actualVersusMeasuredTime < 1 && instance.DurationSeconds > 360 && instance.PlayerCount < 50 && !isMaxIntTimePlayed {
+		timeDilationPrb = timeDilationCurve(actualVersusMeasuredTime)
+		timeDilationExplanation = fmt.Sprintf(
+			"measured time (%02d:%02d) is %.2f%% shorter than maximum actual time (%02d:%02d)",
+			instance.DurationSeconds/60, instance.DurationSeconds%60,
+			(1-actualVersusMeasuredTime)*100,
+			int(float64(totalTimeForAllPlayers)/60), totalTimeForAllPlayers%60,
+		)
+	}
+
+	if instance.Completed && isFresh {
+		estimatedWorldRecordAtClearTime := h.SpeedrunCurve(instance.DaysAfterRelease)
+
+		bodies := min(float64(totalTimeForAllPlayers)/float64(instance.DurationSeconds), 6)
+		adjustedExpectedRecordTime := estimatedWorldRecordAtClearTime * math.Pow(6/bodies, 0.2)
+
+		// timeRatio < 1 means the instance was cleared faster than expected
+		completionTimeRatio := float64(instance.DurationSeconds-25) / adjustedExpectedRecordTime
+
+		cheatedTimePrb = completionTimeCurve(completionTimeRatio)
+		cheatedTimeExplanation = fmt.Sprintf(
+			"cleared %s in %02d:%02d, expected %02d:%02d (adjusted for player count: %d:%d)",
+			h.RaidName, instance.DurationSeconds/60, instance.DurationSeconds%60,
+			int(estimatedWorldRecordAtClearTime/60), int(estimatedWorldRecordAtClearTime)%60,
+			int(adjustedExpectedRecordTime/60), int(adjustedExpectedRecordTime)%60,
+		)
+
+		finalExplanations = append(finalExplanations, "fresh completion")
 		ratio := float64(totalInstanceKills+1) / float64(h.MinFreshKills+1)
 		// Instances with a lower min kill count are harder to flag
-		killsCheatPrb := totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinFreshKills+1))
+		totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinFreshKills+1))
+		totalKillsCheatExplanation = fmt.Sprintf("cleared fresh %s with %d kills, expected at least %d",
+			h.RaidName, totalInstanceKills, h.MinFreshKills)
 
-		reason := h.RaidBit
-		explanations := (make([]string, 0))
+		// adjust really low kill counts to be more likely to be flagged
+		localMin := (min(h.MinFreshKills, 30))
+		if totalInstanceKills < localMin {
+			totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
+		}
 
-		if killsCheatPrb > Threshold {
-			reason |= TotalInstanceKills
-			explanations = append(explanations, fmt.Sprintf("Cleared fresh %s with %d kills, expected at least %d",
-				h.RaidName, totalInstanceKills, h.MinFreshKills))
+		if totalKillsCheatPrb > Threshold {
+			finalResult.Reason |= TotalInstanceKills
+			finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
 		}
 
 		if cheatedTimePrb > Threshold {
-			reason |= TooFast
-			explanations = append(explanations, cheatedTimeExplanation)
+			finalResult.Reason |= TooFast
+			finalExplanations = append(finalExplanations, cheatedTimeExplanation)
 		}
 
-		combinedPrb := 1 - (1-killsCheatPrb)*(1-cheatedTimePrb)
-		if combinedPrb > Threshold {
-			expString := "No explanation"
-			if len(explanations) == 2 {
-				expString = fmt.Sprintf("%s and %s", explanations[0], explanations[1])
-			} else if len(explanations) == 1 {
-				expString = explanations[0]
-			}
-
-			return resultsAdjustedIfSolo(instance.PlayerCount, combinedPrb, reason, expString, results)
+		if timeDilationPrb > Threshold {
+			finalResult.Reason |= TimeDilation
+			finalExplanations = append(finalExplanations, timeDilationExplanation)
 		}
+
+		finalResult.Probability = cumulativeProbability(totalKillsCheatPrb, cheatedTimePrb, timeDilationPrb)
 	} else if instance.Completed {
+		finalExplanations = append(finalExplanations, "checkpoint completion")
 		ratio := float64(totalInstanceKills+1) / float64(h.MinCheckpointKills+1)
 		// Instances with a lower min kill count are harder to flag
-		killsCheatPrb := totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinCheckpointKills+1))
+		totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinCheckpointKills+1))
+		totalKillsCheatExplanation = fmt.Sprintf("cleared %s with %d kills, expected at least %d",
+			h.CheckpointName, totalInstanceKills, h.MinCheckpointKills)
 
-		if killsCheatPrb > Threshold {
-			explanation := fmt.Sprintf("Cleared %s with %d kills, expected at least %d",
-				h.CheckpointName, totalInstanceKills, h.MinCheckpointKills)
-			return resultsAdjustedIfSolo(instance.PlayerCount, killsCheatPrb, h.RaidBit|TotalInstanceKills, explanation, results)
+		// adjust really low kill counts to be more likely to be flagged
+		localMin := (min(h.MinFreshKills, 12))
+		if totalInstanceKills < localMin {
+			totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
 		}
+
+		if totalKillsCheatPrb > Threshold {
+			finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
+			finalResult.Reason |= TotalInstanceKills
+		}
+
+		if timeDilationPrb > Threshold {
+			finalExplanations = append(finalExplanations, timeDilationExplanation)
+			finalResult.Reason |= TimeDilation
+		}
+
+		finalResult.Probability = cumulativeProbability(totalKillsCheatPrb, timeDilationPrb)
+	} else {
+		finalExplanations = append(finalExplanations, "incomplete")
+		// If the instance is not completed, we can still check for time dilation
+		if timeDilationPrb > Threshold {
+			finalResult.Reason |= TimeDilation
+			finalExplanations = append(finalExplanations, timeDilationExplanation)
+		}
+		finalResult.Probability = cumulativeProbability(timeDilationPrb)
+
 	}
 
-	allProbs := []float64{}
-	for _, player := range results {
-		allProbs = append(allProbs, (player.Probability * (1 - cheatedTimePrb)))
+	// lowman stuff
+	if lowmanPrb > Threshold {
+		finalResult.Reason |= lowmanReasonBit
+		finalExplanations = append(finalExplanations, lowmanExplanation)
+	}
+	finalResult.Probability = cumulativeProbability(finalResult.Probability, lowmanPrb)
+
+	// at the player level
+	playerResults := make(map[int64]ResultTuple)
+	for _, player := range instance.Players {
+		individualPlayerKillsCheatPrb, reason, explanations := player.killsCheatProbability(totalInstanceKills, totalTimeForAllPlayers)
+
+		// applies instance level probabilities to player level
+		participationRatioPercentage := participationCurve(instance.PlayerCount, player.totalKills(), totalInstanceKills, player.TimePlayedSeconds, totalTimeForAllPlayers)
+
+		cheatedSpeedrunParticipationPrb := participationRatioPercentage * cheatedTimePrb
+		if cheatedSpeedrunParticipationPrb > PlayerThreshold {
+			reason |= TooFast
+			explanations = append(explanations, fmt.Sprintf("cheated speedrun participation: %.4f", cheatedSpeedrunParticipationPrb))
+		}
+
+		cheatedInstanceKillsPrb := participationRatioPercentage * totalKillsCheatPrb
+		if cheatedInstanceKillsPrb > PlayerThreshold {
+			reason |= TotalInstanceKills
+			explanations = append(explanations, fmt.Sprintf("total instance kills participation: %.4f", cheatedInstanceKillsPrb))
+		}
+
+		playerTimeDilationPrb := participationRatioPercentage * timeDilationPrb
+		if playerTimeDilationPrb > PlayerThreshold {
+			reason |= TimeDilation
+			explanations = append(explanations, fmt.Sprintf("player time dilation: %.4f", playerTimeDilationPrb))
+		}
+
+		playerLowmanPrb := participationRatioPercentage * lowmanPrb
+		if playerLowmanPrb > PlayerThreshold {
+			reason |= lowmanReasonBit
+			explanations = append(explanations, fmt.Sprintf("improbable lowman participation: %.4f", playerLowmanPrb))
+		}
+
+		prb := cumulativeProbability(
+			cheatedInstanceKillsPrb,
+			individualPlayerKillsCheatPrb,
+			cheatedSpeedrunParticipationPrb,
+			playerTimeDilationPrb,
+			playerLowmanPrb,
+		)
+
+		if !player.Finished {
+			prb /= (notCompletedAdjustmentCurve(float64(player.TimePlayedSeconds)) + 1)
+			explanations = append(explanations, "dnf")
+		} else if player.IsFirstClear {
+			reason |= FirstClear
+			explanations = append(explanations, "first clear")
+			prb = math.Pow(prb, 0.8)
+		}
+
+		playerResults[player.MembershipId] = ResultTuple{
+			MembershipId: player.MembershipId,
+			Probability:  prb,
+			Explanation:  strings.Join(explanations, ", "),
+			Reason:       reason,
+		}
 	}
 
 	// Probability of 2 or more players cheating
-	p2orMore := prbAtLeastTwo(allProbs)
+	allPlayerProbs := []float64{}
+	for _, player := range playerResults {
+		allPlayerProbs = append(allPlayerProbs, player.Probability)
+	}
+	p2orMore := prbAtLeastTwo(allPlayerProbs)
 
 	if p2orMore > Threshold {
-		return resultsAdjustedIfSolo(instance.PlayerCount, p2orMore, TwoPlusCheaters|h.RaidBit, fmt.Sprintf("Multiple players cheating in %s", h.RaidName), results)
+		finalResult.Reason |= TwoPlusCheaters
+		finalExplanations = append(finalExplanations, fmt.Sprintf("multiple players cheating in %s", h.RaidName))
 	}
+	finalResult.Probability = cumulativeProbability(finalResult.Probability, p2orMore)
 
-	return ResultTuple{}, results
+	finalResult.Explanation = strings.Join(finalExplanations, ", ")
+	return finalResult, playerResults
+}
+
+func (p *Player) totalKills() int {
+	totalKills := 0
+	for _, char := range p.Characters {
+		totalKills += char.Kills
+	}
+	return totalKills
 }
 
 func (p *Player) killsPerMinute() float64 {
@@ -319,23 +404,22 @@ func (p *Player) superKillsPerMinute() float64 {
 func (i *Player) weaponDiversity() float64 {
 	totalWeapons := 0
 	totalWeaponKills := 0
-	heavyAmmoKills := 0
 
 	for _, char := range i.Characters {
 		for _, weapon := range char.Weapons {
 			totalWeapons++
 			totalWeaponKills += weapon.Kills
-			if weapon.AmmoType == "Heavy" {
-				heavyAmmoKills += weapon.Kills
-			}
 		}
 	}
 
-	// score for too many heavy ammo kills
-	heavyScore := max(0, heavyAmmoKills - totalWeaponKills)
+	if totalWeaponKills < 150 {
+		// If there are less than 150 kills, we cannot calculate a meaningful score
+		return 100
+	}
 
 	if totalWeapons <= 3 {
-		baseScore := (float64(totalWeapons+1) * 1200 / float64(i.TimePlayedSeconds)) + float64(heavyScore)
+		baseScore := (float64(totalWeapons+1) * 1200 / float64(i.TimePlayedSeconds))
+		baseScore /= (float64(max(totalWeaponKills, 800)) / 800)
 		if !i.Finished {
 			return math.Pow(baseScore, 2)
 		} else {
@@ -364,12 +448,11 @@ func (i *Player) weaponDiversity() float64 {
 		}
 	}
 
-	adjStdDev := standardDeviation
-	if standardDeviation < 1 {
-		adjStdDev = 1
-	}
+	adjStdDev := max(standardDeviation, 1)
 
-	baseScore := math.Sqrt(avgKillsPerWeapon/adjStdDev) + math.Pow(float64(totalWeapons-outliers), 1.5) + float64(heavyScore)
+	baseScore := math.Sqrt(avgKillsPerWeapon/adjStdDev) + math.Pow(float64(totalWeapons-outliers), 1.5)
+	baseScore /= (float64(max(totalWeaponKills, 600)) / 600)
+
 	if !i.Finished {
 		return math.Pow(baseScore, 2)
 	} else {
@@ -377,64 +460,78 @@ func (i *Player) weaponDiversity() float64 {
 	}
 }
 
-func (p Player) killsCheatProbability() (float64, uint64, string) {
-	meleeOffset := p.grenadeKillsPerMinute() - p.meleeKillsPerMinute()
-	// Most cheaters don't melee while legit players do (sunbracers, etc)
-	if meleeOffset < 0 {
-		meleeOffset = 0
+func (p Player) heavyAmmoCheat() float64 {
+	heavyAmmoKills := 0
+	totalKills := 0
+	for _, char := range p.Characters {
+		for _, weapon := range char.Weapons {
+			if weapon.AmmoType == "Heavy" {
+				heavyAmmoKills += weapon.Kills
+			}
+			totalKills += weapon.Kills
+		}
 	}
-	probGrenadeCheat := grenadeCurve(meleeOffset)
-	probKillsCheat := killsCurve(p.killsPerMinute())
-	probSuperCheat := superCurve(p.superKillsPerMinute())
-	probWeaponCheat := math.Exp(-0.2 * p.weaponDiversity())
+
+	totalKillsMultiplier := float64(min(100, totalKills)) / 100.0
+
+	killsPerSecondMultiplier := min(1.25, 5*float64(heavyAmmoKills)/float64(p.TimePlayedSeconds))
+
+	return heavyCurve(killsPerSecondMultiplier*float64(heavyAmmoKills)/float64(totalKills+1)) * totalKillsMultiplier
+}
+
+func (p Player) killsCheatProbability(totalInstanceKills int, totalPlayerSeconds int) (float64, uint64, []string) {
+	if p.TimePlayedSeconds < 60 {
+		return 0.0, 0, []string{}
+	}
+	meleeOffset := max(p.grenadeKillsPerMinute()-p.meleeKillsPerMinute(), 0)
+	adjustForLowTimePlayed := (min(300, float64(p.TimePlayedSeconds)) / 300)
+	probGrenadeCheat := grenadeCurve(meleeOffset) * adjustForLowTimePlayed
+	probHeavyAmmoCheat := p.heavyAmmoCheat() * adjustForLowTimePlayed
+	probKillsPerSecondCheat := killsCurve(p.killsPerMinute()) * adjustForLowTimePlayed
+	probSuperCheat := superCurve(p.superKillsPerMinute()) * adjustForLowTimePlayed
+	probWeaponCheat := math.Exp(-0.3*p.weaponDiversity()) * adjustForLowTimePlayed * 0.5
+
+	killsRatio := (float64(p.totalKills()) / float64(totalInstanceKills))
+	maxExpectedKillsRatio := (math.Log((float64(p.TimePlayedSeconds)/float64(totalPlayerSeconds))+0.05) / math.Log(30)) + 0.99
+	killsRatioVsMaxExpectedKillsRatioRatio := killsRatio / maxExpectedKillsRatio
+	probKillsShareCheat := 0.0
+	if killsRatioVsMaxExpectedKillsRatioRatio > 1 && totalInstanceKills > 20 {
+		probKillsShareCheat = killsShareCurve(killsRatioVsMaxExpectedKillsRatioRatio) * adjustForLowTimePlayed
+	}
 
 	var bits uint64 = 0
-	explanation := "Failed kill-based heuristics: "
-	if probKillsCheat > PlayerThreshold {
+	explanations := make([]string, 0)
+	if probKillsPerSecondCheat > PlayerThreshold {
 		bits |= PlayerTotalKills
-		explanation += fmt.Sprintf("total kills: %.4f, ", probKillsCheat)
+		explanations = append(explanations, fmt.Sprintf("total kills rate: %.4f", probKillsPerSecondCheat))
 	}
 
 	if probGrenadeCheat > PlayerThreshold {
 		bits |= PlayerGrenadeKills
-		explanation += fmt.Sprintf("grenade kills: %.4f, ", probGrenadeCheat)
+		explanations = append(explanations, fmt.Sprintf("grenade kills rate: %.4f", probGrenadeCheat))
+	}
+
+	if probHeavyAmmoCheat > PlayerThreshold {
+		bits |= PlayerHeavyAmmoKills
+		explanations = append(explanations, fmt.Sprintf("heavy ammo cheat: %.4f", probHeavyAmmoCheat))
 	}
 
 	if probSuperCheat > PlayerThreshold {
 		bits |= PlayerSuperKills
-		explanation += fmt.Sprintf("super kills: %.4f, ", probSuperCheat)
+		explanations = append(explanations, fmt.Sprintf("super kills rate: %.4f", probSuperCheat))
 	}
 
 	if probWeaponCheat > PlayerThreshold {
 		bits |= PlayerWeaponDiversity
-		explanation += fmt.Sprintf("weapon diversity: %.4f, ", probWeaponCheat)
-	}
-	explanation = explanation[:len(explanation)-2]
-
-	allProbs := []float64{probKillsCheat, probGrenadeCheat, probSuperCheat, probWeaponCheat}
-
-	// P(2 or more) = 1 - P(0) - P(1)
-	return prbAtLeastTwo(allProbs), bits, explanation
-}
-
-func prbAtLeastTwo(allProbs []float64) float64 {
-	// get the probability that 2 events happened
-	p0 := 1.0
-	for _, prob := range allProbs {
-		p0 *= (1 - prob)
+		explanations = append(explanations, fmt.Sprintf("weapon diversity: %.4f", probWeaponCheat))
 	}
 
-	p1 := 0.0
-	for i := 0; i < len(allProbs); i++ {
-		pi := allProbs[i]
-		rest := 1.0
-		for j := 0; j < len(allProbs); j++ {
-			if j != i {
-				rest *= (1 - allProbs[j])
-			}
-		}
-		p1 += pi * rest
+	if probKillsShareCheat > PlayerThreshold {
+		bits |= PlayerKillsShare
+		explanations = append(explanations, fmt.Sprintf("kills share: %.4f", probKillsShareCheat))
 	}
 
-	return 1 - p0 - p1
+	allProbs := []float64{probKillsPerSecondCheat, probGrenadeCheat, probHeavyAmmoCheat, probSuperCheat, probWeaponCheat, probKillsShareCheat}
+
+	return prbAtLeastTwo(allProbs), bits, explanations
 }

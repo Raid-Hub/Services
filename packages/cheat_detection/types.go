@@ -50,13 +50,13 @@ const (
 	Bit44
 	Bit45
 	Bit46
-	Bit47
-	Bit48
-	Bit49
-	Bit50
-	Bit51
-	Bit52
-	Bit53
+	PlayerHeavyAmmoKills
+	FastLowmanCheckpoint
+	UnlikelyLowman
+	PlayerKillsShare
+	TimeDilation
+	FirstClear
+	Solo
 	TotalInstanceKills
 	TwoPlusCheaters
 	PlayerTotalKills
@@ -79,6 +79,7 @@ type Instance struct {
 	InstanceId       int64     `json:"instanceId"`
 	Activity         int       `json:"activity"`
 	Version          int       `json:"version"`
+	RaidPath         string    `json:"raidPath"`
 	Completed        bool      `json:"completed"`
 	Flawless         *bool     `json:"flawless"`
 	Fresh            *bool     `json:"fresh"`
@@ -104,7 +105,7 @@ type Player struct {
 
 type Character struct {
 	CharacterId       int64    `json:"characterId"`
-	Class             *string  `json:"class"`
+	Class             *uint32  `json:"classHash"`
 	EmblemHash        *uint32  `json:"emblemHash"`
 	Completed         bool     `json:"completed"`
 	Score             int      `json:"score"`
@@ -128,4 +129,13 @@ type Weapon struct {
 	AmmoType       string `json:"ammoType"`
 	Slot           string `json:"slot"`
 	Element        string `json:"element"`
+}
+
+type PlayerInstanceFlagStats struct {
+	MembershipId int64 `db:"membership_id"`
+	FlaggedCount int   `db:"flagged_count"`
+	FlagsA       int   `db:"flags_type_a"`
+	FlagsB       int   `db:"flags_type_b"`
+	FlagsC       int   `db:"flags_type_c"`
+	FlagsD       int   `db:"flags_type_d"`
 }

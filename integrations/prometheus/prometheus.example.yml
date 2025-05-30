@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 5s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+
+scrape_configs:
+  - job_name: "atlas"
+    static_configs:
+      - targets:
+        - "localhost:8080"
+
+  - job_name: "api"
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+        - "localhost:8082"
+
+  - job_name: "hermes"
+    static_configs:
+      - targets:
+        - "localhost:8083"
+
+  - job_name: "rabbit"
+    scrape_interval: 10s
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets:
+        - "localhost:15692"
+
+
+remote_write:
+  - url: ""
+    basic_auth:
+      username: ""
+      password: ""
+    
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: ^(erlang_.*|rabbitmq_channel_.*|rabbitmq_connection_.*|go_.*)$
+        action: drop
+

@@ -1,4 +1,4 @@
-package bonus_pgcr
+package pgcr_exists
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 	"raidhub/packages/discord"
 	"raidhub/packages/pgcr"
 	"raidhub/packages/pgcr_types"
+	"raidhub/packages/postgres"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -33,6 +34,20 @@ func process_store_queue(qw *async.QueueWorker, msg amqp.Delivery) {
 		return
 	}
 
+	latestId, err := postgres.GetLatestInstanceId(qw.Db, 1000)
+	if err != nil {
+		log.Printf("Failed to get latest instanceId: %s", err)
+		pgcr.WriteMissedLog(request.Activity.InstanceId)
+		return
+	}
+
+	offset := request.Activity.InstanceId - latestId
+	if offset > 0 {
+		log.Printf("InstanceId %d is too far ahead of latestId %d", request.Activity.InstanceId, latestId)
+		pgcr.WriteMissedLog(request.Activity.InstanceId)
+		return
+	}
+
 	if request.Activity.PlayerCount > 20 {
 		// For now, don't bother with checkpoint instances and log for later
 		log.Printf("Skipping PGCR %d with %d players", request.Activity.InstanceId, request.Activity.PlayerCount)
@@ -49,12 +64,17 @@ func process_store_queue(qw *async.QueueWorker, msg amqp.Delivery) {
 		webhook := discord.Webhook{
 			Content: &msg,
 		}
-		log.Printf("%d added to data set", request.Activity.InstanceId)
+
+		if offset < -10_000_000 {
+			// If the offset is too large, we need to write a range of missed logs
+			msg = fmt.Sprintf("Found missing PGCR: %d from <t:%d>", request.Activity.InstanceId, request.Activity.DateCompleted.Unix())
+			for i := request.Activity.InstanceId - 10_000; i < request.Activity.InstanceId+10_000; i++ {
+				pgcr.WriteMissedLog(i)
+			}
+		}
+
 		discord.SendWebhook(os.Getenv("PAN_WEBHOOK_URL"), &webhook)
 
-		for i := request.Activity.InstanceId - 100_000; i < request.Activity.InstanceId+100_000; i++ {
-			pgcr.WriteMissedLog(i)
-		}
 	} else {
 		log.Printf("%d is already added", request.Activity.InstanceId)
 	}

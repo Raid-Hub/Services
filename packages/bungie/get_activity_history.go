@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
 )
 
 type ActivityHistoryResponse struct {
@@ -22,13 +21,14 @@ type DestinyActivityHistoryResults struct {
 }
 
 type DestinyHistoricalStatsPeriodGroup struct {
+	Period          string                         `json:"period"`
 	ActivityDetails DestinyHistoricalStatsActivity `json:"activityDetails"`
 }
 
 func GetActivityHistory(membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) error {
 	ch := make(chan int)
 
-	results, _, err := GetActivityHistoryPage(membershipType, membershipId, characterId, 0)
+	results, _, err := GetActivityHistoryPage(membershipType, membershipId, characterId, 250, 0, 4)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func GetActivityHistory(membershipType int, membershipId int64, characterId int6
 			defer wg.Done()
 
 			for page := range ch {
-				results, _, err := GetActivityHistoryPage(membershipType, membershipId, characterId, page)
+				results, _, err := GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
 				if err != nil {
 					log.Printf("Error fetching activity history page: %s", err)
 				}
@@ -74,9 +74,8 @@ func GetActivityHistory(membershipType int, membershipId int64, characterId int6
 	return nil
 }
 
-func GetActivityHistoryPage(membershipType int, membershipId int64, characterId int64, page int) ([]DestinyHistoricalStatsPeriodGroup, int, error) {
-	log.Printf("Getting /Destiny2/%d/Account/%d/Character/%d/ page=%d", membershipType, membershipId, characterId, page)
-	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Account/%d/Character/%d/Stats/Activities/?mode=4&count=250&page=%d", getBungieURL(), membershipType, membershipId, characterId, page)
+func GetActivityHistoryPage(membershipType int, membershipId int64, characterId int64, count int, page int, mode int) ([]DestinyHistoricalStatsPeriodGroup, int, error) {
+	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Account/%d/Character/%d/Stats/Activities/?mode=%d&count=%d&page=%d", getBungieURL(), membershipType, membershipId, characterId, mode, count, page)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return []DestinyHistoricalStatsPeriodGroup{}, 0, err
@@ -99,12 +98,6 @@ func GetActivityHistoryPage(membershipType int, membershipId int64, characterId 
 		if err := decoder.Decode(&data); err != nil {
 			return []DestinyHistoricalStatsPeriodGroup{}, 0, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return []DestinyHistoricalStatsPeriodGroup{}, data.ErrorCode, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

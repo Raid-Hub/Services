@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	CheatCheckVersion = "alpha-0.5.12"
+	CheatCheckVersion = "beta-2.1.11"
 	Threshold         = 0.05
 	PlayerThreshold   = 0.02
 )
@@ -16,33 +16,33 @@ const (
 // Returns
 // `instanceResult` which is the result of the instance check
 // `flaggedPlayers` which is a list of players that were flagged
-func CheckForCheats(instanceId int64, db *sql.DB) (ResultTuple, []ResultTuple, bool, error) {
+func CheckForCheats(instanceId int64, db *sql.DB) (*Instance, ResultTuple, []ResultTuple, bool, error) {
 	instance, err := getInstance(instanceId, db)
 	if err != nil {
-		return ResultTuple{}, nil, false, err
+		log.Printf("Error getting instance %d: %s", instanceId, err)
+		return nil, ResultTuple{}, nil, false, err
 	}
 
 	heuristic, err := getActivityHeuristic(instance)
 	if err != nil {
-		return ResultTuple{}, nil, false, err
+		return instance, ResultTuple{}, nil, false, err
 	}
 
 	instanceResult, playerResults := heuristic.apply(instance)
 	isSolo := len(playerResults) == 1
 
 	if instanceResult.Probability <= Threshold && len(playerResults) == 0 {
-		return instanceResult, nil, isSolo, nil
+		return instance, instanceResult, nil, isSolo, nil
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		return instanceResult, nil, isSolo, err
+		return instance, instanceResult, nil, isSolo, err
 	}
 
 	defer tx.Rollback()
 
 	if instanceResult.Probability > Threshold {
-		log.Printf("Flagging instance %d with probability %f: %s", instance.InstanceId, instanceResult.Probability, instanceResult.Explanation)
 		err = flagInstance(FlagInstance{
 			InstanceId:        instance.InstanceId,
 			CheatCheckVersion: CheatCheckVersion,
@@ -52,14 +52,13 @@ func CheckForCheats(instanceId int64, db *sql.DB) (ResultTuple, []ResultTuple, b
 		}, tx)
 
 		if err != nil {
-			return instanceResult, nil, isSolo, err
+			return instance, instanceResult, nil, isSolo, err
 		}
 	}
 
 	flaggedPlayers := make([]ResultTuple, 0)
 	for membershipId, result := range playerResults {
 		if result.Probability > Threshold {
-			log.Printf("Flagging player %d in instance %d with probability %f: %s", membershipId, instance.InstanceId, result.Probability, result.Explanation)
 			err = flagPlayerInstance(FlagInstancePlayer{
 				InstanceId:        instance.InstanceId,
 				MembershipId:      membershipId,
@@ -69,7 +68,7 @@ func CheckForCheats(instanceId int64, db *sql.DB) (ResultTuple, []ResultTuple, b
 				Explanation:       result.Explanation,
 			}, tx)
 			if err != nil {
-				return instanceResult, flaggedPlayers, isSolo, err
+				return instance, instanceResult, flaggedPlayers, isSolo, err
 			}
 			flaggedPlayers = append(flaggedPlayers, result)
 		}
@@ -77,10 +76,10 @@ func CheckForCheats(instanceId int64, db *sql.DB) (ResultTuple, []ResultTuple, b
 
 	err = tx.Commit()
 	if err != nil {
-		return instanceResult, flaggedPlayers, isSolo, err
+		return instance, instanceResult, flaggedPlayers, isSolo, err
 	}
 
-	return instanceResult, flaggedPlayers, isSolo, nil
+	return instance, instanceResult, flaggedPlayers, isSolo, nil
 }
 
 func getActivityHeuristic(instance *Instance) (*ActivityHeuristic, error) {

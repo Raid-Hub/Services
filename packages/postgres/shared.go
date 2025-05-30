@@ -38,10 +38,9 @@ func UpsertPlayer(tx *sql.Tx, player *pgcr_types.Player) (sql.Result, error) {
 					WHEN EXCLUDED.last_seen > player.last_seen THEN COALESCE(EXCLUDED.bungie_global_display_name_code, player.bungie_global_display_name_code)
 					ELSE player.bungie_global_display_name_code
 				END,
-				last_seen = CASE 
-					WHEN EXCLUDED.last_seen > player.last_seen THEN EXCLUDED.last_seen
-					ELSE player.last_seen
-				END;
+				last_seen = GREATEST(player.last_seen, EXCLUDED.last_seen),
+				first_seen = LEAST(player.first_seen, EXCLUDED.first_seen)
+				;
 			`,
 		player.MembershipId, player.MembershipType, player.IconPath, player.DisplayName,
 		player.BungieGlobalDisplayName, player.BungieGlobalDisplayNameCode, player.LastSeen)

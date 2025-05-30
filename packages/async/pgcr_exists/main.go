@@ -1,14 +1,14 @@
-package bonus_pgcr
+package pgcr_exists
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"raidhub/packages/async"
 	"raidhub/packages/bungie"
 	"raidhub/packages/pgcr_types"
-	"strconv"
 	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -25,7 +25,7 @@ func CreateOutboundChannel(conn *amqp.Connection) {
 	})
 }
 
-const fetchQueueName = "pgcr_fetch"
+const fetchQueueName = "pgcr_exists"
 
 func CreateFetchWorker() async.QueueWorker {
 	client := &http.Client{}
@@ -42,12 +42,7 @@ func CreateFetchWorker() async.QueueWorker {
 }
 
 func SendFetchMessage(ch *amqp.Channel, instanceId int64) error {
-	body, err := json.Marshal(PGCRFetchRequest{
-		InstanceId: strconv.FormatInt(instanceId, 10),
-	})
-	if err != nil {
-		return err
-	}
+	body := fmt.Appendf(nil, "%d", instanceId)
 
 	return ch.PublishWithContext(
 		context.Background(),
@@ -56,7 +51,7 @@ func SendFetchMessage(ch *amqp.Channel, instanceId int64) error {
 		false,          // mandatory
 		false,          // immediate
 		amqp.Publishing{
-			ContentType: "application/json",
+			ContentType: "text/plain",
 			Body:        body,
 		},
 	)

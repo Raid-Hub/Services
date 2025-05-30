@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 )
 
 type GetGroupsResponse struct {
@@ -26,7 +25,8 @@ type GroupMembership struct {
 }
 
 type GroupMember struct {
-	DestinyUserInfo DestinyUserInfo `json:"destinyUserInfo"`
+	DestinyUserInfo        DestinyUserInfo `json:"destinyUserInfo"`
+	LastOnlineStatusChange int64           `json:"lastOnlineStatusChange,string"`
 }
 
 type GroupV2 struct {
@@ -76,12 +76,6 @@ func GetGroupsForMember(membershipType int, membershipId int64) (*GetGroupsForMe
 		if err := decoder.Decode(&data); err != nil {
 			return nil, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return nil, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

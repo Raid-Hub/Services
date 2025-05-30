@@ -36,7 +36,7 @@ func main() {
 	log.Println("querying")
 	rows, err := db.Query(`SELECT * FROM (
 			SELECT membership_id FROM player
-			WHERE history_last_crawled IS NULL OR (history_last_crawled < NOW() - INTERVAL '4 weeks')
+			WHERE history_last_crawled IS NULL OR (history_last_crawled < NOW() - INTERVAL '25 weeks')
 			ORDER BY clears DESC
 			LIMIT $1
 		) foo

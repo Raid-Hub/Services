@@ -36,6 +36,7 @@ type Player struct {
 	DisplayName                 *string   `json:"displayName"`
 	BungieGlobalDisplayName     *string   `json:"bungieGlobalDisplayName"`
 	BungieGlobalDisplayNameCode *string   `json:"bungieGlobalDisplayNameCode"`
+	FirstSeen                   time.Time `json:"firstSeen"` // Not set by default
 }
 
 type ProcessedActivityCharacter struct {

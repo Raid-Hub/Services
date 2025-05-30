@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"raidhub/packages/async/pgcr_blocked"
 	"raidhub/packages/monitoring"
 	"raidhub/packages/pgcr"
 
@@ -74,9 +75,6 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 					}
 					break
 				}
-			} else if result == pgcr.InternalError || result == pgcr.DecodingError {
-				errCount++
-				time.Sleep(time.Duration(10*errCount) * time.Second)
 			} else if result == pgcr.NotFound {
 				notFoundCount++
 			} else if result == pgcr.SystemDisabled {
@@ -84,18 +82,26 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 				time.Sleep(45 * time.Second)
 				continue
 			} else if result == pgcr.InsufficientPrivileges {
-				go logMissedInstance(instanceID, startTime)
-				logInsufficentPrivileges(instanceID)
-				pgcr.WriteMissedLog(instanceID)
+				pgcr_blocked.SendMessage(rabbitChannel, instanceID)
 				break
-			} else if result == pgcr.BadFormat {
+			} else if result == pgcr.InternalError || result == pgcr.DecodingError {
+				errCount++
+				time.Sleep(time.Duration(5*errCount*errCount) * time.Second)
+			} else if result == pgcr.RateLimited {
+				errCount++
+				time.Sleep(time.Duration(30) * time.Second)
+			} else if result == pgcr.BadFormat || result == pgcr.ExternalError {
 				pgcr.WriteMissedLog(instanceID)
-				offloadChannel <- instanceID
-				break
+				if errCount > 0 {
+					offloadChannel <- instanceID
+					break
+				} else {
+					errCount++
+				}
 			}
 
 			// If we have not found the instance id after some time
-			if notFoundCount > 4 || errCount > 3 {
+			if notFoundCount > 3 || errCount > 2 {
 				pgcr.WriteMissedLog(instanceID)
 				offloadChannel <- instanceID
 				break

@@ -60,7 +60,9 @@ func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*pgcr_ty
 	for _, entries := range players {
 		processedPlayerActivity := pgcr_types.ProcessedActivityPlayer{
 			Characters: []pgcr_types.ProcessedActivityCharacter{},
-			Player:     pgcr_types.Player{},
+			Player: pgcr_types.Player{
+				FirstSeen: startDate,
+			},
 		}
 
 		for _, entry := range entries {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"raidhub/packages/async"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -40,4 +41,15 @@ func SendMessage(ch *amqp.Channel, membershipId int64) error {
 			Body:        body,
 		},
 	)
+}
+
+var (
+	outgoing *amqp.Channel
+	once     sync.Once
+)
+
+func CreateOutboundChannel(conn *amqp.Connection) {
+	once.Do(func() {
+		outgoing, _ = conn.Channel()
+	})
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 )
 
 type GetGroupResponse struct {
@@ -19,11 +18,11 @@ type GroupResponse struct {
 	Detail GroupV2 `json:"detail"`
 }
 
-func GetGroup(groupId int64) (*GroupResponse, error) {
+func GetGroup(groupId int64) (*GroupResponse, int, error) {
 	url := fmt.Sprintf("%s/Platform/GroupV2/%d", getBungieURL(), groupId)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
 	apiKey := os.Getenv("BUNGIE_API_KEY") // Read the API key from the BUNGIE_API_KEY environment variable
@@ -31,7 +30,7 @@ func GetGroup(groupId int64) (*GroupResponse, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 	defer resp.Body.Close()
 
@@ -40,22 +39,16 @@ func GetGroup(groupId int64) (*GroupResponse, error) {
 	if resp.StatusCode != http.StatusOK {
 		var data BungieError
 		if err := decoder.Decode(&data); err != nil {
-			return nil, err
+			return nil, -1, err
 		}
 
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
-
-		return nil, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
+		return nil, data.ErrorCode, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}
 
 	var data GetGroupResponse
 	if err := decoder.Decode(&data); err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
-	return &data.Response, nil
+	return &data.Response, 1, nil
 }

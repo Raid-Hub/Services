@@ -25,6 +25,7 @@ type DestinyUserInfo struct {
 	DisplayName                 *string `json:"displayName"`
 	BungieGlobalDisplayName     *string `json:"bungieGlobalDisplayName"`
 	BungieGlobalDisplayNameCode *int    `json:"bungieGlobalDisplayNameCode"`
+	ApplicableMembershipTypes   []int   `json:"applicableMembershipTypes"`
 }
 
 type DestinyHistoricalStatsActivity struct {

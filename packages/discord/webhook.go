@@ -3,8 +3,8 @@ package discord
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -58,25 +58,32 @@ var CommonFooter = Footer{
 	IconURL: "https://raidhub.io/_next/image?url=%2Flogo.png&w=48&q=100",
 }
 
-func SendWebhook(url string, webhook *Webhook) (*http.Response, error) {
+func SendWebhook(url string, webhook *Webhook) error {
 	// Convert payload to JSON
 	jsonPayload, err := json.Marshal(&webhook)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Send the JSON payload to the Discord webhook
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err := errors.New("Unexpected status code: " + fmt.Sprint(resp.StatusCode))
-		return nil, err
+		return err
 	}
 
 	defer resp.Body.Close()
 
-	return resp, nil
+	if resp.StatusCode != http.StatusNoContent {
+		// read the json response body for more details
+		decoder := json.NewDecoder(resp.Body)
+		var errorResponse map[string]any
+		if err := decoder.Decode(&errorResponse); err != nil {
+			log.Fatalf("Error decoding error response %d: %s", resp.StatusCode, err)
+			return err
+		}
+
+		return fmt.Errorf("error sending discord webhook: %s (status code: %d)", errorResponse, resp.StatusCode)
+	}
+
+	return nil
 }

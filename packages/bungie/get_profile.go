@@ -25,15 +25,32 @@ type SingleComponentResponseOfDestinyProfileComponent struct {
 }
 
 type DestinyProfileComponent struct {
-	UserInfo DestinyUserInfo `json:"userInfo"`
+	UserInfo                    DestinyUserInfo `json:"userInfo"`
+	DateLastPlayed              time.Time       `json:"dateLastPlayed"`
+	VersionsOwned               int64           `json:"versionsOwned"`
+	CharacterIds                []string        `json:"characterIds"`
+	SeasonHashes                []uint32        `json:"seasonHashes"`
+	EventCardHashesOwned        []uint32        `json:"eventCardHashesOwned"`
+	CurrentGuardianRank         int             `json:"currentGuardianRank"`
+	LifetimeHighestGuardianRank int             `json:"lifetimeHighestGuardianRank"`
+	RenewedGuardianRank         int             `json:"renewedGuardianRank"`
 }
 
 type DictionaryComponentResponseOfint64AndDestinyCharacterComponent struct {
 	Data *map[int64]DestinyCharacterComponent `json:"data"`
 }
 
-func GetProfile(membershipType int, membershipId int64) (*DestinyProfileResponse, error) {
-	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Profile/%d/?components=100,200", getBungieURL(), membershipType, membershipId)
+func GetProfile(membershipType int, membershipId int64, components []int) (*DestinyProfileResponse, error) {
+	// turn componets into a comma separated string
+	componentsStr := ""
+	for i, component := range components {
+		if i == 0 {
+			componentsStr = fmt.Sprintf("%d", component)
+		} else {
+			componentsStr = fmt.Sprintf("%s,%d", componentsStr, component)
+		}
+	}
+	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Profile/%d/?components=%s", getBungieURL(), membershipType, membershipId, componentsStr)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -55,12 +72,6 @@ func GetProfile(membershipType int, membershipId int64) (*DestinyProfileResponse
 		if err := decoder.Decode(&data); err != nil {
 			return nil, err
 		}
-
-		defer func() {
-			if data.ThrottleSeconds > 0 {
-				time.Sleep(time.Duration(data.ThrottleSeconds) * time.Second)
-			}
-		}()
 
 		return nil, fmt.Errorf("error response: %s (%d)", data.Message, data.ErrorCode)
 	}

@@ -16,7 +16,7 @@ type QueueWorker struct {
 	Wg        *util.ReadOnlyWaitGroup
 }
 
-func (qw *QueueWorker) Register(numWorkers int) {
+func (qw *QueueWorker) Register(numWorkers int, keepInReady bool) {
 	ch, err := qw.Conn.Channel()
 	if err != nil {
 		log.Fatalf("Failed to create channel: %s", err)
@@ -35,6 +35,12 @@ func (qw *QueueWorker) Register(numWorkers int) {
 		log.Fatalf("Failed to create queue: %s", err)
 	}
 
+	if keepInReady {
+		err = ch.Qos(1, 0, false)
+		if err != nil {
+			log.Fatalf("Failed to set QoS: %s", err)
+		}
+	}
 	for i := 0; i < numWorkers; i++ {
 		msgs, err := ch.Consume(
 			q.Name,

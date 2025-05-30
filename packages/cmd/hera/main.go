@@ -85,7 +85,8 @@ func main() {
 	// Get all groups for each player
 	playerCountPointer := new(int32)
 	queue := make(chan PlayerTransport, 100)
-	groups := make(chan bungie.GroupV2)
+
+	groupSet := sync.Map{}
 
 	wg := sync.WaitGroup{}
 	for i := 0; i < *reqs; i++ {
@@ -93,35 +94,28 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for player := range queue {
-				res, err := bungie.GetGroupsForMember(player.membershipType, player.membershipId)
-				if err != nil {
-					// retry
-					res, err = bungie.GetGroupsForMember(player.membershipType, player.membershipId)
+				attempts := 0
+				for attempts < 4 {
+					res, err := bungie.GetGroupsForMember(player.membershipType, player.membershipId)
 					if err != nil {
-						log.Fatalf("Error getting groups for player %d: %s", player.membershipId, err)
+						// retry
+						log.Printf("Error getting groups for player %d: %s", player.membershipId, err)
+						attempts++
+						continue
 					}
-				}
-				atomic.AddInt32(playerCountPointer, 1)
+					atomic.AddInt32(playerCountPointer, 1)
 
-				for _, group := range res.Results {
-					if !res.AreAllMembershipsInactive[group.Group.GroupId] {
-						groups <- group.Group
+					for _, group := range res.Results {
+						if !res.AreAllMembershipsInactive[group.Group.GroupId] {
+							groupSet.Store(group.Group.GroupId, group.Group)
+						}
 					}
+					break
 				}
+
 			}
 		}()
 	}
-
-	groupSet := make(map[int64]bungie.GroupV2)
-	wg2 := sync.WaitGroup{}
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
-		for group := range groups {
-			groupSet[group.GroupId] = group
-		}
-	}()
-
 	defer rows.Close()
 	for rows.Next() {
 		player := PlayerTransport{}
@@ -131,16 +125,21 @@ func main() {
 
 	close(queue)
 	wg.Wait()
-	close(groups)
-	wg2.Wait()
 
-	log.Printf("Got all %d clans from %d players.", len(groupSet), *playerCountPointer)
+	count := 0
+	groupSet.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+
+	log.Printf("Got all %d clans from %d players.", count, *playerCountPointer)
 
 	// Begin processing the clans
-	groupChannel := make(chan bungie.GroupV2, len(groupSet))
-	for _, group := range groupSet {
-		groupChannel <- group
-	}
+	groupChannel := make(chan bungie.GroupV2, count)
+	groupSet.Range(func(_, group any) bool {
+		groupChannel <- group.(bungie.GroupV2)
+		return true
+	})
 	close(groupChannel)
 
 	_, err = db.ExecContext(ctx, `TRUNCATE TABLE clan_members`)
@@ -182,34 +181,39 @@ func main() {
 				}
 
 				for page := 1; ; page++ {
-					results, _, err := bungie.GetMembersOfGroup(group.GroupId, page)
-
-					if err != nil {
-						time.Sleep(5 * time.Second)
-						results2, errCode, err := bungie.GetMembersOfGroup(group.GroupId, page)
+					var err error
+					var results *bungie.SearchResultOfGroupMember
+					var errCode int
+					attempts := 0
+					for attempts < 4 {
+						results, errCode, err = bungie.GetMembersOfGroup(group.GroupId, page)
 						if errCode == 686 { // Group not found
 							break
+						} else if err != nil {
+							log.Printf("Error getting members of group %d: %s", group.GroupId, err)
+							attempts++
+							continue
 						}
-						if err != nil {
-							log.Fatalf("Error getting members of group %d: %s", group.GroupId, err)
-						}
-						results = results2
-					}
 
-					atomic.AddInt32(clanMemberCountPointer, int32(len(results.Results)))
-					for _, member := range results.Results {
-						_, err := insertMember.ExecContext(ctx, group.GroupId, member.DestinyUserInfo.MembershipId)
-						if err != nil {
-							atomic.AddInt32(memberFailurePointer, 1)
-							if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
-								player_crawl.SendMessage(ch, member.DestinyUserInfo.MembershipId)
-							} else {
-								log.Fatalf("Error inserting into the clan_members table: %s", err)
+						atomic.AddInt32(clanMemberCountPointer, int32(len(results.Results)))
+						for _, member := range results.Results {
+							_, err := insertMember.ExecContext(ctx, group.GroupId, member.DestinyUserInfo.MembershipId)
+							if err != nil {
+								atomic.AddInt32(memberFailurePointer, 1)
+								if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
+									player_crawl.SendMessage(ch, member.DestinyUserInfo.MembershipId)
+									// if member.LastOnlineStatusChange != 0 {
+									// 	log.Printf("Player %d, last seen %s, is not in the database, sending to player_crawl", member.DestinyUserInfo.MembershipId, time.Unix(member.LastOnlineStatusChange, 0))
+									// }
+								} else {
+									log.Fatalf("Error inserting into the clan_members table: %s", err)
+								}
 							}
 						}
+						break
 					}
 
-					if !results.HasMore {
+					if err != nil || !results.HasMore {
 						break
 					}
 				}

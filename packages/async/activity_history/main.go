@@ -2,15 +2,11 @@ package activity_history
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"raidhub/packages/async"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-type ActivityHistoryRequest struct {
-	MembershipId int64 `json:"membershipId,string"`
-}
 
 const queueName = "activity_history"
 
@@ -23,12 +19,7 @@ func Create() async.QueueWorker {
 }
 
 func SendMessage(ch *amqp.Channel, membershipId int64) error {
-	body, err := json.Marshal(ActivityHistoryRequest{
-		MembershipId: membershipId,
-	})
-	if err != nil {
-		return err
-	}
+	body := fmt.Appendf(nil, "%d", membershipId)
 
 	return ch.PublishWithContext(
 		context.Background(),
@@ -37,7 +28,7 @@ func SendMessage(ch *amqp.Channel, membershipId int64) error {
 		true,      // mandatory
 		false,     // immediate
 		amqp.Publishing{
-			ContentType: "application/json",
+			ContentType: "text/plain",
 			Body:        body,
 		},
 	)
