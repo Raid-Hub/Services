@@ -9,10 +9,15 @@ import (
 
 var crafteningStart = time.Date(2023, 9, 15, 13, 54, 00, 0, time.UTC)
 var crafteningEnd = time.Date(2023, 9, 18, 4, 00, 9, 0, time.UTC)
+// Skip window for the bad flagging period (prevent recurrence for Sept 16-23, 2025)
+var quickfangStart = time.Date(2025, 9, 16, 17, 0, 0, 0, time.UTC)
+var quickfangEnd = time.Date(2025, 9, 23, 17, 0, 0, 0, time.UTC)
 
 func (h ActivityHeuristic) apply(instance *Instance) (ResultTuple, map[int64]ResultTuple) {
-	if instance.DateCompleted.After(crafteningStart) && instance.DateStarted.Before(crafteningEnd) {
-		// We cannot apply any heuristics to instances that are part of the craftening
+	// Instances overlapping known problematic windows should be skipped
+	if (instance.DateCompleted.After(crafteningStart) && instance.DateStarted.Before(crafteningEnd)) ||
+		(instance.DateCompleted.After(quickfangStart) && instance.DateStarted.Before(quickfangEnd)) {
+		// We cannot apply any heuristics to instances that are part of these windows
 		return ResultTuple{}, map[int64]ResultTuple{}
 	}
 
