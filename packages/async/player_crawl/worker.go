@@ -164,6 +164,12 @@ func crawl_membership(membershipType int, membershipId int64, db *sql.DB) {
 		return
 	}
 
+	// _, err = stats.UpdatePlayerSumOfBest(membershipId, tx)
+	// if err != nil {
+	// 	log.Printf("Error updating sum of best for membershipId %d: %s", membershipId, err)
+	// 	return
+	// }
+
 	_, err = tx.Exec(`UPDATE player SET last_crawled = NOW(), is_private = $1 WHERE membership_id = $2`, isPrivate, membershipId)
 	if err != nil {
 		log.Fatalf("Failed to update last crawled: %s", err)

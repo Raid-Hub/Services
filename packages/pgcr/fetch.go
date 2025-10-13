@@ -42,7 +42,7 @@ func getPgcrURL() string {
 	return pgcrUrlBase
 }
 
-var e = time.Now()
+var now = time.Now()
 
 func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (PGCRResult, *pgcr_types.ProcessedActivity, *bungie.DestinyPostGameCarnageReport, error) {
 	start := time.Now()
@@ -60,24 +60,25 @@ func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (
 			log.Printf("Error decoding %d response for instanceId %d: %s", statusCode, instanceID, err)
 			monitoring.GetPostGameCarnageReportRequest.WithLabelValues(fmt.Sprintf("Unknown%d", statusCode)).Observe(float64(time.Since(start).Milliseconds()))
 			// Handle a few cases here
-			if statusCode == 404 {
+			switch statusCode {
+			case 404:
 				return NotFound, nil, nil, err
-			} else if statusCode == 429 {
+			case 429:
 				return SystemDisabled, nil, nil, err
-			} else if statusCode == 403 {
+			case 403:
 				return RateLimited, nil, nil, err
 			}
 			return DecodingError, nil, nil, err
 		}
 		monitoring.GetPostGameCarnageReportRequest.WithLabelValues(data.ErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 
+		bungieErr := fmt.Errorf("%s", data.ErrorStatus)
 		if data.ErrorCode == 1653 {
 			// PGCRNotFound
-			return NotFound, nil, nil, fmt.Errorf("%s", data.ErrorStatus)
+			return NotFound, nil, nil, bungieErr
 		}
 
 		log.Printf("Error response for instanceId %d: %s (%d) - %s", instanceID, data.ErrorStatus, data.ErrorCode, data.Message)
-		bungieErr := fmt.Errorf("%s", data.ErrorStatus)
 
 		if data.ErrorCode == 5 {
 			return SystemDisabled, nil, nil, bungieErr
@@ -98,25 +99,15 @@ func FetchAndProcessPGCR(client *http.Client, instanceID int64, apiKey string) (
 	monitoring.GetPostGameCarnageReportRequest.WithLabelValues(data.ErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 
 	if data.Response.ActivityDetails.Mode != 4 {
-		// if (time.Since(e) < (time.Duration(100) * time.Second)) {
-		// 	return InsufficientPrivileges, nil, nil, fmt.Errorf("manually blocked PGCR %d", instanceID)
-		// }
-		// if (data.Response.ActivityDetails.InstanceId % 1000 == 0) {
-		// 	return InsufficientPrivileges, nil, nil, fmt.Errorf("manually blocked PGCR %d", instanceID)
-		// }
-
 		return NonRaid, nil, &data.Response, nil
 	}
 
 	pgcr, err := ProcessDestinyReport(&data.Response)
+
 	if err != nil {
 		log.Println(err)
 		return BadFormat, nil, nil, err
 	}
-
-	// if (!pgcr.Completed) {
-	// 	return InsufficientPrivileges, nil, nil, fmt.Errorf("manually blocked PGCR %d", instanceID)
-	// }
 
 	return Success, pgcr, &data.Response, nil
 }

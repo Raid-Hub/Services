@@ -2,12 +2,11 @@ package cheat_detection
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 )
 
 const (
-	CheatCheckVersion = "beta-2.1.11"
+	CheatCheckVersion = "beta-2.1.13"
 	Threshold         = 0.05
 	PlayerThreshold   = 0.02
 )
@@ -23,10 +22,7 @@ func CheckForCheats(instanceId int64, db *sql.DB) (*Instance, ResultTuple, []Res
 		return nil, ResultTuple{}, nil, false, err
 	}
 
-	heuristic, err := getActivityHeuristic(instance)
-	if err != nil {
-		return instance, ResultTuple{}, nil, false, err
-	}
+	heuristic := getActivityHeuristic(instance)
 
 	instanceResult, playerResults := heuristic.apply(instance)
 	isSolo := len(playerResults) == 1
@@ -82,39 +78,46 @@ func CheckForCheats(instanceId int64, db *sql.DB) (*Instance, ResultTuple, []Res
 	return instance, instanceResult, flaggedPlayers, isSolo, nil
 }
 
-func getActivityHeuristic(instance *Instance) (*ActivityHeuristic, error) {
+func getActivityHeuristic(instance *Instance) *ActivityHeuristic {
 	switch instance.Activity {
 	case 1:
-		return &LeviathanHeuristic, nil
+		return &LeviathanHeuristic
 	case 2:
-		return &EaterOfWorldsHeuristic, nil
+		return &EaterOfWorldsHeuristic
 	case 3:
-		return &SpireOfStarsHeuristic, nil
+		return &SpireOfStarsHeuristic
 	case 4:
-		return &LastWishHeuristic, nil
+		return &LastWishHeuristic
 	case 5:
-		return &ScourgeOfThePastHeuristic, nil
+		return &ScourgeOfThePastHeuristic
 	case 6:
-		return &CrownOfSorrowHeuristic, nil
+		return &CrownOfSorrowHeuristic
 	case 7:
-		return &GardenOfSalvationHeuristic, nil
+		return &GardenOfSalvationHeuristic
 	case 8:
-		return &DeepStoneCryptHeuristic, nil
+		return &DeepStoneCryptHeuristic
 	case 9:
-		return &VaultOfGlassHeuristic, nil
+		return &VaultOfGlassHeuristic
 	case 10:
-		return &VowOfTheDiscipleHeuristic, nil
+		return &VowOfTheDiscipleHeuristic
 	case 11:
-		return &KingsFallHeuristic, nil
+		return &KingsFallHeuristic
 	case 12:
-		return &RootOfNightmaresHeuristic, nil
+		return &RootOfNightmaresHeuristic
 	case 13:
-		return &CrotasEndHeuristic, nil
+		return &CrotasEndHeuristic
 	case 101:
-		return &PantheonHeuristic, nil
+		return &PantheonHeuristic
 	case 14:
-		return &SalvationsEdgeHeuristic, nil
+		return &SalvationsEdgeHeuristic
+	case 15:
+		return &DesertPerpetualHeuristic
+	case 16:
+		return &EpicDesertPerpetualHeuristic
 	default:
-		return nil, fmt.Errorf("no heuristic for activity %d", instance.Activity)
+		return &ActivityHeuristic{
+			RaidName:       "Unknown Raid",
+			CheckpointName: "Unknown Checkpoint",
+		}
 	}
 }

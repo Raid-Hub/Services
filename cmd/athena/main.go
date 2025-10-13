@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"raidhub/packages/bungie"
 	"raidhub/packages/postgres"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -199,6 +201,19 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go saveWeaponDefinitions(ctx, &wg, db, definitions)
+	go saveFeatDefinitions(ctx, &wg, db, definitions)
+
+	wg.Wait()
+
+}
+
+func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, definitions *sql.DB) {
+	defer wg.Done()
+
 	rows, err := definitions.QueryContext(ctx, `SELECT 
 			json_extract(json, '$.hash'), 
 			json_extract(json, '$.displayProperties.name'), 
@@ -274,5 +289,96 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("Done")
+	log.Println("Saved weapon definitions")
+}
+
+type FeatData struct {
+	Hash                      uint32
+	SkullIdentifierHash       uint32
+	Name                      string
+	Icon                      string
+	Description               string
+	DescriptionShort          string
+	ModifierPowerContribution int
+}
+
+func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, definitions *sql.DB) {
+	defer wg.Done()
+
+	// first, get all raid hashes
+	raidHashRows, err := db.QueryContext(ctx, `SELECT hash FROM activity_version`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer raidHashRows.Close()
+	var raidHashes []any
+	for raidHashRows.Next() {
+		var hash uint32
+		if err := raidHashRows.Scan(&hash); err != nil {
+			log.Fatal(err)
+		}
+		raidHashes = append(raidHashes, hash)
+	}
+
+	// Create a placeholder string for the IN clause
+	placeholders := make([]string, len(raidHashes))
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+
+	// find the difficultyTierCollectionHash from the activity definition (or zero if not found)
+	query := fmt.Sprintf(`SELECT 
+			json_extract(selectable_skulls.value, '$.activitySkull.hash') AS hash,
+			json_extract(selectable_skulls.value, '$.activitySkull.skullIdentifierHash') AS skull_identifier_hash,
+			json_extract(selectable_skulls.value, '$.activitySkull.displayProperties.name') AS name,
+			json_extract(selectable_skulls.value, '$.activitySkull.displayProperties.icon') AS icon,
+			json_extract(selectable_skulls.value, '$.activitySkull.displayProperties.description') AS description,
+			json_extract(selectable_skulls.value, '$.activitySkull.displayDescriptionOverrideForNavMode') AS description_short,
+			json_extract(selectable_skulls.value, '$.activitySkull.modifierPowerContribution')
+		FROM DestinyActivityDefinition AS a
+		JOIN DestinyActivityDifficultyTierCollectionDefinition AS tier_collection
+			ON json_extract(a.json, '$.difficultyTierCollectionHash') = json_extract(tier_collection.json, '$.hash')
+		JOIN json_each(json_extract(tier_collection.json, '$.difficultyTiers')) AS tier
+		JOIN json_each(tier.value, '$.selectableSkullCollectionHashes') AS skull_hashes
+		JOIN DestinyActivitySelectableSkullCollectionDefinition AS skull
+			ON json_extract(skull.json, '$.hash') = skull_hashes.value
+		JOIN json_each(json_extract(skull.json, '$.selectableActivitySkulls')) AS selectable_skulls
+		WHERE json_extract(a.json, '$.hash') IN (%s)
+		 	AND json_extract(selectable_skulls.value, '$.activitySkull.dynamicUse') > 0
+		GROUP BY hash`,
+		strings.Join(placeholders, ","))
+
+	rows, err := definitions.QueryContext(ctx, query, raidHashes...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	// for each row, see if the difficultyTierCollectionHash is not null
+	var feat FeatData
+	for rows.Next() {
+		// for now, just log the hash
+		if err := rows.Scan(&feat.Hash, &feat.SkullIdentifierHash, &feat.Name, &feat.Icon, &feat.Description, &feat.DescriptionShort, &feat.ModifierPowerContribution); err != nil {
+			log.Fatal(err)
+		}
+
+		if *verbose {
+			log.Printf("Found selectable skull: %s", feat.Name)
+		}
+
+		// Insert the feat into the database
+		_, err := db.ExecContext(ctx, `INSERT INTO activity_feat_definition 
+			(hash, skull_hash, name, icon_path, description, description_short, modifier_power_contribution) 
+			VALUES ($1::bigint, $2::bigint, $3, $4, $5, $6, $7) 
+			ON CONFLICT (hash) DO UPDATE SET
+			name = EXCLUDED.name,
+			icon_path = EXCLUDED.icon_path,
+			description = EXCLUDED.description,
+			description_short = EXCLUDED.description_short,
+			modifier_power_contribution = EXCLUDED.modifier_power_contribution`,
+			feat.Hash, feat.SkullIdentifierHash, feat.Name, feat.Icon, feat.Description, feat.DescriptionShort, feat.ModifierPowerContribution)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }

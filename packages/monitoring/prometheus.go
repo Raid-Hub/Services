@@ -75,6 +75,7 @@ func RegisterAtlas(port int) {
 func RegisterHermes(port int) {
 	prometheus.MustRegister(FloodgatesRecent)
 	prometheus.MustRegister(PGCRStoreActivity)
+	prometheus.MustRegister(GetPostGameCarnageReportRequest)
 
 	serveMetrics(port)
 }

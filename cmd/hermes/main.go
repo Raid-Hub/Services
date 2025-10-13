@@ -41,14 +41,14 @@ func main() {
 	activityHistoryQueue.Conn = conn
 	activityHistoryQueue.Db = db
 	activityHistoryQueue.Wg = &readonlyDestiny2ApiWg
-	go activityHistoryQueue.Register(3, true)
+	go activityHistoryQueue.Register(1, true)
 
 	player_crawl.CreateOutboundChannel(conn)
 	playersQueue := player_crawl.Create()
 	playersQueue.Db = db
 	playersQueue.Conn = conn
 	playersQueue.Wg = &readonlyDestiny2ApiWg
-	go playersQueue.Register(30, true)
+	go playersQueue.Register(50, true)
 
 	activityCharactersQueue := character_fill.Create()
 	activityCharactersQueue.Db = db
@@ -66,7 +66,8 @@ func main() {
 	bonusPgcrsFetchQueue.Db = db
 	bonusPgcrsFetchQueue.Conn = conn
 	bonusPgcrsFetchQueue.Wg = &readonlyDestiny2ApiWg
-	go bonusPgcrsFetchQueue.Register(5, true)
+	// undo change to 0 later
+	go bonusPgcrsFetchQueue.Register(1, true)
 
 	bonusPgcrsStoreQueue := pgcr_exists.CreateStoreWorker()
 	bonusPgcrsStoreQueue.Db = db
@@ -95,7 +96,7 @@ func main() {
 	pgcrBlockedQueue.Conn = conn
 	pgcrBlockedQueue.Wg = &readonlyDestiny2ApiWg
 	// Before a Raid Race, set this number to be 200
-	go pgcrBlockedQueue.Register(20, true)
+	go pgcrBlockedQueue.Register(200, true)
 
 	monitoring.RegisterHermes(8083)
 

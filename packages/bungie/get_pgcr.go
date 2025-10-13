@@ -46,6 +46,8 @@ type DestinyPostGameCarnageReportResponse struct {
 
 type DestinyPostGameCarnageReport struct {
 	ActivityDetails                 DestinyHistoricalStatsActivity      `json:"activityDetails"`
+	ActivityDifficultyTier          *int                                `json:"activityDifficultyTier"`
+	SelectedSkullHashes             *[]uint32                           `json:"selectedSkullHashes"`
 	Period                          string                              `json:"period"`
 	StartingPhaseIndex              int                                 `json:"startingPhaseIndex"`
 	ActivityWasStartedFromBeginning bool                                `json:"activityWasStartedFromBeginning"`

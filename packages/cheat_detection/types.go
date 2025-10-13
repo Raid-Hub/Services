@@ -18,8 +18,8 @@ const (
 	RootOfNightmares
 	CrotasEnd
 	SalvationsEdge
-	Raid15
-	Raid16
+	DesertPerpetual
+	EpicDesertPerpetual
 	Raid17
 	Raid18
 	Raid19
@@ -49,7 +49,7 @@ const (
 	Bit43
 	Bit44
 	Bit45
-	Bit46
+	RestrictedPGCR
 	PlayerHeavyAmmoKills
 	FastLowmanCheckpoint
 	UnlikelyLowman

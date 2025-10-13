@@ -17,6 +17,7 @@ type ProcessedActivity struct {
 	MembershipType  int                       `json:"membershipType"`
 	Score           int                       `json:"score"`
 	Players         []ProcessedActivityPlayer `json:"players"`
+	SkullHashes     []uint32                  `json:"skullHashes"`
 }
 
 type ProcessedActivityPlayer struct {

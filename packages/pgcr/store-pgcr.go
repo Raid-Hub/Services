@@ -12,6 +12,7 @@ import (
 	"raidhub/packages/monitoring"
 	"raidhub/packages/pgcr_types"
 	"raidhub/packages/postgres"
+	"raidhub/packages/stats"
 	"sync"
 	"time"
 
@@ -73,10 +74,11 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 		"date_completed",
 		"platform_type",
 		"duration",
-		"score"
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, pgcr.InstanceId, pgcr.Hash,
+		"score",
+		"skull_hashes"
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, pgcr.InstanceId, pgcr.Hash,
 		pgcr.Flawless, pgcr.Completed, pgcr.Fresh, pgcr.PlayerCount,
-		pgcr.DateStarted, pgcr.DateCompleted, pgcr.MembershipType, pgcr.DurationSeconds, pgcr.Score)
+		pgcr.DateStarted, pgcr.DateCompleted, pgcr.MembershipType, pgcr.DurationSeconds, pgcr.Score, pq.Array(pgcr.SkullHashes))
 
 	if err != nil {
 		pqErr, ok := err.(*pq.Error)
@@ -354,23 +356,7 @@ func StorePGCR(pgcr *pgcr_types.ProcessedActivity, raw *bungie.DestinyPostGameCa
 		}
 
 		if pgcr.Fresh != nil && *pgcr.Fresh && pgcr.DurationSeconds < fastestClearSoFar[membershipId] {
-			_, err = tx.Exec(`WITH c AS (SELECT COUNT(*) as expected FROM activity_definition WHERE is_raid = true AND is_sunset = false)
-				UPDATE player p
-				SET sum_of_best = ptd.total_duration
-				FROM (
-					SELECT
-						ps.membership_id,
-						SUM(a.duration) AS total_duration
-					FROM player_stats ps
-					JOIN activity_definition r ON ps.activity_id = r.id
-					LEFT JOIN instance a ON ps.fastest_instance_id = a.instance_id
-					WHERE a.duration IS NOT NULL AND is_raid = true AND is_sunset = false 
-						AND ps.membership_id = $1
-					GROUP BY ps.membership_id
-					HAVING COUNT(a.instance_id) = (SELECT expected FROM c)
-				) ptd
-				WHERE p.membership_id = ptd.membership_id;`, membershipId)
-
+			_, err := stats.UpdatePlayerSumOfBest(membershipId, tx)
 			if err != nil {
 				log.Printf("Error updating sum of best for membershipId %d", membershipId)
 				return nil, false, err

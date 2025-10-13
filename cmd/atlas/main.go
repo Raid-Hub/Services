@@ -98,6 +98,8 @@ func run(latestId int64, db *sql.DB) {
 		startTime := time.Now()
 		spawnWorkers(workers, periodLength, db, &consumerConfig)
 
+		monitoring.ActiveWorkers.Set(float64(workers))
+
 		medianLag, err := getMedianLag(min(4, int(time.Since(startTime).Minutes())))
 		if err != nil {
 			log.Fatal(err)
@@ -115,12 +117,15 @@ func run(latestId int64, db *sql.DB) {
 
 		var newPeriodLength int
 		newWorkers := 0
-		if fractionNotFound < 0.001 || medianLag >= 600 {
+		if fractionNotFound > 0.50 {
+			// If we are getting a lot of 404s, let's do a quick probe set
+			newPeriodLength = 2500
+			newWorkers = 25
+		} else if fractionNotFound < 0.001 || medianLag >= 600 {
 			// how much we expect to get catch up
 			newPeriodLength = max(int(math.Round(math.Pow(float64(workers)*(math.Ceil(medianLag)-20.0), 0.824))), 10_000)
 			// If we aren't getting 404's, just spike the workers up to ensure we catch up to live ASAP
 			newWorkers = int(math.Ceil(float64(workers) * (1 + float64(medianLag-20)/100)))
-
 		} else {
 			adjf := fractionNotFound - 0.025 // do not let workers go below 2.5 %
 			decreaseFraction := min(math.Pow(retryDelayTime/8*math.Abs(adjf), 0.88)/100, 0.65)
@@ -128,12 +133,14 @@ func run(latestId int64, db *sql.DB) {
 			// Adjust number of workers for the next period
 			newWorkers = int(math.Round(float64(workers) - sign*decreaseFraction*float64(workers)))
 
-			// Calculate the new period length based on the number of PGCRs per second
 			pgcrRate, err := getPgcrsPerSecond(int(time.Since(startTime).Minutes()))
+			// Calculate the new period length based on the number of PGCRs per second
 			if err != nil {
 				log.Fatal(err)
 			} else if pgcrRate == 0 {
 				newPeriodLength = 600 * newWorkers
+			} else if fractionNotFound >= 0.075 {
+				newPeriodLength = int(math.Round(100 * pgcrRate))
 			} else {
 				newPeriodLength = int(math.Round(300 * pgcrRate))
 			}

@@ -169,6 +169,10 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 					Value: bungieName,
 				},
 				{
+					Name:  "Last Seen",
+					Value: fmt.Sprintf("<t:%d:R>", profile.DateLastPlayed.Unix()),
+				},
+				{
 					Name:  "Clears",
 					Value: fmt.Sprintf("%d", clears),
 				},

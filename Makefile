@@ -30,7 +30,7 @@ prometheus:
 # Go Binaries
 GO_BUILD = go build
 BINARIES = -o ./bin/
-COMMANDS = ./packages/cmd/
+COMMANDS = ./cmd/
 
 .PHONY: bin
 bin:

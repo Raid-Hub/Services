@@ -80,7 +80,4 @@ COMMIT;
 
 ALTER TABLE "player" ADD COLUMN "is_whitelisted" BOOLEAN DEFAULT FALSE;
 
-ALTER TABLE activity_definition ADD COLUMN r2_path TEXT NOT NULL DEFAULT '';
-ALTER TABLE activity_definition ALTER COLUMN r2_path DROP DEFAULT;
-
 ALTER TABLE "instance" ADD COLUMN "is_whitelisted" BOOLEAN DEFAULT FALSE;

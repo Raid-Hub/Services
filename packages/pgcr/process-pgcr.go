@@ -44,6 +44,17 @@ func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*pgcr_ty
 		DurationSeconds: CalculateDurationSeconds(startDate, report.Entries[0]),
 		MembershipType:  report.ActivityDetails.MembershipType,
 		Score:           getStat(report.Entries[0].Values, "teamScore"),
+		SkullHashes:     []uint32{},
+	}
+
+	if report.SelectedSkullHashes != nil {
+		setOfSkullHashes := make(map[uint32]bool)
+		for _, hash := range *report.SelectedSkullHashes {
+			setOfSkullHashes[hash] = true
+		}
+		for hash := range setOfSkullHashes {
+			result.SkullHashes = append(result.SkullHashes, hash)
+		}
 	}
 
 	players := make(map[int64][]bungie.DestinyPostGameCarnageReportEntry)

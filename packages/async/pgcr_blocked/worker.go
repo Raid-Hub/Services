@@ -63,7 +63,7 @@ func process_request(qw *async.QueueWorker, msg amqp.Delivery, client *http.Clie
 			}
 		} else if result == pgcr.InsufficientPrivileges {
 			if !isUnblocked() {
-				time.Sleep(time.Duration(20) * time.Second)
+				time.Sleep(time.Duration(60) * time.Second)
 				continue
 			} else {
 				errCount++

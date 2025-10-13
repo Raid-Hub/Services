@@ -15,6 +15,12 @@ const (
 	versionPrefix        = "beta-2.1"
 )
 
+type LevelsDTO struct {
+	Flag                      cheat_detection.PlayerInstanceFlagStats
+	CheaterAccountProbability float64
+	CheaterAccountFlags       uint64
+}
+
 func main() {
 	log.Println("Starting...")
 
@@ -24,40 +30,13 @@ func main() {
 	}
 	defer db.Close()
 
+	// step 1: get all player instance flags and check their cheat levels
 	flags := make(chan cheat_detection.PlayerInstanceFlagStats)
 
-	// step 1: get all player instance flags and check their cheat levels
-	go func() {
-		rows := cheat_detection.GetAllInstanceFlagsByPlayer(db, flags, fmt.Sprintf("%s%%", versionPrefix))
-
-		defer rows.Close()
-		for rows.Next() {
-			var flag cheat_detection.PlayerInstanceFlagStats
-			if err := rows.Scan(
-				&flag.MembershipId,
-				&flag.FlaggedCount,
-				&flag.FlagsA,
-				&flag.FlagsB,
-				&flag.FlagsC,
-				&flag.FlagsD,
-			); err != nil {
-				log.Fatalf("Error scanning row: %s", err)
-			}
-			flags <- flag
-		}
-		close(flags)
-	}()
-
-	type LevelsDTO struct {
-		Flag                      cheat_detection.PlayerInstanceFlagStats
-		CheaterAccountProbability float64
-		CheaterAccountFlags       uint64
-	}
-
-	stats := make([][]LevelsDTO, 5)
-	var wg sync.WaitGroup
+	wg := sync.WaitGroup{}
 	wg.Add(numBungieWorkers)
 	mu := sync.Mutex{}
+	stats := make([][]LevelsDTO, 5)
 	for i := 0; i < numBungieWorkers; i++ {
 		go func() {
 			defer wg.Done()
@@ -76,6 +55,24 @@ func main() {
 			}
 		}()
 	}
+
+	rows := cheat_detection.GetAllInstanceFlagsByPlayer(db, flags, fmt.Sprintf("%s%%", versionPrefix))
+	defer rows.Close()
+	for rows.Next() {
+		var flag cheat_detection.PlayerInstanceFlagStats
+		if err := rows.Scan(
+			&flag.MembershipId,
+			&flag.FlaggedCount,
+			&flag.FlagsA,
+			&flag.FlagsB,
+			&flag.FlagsC,
+			&flag.FlagsD,
+		); err != nil {
+			log.Fatalf("Error scanning row: %s", err)
+		}
+		flags <- flag
+	}
+	close(flags)
 	wg.Wait()
 
 	// calculate average of each flag type, total flags, and flag count
@@ -123,7 +120,7 @@ func main() {
 		}()
 	}
 
-	rows, err := db.Query(`SELECT DISTINCT instance_id 
+	rows, err = db.Query(`SELECT DISTINCT instance_id 
 		FROM instance_player 
 		JOIN player USING (membership_id)
 		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'`)

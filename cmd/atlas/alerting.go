@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"raidhub/packages/discord"
-	"raidhub/packages/monitoring"
 	"raidhub/packages/pgcr"
 
 	"golang.org/x/time/rate"
@@ -88,8 +87,6 @@ func logIntervalState(medianLag float64, countWorkers int, percentNotFound, erro
 }
 
 func logWorkersStarting(numWorkers int, period int, latestId int64) {
-	monitoring.ActiveWorkers.Set(float64(numWorkers))
-
 	webhook := discord.Webhook{
 		Embeds: []discord.Embed{{
 			Title: "Workers Starting",
@@ -216,28 +213,36 @@ func logRunawayError(percentNotFound float64, currentInstanceId, latestInstanceI
 	ping := fmt.Sprintf("<@&%s>", os.Getenv("ALERTS_ROLE_ID"))
 	webhook := discord.Webhook{
 		Content: &ping,
-		Embeds: []discord.Embed{{
-			Title: "Runaway Error",
-			Color: 15548997, // Red
-			Fields: []discord.Field{{
-				Name:  "404 Rate",
-				Value: fmt.Sprintf("%.3f%%", percentNotFound),
-			}, {
-				Name:  "Crawling Near Instance Id",
-				Value: fmt.Sprintf("`%d`", currentInstanceId),
-			}, {
-				Name:  "Latest Instance Id",
-				Value: fmt.Sprintf("`%d`", latestInstanceId),
-			}, {
-				Name:  "Latest Instance Completion Date",
-				Value: fmt.Sprintf("%d minutes ago", int(time.Since(latestInstanceCompletionDate).Minutes())),
-			}, {
-				Name:  "Ahead By",
-				Value: fmt.Sprintf("%d", currentInstanceId-latestInstanceId),
+		Embeds: []discord.Embed{
+			{
+				Title: "Runaway Error",
+				Color: 15548997, // Red
+				Fields: []discord.Field{{
+					Name:  "404 Rate",
+					Value: fmt.Sprintf("%.3f%%", percentNotFound),
+				}, {
+					Name:  "Crawling Near Instance Id",
+					Value: fmt.Sprintf("`%d`", currentInstanceId),
+				}, {
+					Name:  "Latest Instance Completion Date",
+					Value: fmt.Sprintf("<t:%d:t>", latestInstanceCompletionDate.Unix()),
+				}},
+				Timestamp: time.Now().Format(time.RFC3339),
+				Footer:    discord.CommonFooter,
+			},
+			{
+				Title: "Resetting Channel",
+				Color: 3447003, // Blue
+				Fields: []discord.Field{{
+					Name:  "Returning to Instance Id",
+					Value: fmt.Sprintf("`%d`", latestInstanceId),
+				}, {
+					Name:  "Backtrack Count",
+					Value: fmt.Sprintf("%d", currentInstanceId-latestInstanceId),
+				}},
+				Timestamp: time.Now().Format(time.RFC3339),
+				Footer:    discord.CommonFooter,
 			}},
-			Timestamp: time.Now().Format(time.RFC3339),
-			Footer:    discord.CommonFooter,
-		}},
 	}
 	discord.SendWebhook(getAtlasWebhookURL(), &webhook)
 	log.Printf("Error: Atlas is runaway with 404 rate %.3f%%, latest instance id %d, latest instance completion date %s", percentNotFound, latestInstanceId, latestInstanceCompletionDate.Format(time.RFC3339))

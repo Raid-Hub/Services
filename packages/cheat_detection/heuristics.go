@@ -59,6 +59,74 @@ type ActivityHeuristic struct {
 	MinCheckpointKills int
 }
 
+var EpicDesertPerpetualHeuristic = ActivityHeuristic{
+	ActivityId:     16,
+	RaidBit:        EpicDesertPerpetual,
+	RaidName:       "The Epic Desert Perpetual",
+	CheckpointName: "Keregos, Fractured In Time",
+	CheckpointLowman: map[int][]LowmanData{
+		Any: {
+			{
+				MinPlayers:    2,
+				CheatedChance: 0.05,
+			},	
+			{
+				MinPlayers: 3,
+			},	
+		},
+	},
+	FreshLowman: map[int][]LowmanData{
+		Any: {
+			{
+				MinPlayers:    2,
+				CheatedChance: 0.10,
+			},
+			{
+				MinPlayers: 3,
+			},
+		},
+	},
+	SpeedrunCurve: func(daysAfterRelease float64) float64 {
+		return 0 // tbd
+	},
+	MinFreshKills:      40, // tbd
+	MinCheckpointKills: 40,
+}
+
+var DesertPerpetualHeuristic = ActivityHeuristic{
+	ActivityId:     15,
+	RaidBit:        DesertPerpetual,
+	RaidName:       "The Desert Perpetual",
+	CheckpointName: "Keregos, The Worldline",
+	CheckpointLowman: map[int][]LowmanData{
+		Any: {
+			{
+				MinPlayers:    2,
+				CheatedChance: 0.10,
+			},
+			{
+				MinPlayers: 3,
+			},
+		},
+	},
+	FreshLowman: map[int][]LowmanData{
+		Any: {
+			{
+				MinPlayers:    2,
+				CheatedChance: 0.10,
+			},
+			{
+				MinPlayers: 3,
+			},
+		},
+	},
+	SpeedrunCurve: func(daysAfterRelease float64) float64 {
+		return 0 // tbd
+	},
+	MinFreshKills:      20, // tbd
+	MinCheckpointKills: 20,
+}
+
 var SalvationsEdgeHeuristic = ActivityHeuristic{
 	ActivityId:     14,
 	RaidBit:        SalvationsEdge,
@@ -191,7 +259,7 @@ var KingsFallHeuristic = ActivityHeuristic{
 	SpeedrunCurve: func(daysAfterRelease float64) float64 {
 		return 1138.90 - (39.11 * math.Log10(math.Pow(daysAfterRelease+1.00, 3.94)))
 	},
-	MinFreshKills:      700,
+	MinFreshKills:      460,
 	MinCheckpointKills: 105,
 }
 

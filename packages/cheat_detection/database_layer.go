@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"raidhub/packages/bungie"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +27,7 @@ func getInstance(instanceId int64, db *sql.DB) (*Instance, error) {
 			'duration', i."duration", 
 			'platformType', i."platform_type", 
 			'season', i."season_id",
-			'raidPath', ad."r2_path",
+			'raidPath', ad."splash_path",
 			'players', (
 				SELECT 
 					ARRAY_AGG(
@@ -156,6 +155,7 @@ func GetAllInstanceFlagsByPlayer(db *sql.DB, out chan PlayerInstanceFlagStats, v
 			JOIN instance i USING (instance_id)
 			WHERE fp.flagged_at >= NOW() - INTERVAL '60 days'
 				AND cheat_check_version LIKE $1
+				AND NOT i.is_whitelisted
 			ORDER BY membership_id, instance_id, fp.flagged_at DESC
 		)
 		SELECT 
@@ -181,106 +181,6 @@ func GetAllInstanceFlagsByPlayer(db *sql.DB, out chan PlayerInstanceFlagStats, v
 	}
 
 	return rows
-}
-
-func UpdatePlayerCheatLevel(db *sql.DB, flag PlayerInstanceFlagStats) (int, float64, uint64) {
-	var ageInDays float64
-	var clears int
-	var membershipType int
-	var iconPath string
-	var bungieName string
-	var currentCheatLevel int
-	var isPrivate bool
-	// get the age of the account and # of clears
-	err := db.QueryRow(`
-		SELECT 
-			EXTRACT(EPOCH FROM age(NOW(), first_seen)) / 86400 AS age_in_days,
-			clears,
-		    membership_type,
-			icon_path,
-			bungie_name,
-			cheat_level,
-			is_private
-		FROM player
-		WHERE membership_id = $1
-	`, flag.MembershipId).Scan(&ageInDays, &clears, &membershipType, &iconPath, &bungieName, &currentCheatLevel, &isPrivate)
-	if err != nil {
-		log.Fatalf("Error getting player info for %d: %s", flag.MembershipId, err)
-		return -1, 0, 0
-	}
-
-	var flawlessRatio float64
-	var lowmanRatio float64
-	var soloRatio float64
-	err = db.QueryRow(`
-		SELECT 
-			COUNT(CASE WHEN i.completed AND flawless THEN 1 END) * 1.0 / GREATEST(COUNT(CASE WHEN i.completed = true THEN 1 END), 1) AS flawless_ratio,
-			COUNT(CASE WHEN i.completed AND player_count <= 3 THEN 1 END) * 1.0 / GREATEST(COUNT(CASE WHEN i.completed = true THEN 1 END), 1) AS lowman_ratio,
-			COUNT(CASE WHEN i.completed AND player_count = 1 THEN 1 END) * 1.0 / GREATEST(COUNT(CASE WHEN i.completed = true THEN 1 END), 1) AS solo_ratio
-		FROM instance_player
-		JOIN instance i USING (instance_id)
-		WHERE i.date_started >= NOW() - INTERVAL '60 days'
-			AND membership_id = $1
-	`, flag.MembershipId).Scan(&flawlessRatio, &lowmanRatio, &soloRatio)
-	if err != nil {
-		log.Fatalf("Error getting ratios for player %d: %s", flag.MembershipId, err)
-		return -1, 0, 0
-	}
-
-	res, err := bungie.GetProfile(membershipType, flag.MembershipId, []int{100})
-	if err != nil {
-		log.Printf("Error getting profile for player %d: %s", flag.MembershipId, err)
-		return -1, 0, 0
-	}
-
-	cheaterAccountChance, bitFlags := GetCheaterAccountChance(res.Profile.Data, clears, ageInDays, flawlessRatio, lowmanRatio, soloRatio, isPrivate)
-
-	minCheatLevel := GetMinimumCheatLevel(flag, cheaterAccountChance)
-
-	if minCheatLevel > currentCheatLevel {
-		log.Printf("Upgrading cheat level for player %d %s from %d to %d", flag.MembershipId, bungieName, currentCheatLevel, minCheatLevel)
-		// Update the player's cheat level in the database
-		_, err = db.Exec(`
-			UPDATE player
-			SET cheat_level = GREATEST(cheat_level, $1)
-			WHERE membership_id = $2;
-		`, minCheatLevel, flag.MembershipId)
-
-		if err != nil {
-			log.Fatalf("Error updating cheat level for player %d: %s", flag.MembershipId, err)
-		}
-
-		if minCheatLevel == 4 {
-			flag.SendBlacklistedPlayerWebhook(res.Profile.Data, clears, ageInDays, bungieName, iconPath, cheaterAccountChance, bitFlags)
-		}
-
-		if minCheatLevel >= 2 {
-			err := SendGmReportWebhook(flag.MembershipId, GmReportWebhookMetadata{
-				CheaterAccountProbability:  cheaterAccountChance,
-				CheaterAccountHeuristics:   GetCheaterAccountFlagsStrings(bitFlags),
-				RaidHubCheatLevel:          minCheatLevel,
-				EstimatedAccountAgeDays:    ageInDays,
-				LookBackDays:               60,
-				RaidClears:                 clears,
-				FractionRaidClearsSolo:     soloRatio,
-				FractionRaidClearsLowman:   lowmanRatio,
-				FractionRaidClearsFlawless: flawlessRatio,
-				Flags: GmReportWebhookFlags{
-					Total:  flag.FlaggedCount,
-					ClassA: flag.FlagsA,
-					ClassB: flag.FlagsB,
-					ClassC: flag.FlagsC,
-					ClassD: flag.FlagsD,
-				},
-			})
-
-			if err != nil {
-				log.Printf("Error sending GM Report webhook for player %d: %s", flag.MembershipId, err)
-			}
-		}
-	}
-
-	return minCheatLevel, cheaterAccountChance, bitFlags
 }
 
 type BlacklistedPlayerDTO struct {

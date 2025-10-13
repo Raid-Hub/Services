@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 type GmReportWebhook struct {
@@ -25,6 +26,7 @@ type GmReportWebhookMetadata struct {
 	FractionRaidClearsLowman   float64              `json:"fraction_raid_clears_lowman"`
 	FractionRaidClearsFlawless float64              `json:"fraction_raid_clears_flawless"`
 	Flags                      GmReportWebhookFlags `json:"flags"`
+	LastSeen                   time.Time            `json:"last_seen"`
 }
 type GmReportWebhookFlags struct {
 	Total  int `json:"total"`

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -78,8 +77,7 @@ func SendWebhook(url string, webhook *Webhook) error {
 		decoder := json.NewDecoder(resp.Body)
 		var errorResponse map[string]any
 		if err := decoder.Decode(&errorResponse); err != nil {
-			log.Fatalf("Error decoding error response %d: %s", resp.StatusCode, err)
-			return err
+			return fmt.Errorf("error sending discord webhook: error decoding error response %d: %s", resp.StatusCode, err)
 		}
 
 		return fmt.Errorf("error sending discord webhook: %s (status code: %d)", errorResponse, resp.StatusCode)
