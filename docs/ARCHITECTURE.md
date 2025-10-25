@@ -45,11 +45,12 @@ RaidHub-Services/
 │   └── utils/                   # Common utilities
 ├── infrastructure/              # Infrastructure tooling (NO app code)
 │   ├── postgres/                # PostgreSQL infrastructure
-│   │   ├── schemas/             # Database schemas
-│   │   ├── migrations/          # Migration files
-│   │   ├── seeds/               # Seed data
-│   │   ├── views/               # Database views
-│   │   └── tools/               # Migration tools
+│   │   ├── migrations/          # Migration files (multi-schema)
+│   │   ├── seeds/               # Seed data (JSON format)
+│   │   ├── init/                # Database initialization
+│   │   └── tools/               # Migration and seeding tools
+│   │       ├── migrate/         # Migration tool
+│   │       └── seed/            # Seeding tool
 │   ├── clickhouse/              # ClickHouse infrastructure
 │   │   ├── migrations/          # ClickHouse migrations
 │   │   ├── seeds/               # Seed data
@@ -94,14 +95,15 @@ RaidHub-Services/
 
 ### 3. Database Organization
 
-- **PostgreSQL**: Schemas, migrations, seeds, views in `infrastructure/postgres/`
+- **PostgreSQL**: Multi-schema migrations, seeds, initialization in `infrastructure/postgres/`
 - **ClickHouse**: Migrations, seeds, views in `infrastructure/clickhouse/`
+- **Schema Structure**: `core`, `definitions`, `clan`, `extended`, `raw`, `flagging`, `leaderboard`
 - Connection logic in `shared/database/` for use by apps
 - Separate migrate/seed tools for each database
 
 ### 4. Cron Job Management
 
-- Crontab definitions in `infrastructure/cron/crontab/`
+- Crontab definitions in `infrastructure/cron/`
 - Wrapper scripts in `infrastructure/cron/scripts/`
 - Environment-specific crontabs (dev/staging/prod)
 - No hardcoded credentials - use environment variables
@@ -160,10 +162,11 @@ Background processing workers that handle asynchronous tasks:
 
 ### Database Management
 
-- Migrations are managed through custom Go tools
-- Schemas define table structures
-- Seeds populate initial data
+- Migrations are managed through custom Go tools in `infrastructure/postgres/tools/`
+- Multi-schema structure with numbered migration files
+- Seeds populate initial data using JSON format
 - Views provide analytical queries
+- Database initialization handled via templates
 
 ### Monitoring
 
@@ -199,7 +202,8 @@ make down       # Stop all services
 ### Database
 
 ```bash
-make migrate    # Run database migrations (includes schemas and seeds)
+make migrate    # Run database migrations (multi-schema structure)
+make seed       # Seed initial data (definitions, seasons, activities)
 ```
 
 ## Environment Variables

@@ -156,7 +156,7 @@ echo "✅ All binaries built successfully"
 # Run database migrations
 echo ""
 echo "🗄️  Running database migrations..."
-go run ./infrastructure/postgres/tools/migrate.go
+make migrate
 echo "✅ Database migrations completed"
 
 # Verify binaries were created

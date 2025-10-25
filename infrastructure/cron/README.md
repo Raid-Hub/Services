@@ -7,9 +7,10 @@ This directory contains cron job definitions for the RaidHub Services infrastruc
 ```
 infrastructure/cron/
 ├── README.md           # This file
-├── crontab/            # Crontab definitions by environment
-│   ├── dev.crontab     # Development environment crontab
-│   └── prod.crontab    # Production environment crontab
+├── prod.crontab        # Production environment crontab
+└── scripts/            # Cron job wrapper scripts
+    ├── refresh-view.sh  # ClickHouse view refresh script
+    └── restart-zeus.sh # Zeus service restart script
 ```
 
 ## Principles
@@ -42,7 +43,7 @@ All RaidHub binaries automatically load the `.env` file from their working direc
 2. Ensure `.env` file exists in the production directory
 3. Install the crontab:
    ```bash
-   crontab infrastructure/cron/crontab/prod.crontab
+   crontab infrastructure/cron/prod.crontab
    ```
 4. Verify installation:
    ```bash
@@ -51,10 +52,10 @@ All RaidHub binaries automatically load the `.env` file from their working direc
 
 ### Development
 
-Similar process using `dev.crontab`:
+For development, you can create a `dev.crontab` file or modify `prod.crontab` for local testing:
 
 ```bash
-crontab infrastructure/cron/crontab/dev.crontab
+crontab infrastructure/cron/prod.crontab
 ```
 
 ## Environment Variables

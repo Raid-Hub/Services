@@ -218,17 +218,19 @@ RaidHub-Services/
 
 ### Migrations
 
-Run database migrations with:
+Run database migrations and seeding:
 
 ```bash
-make migrate  # Run database migrations (includes schemas and seed data)
+make migrate  # Run database migrations (multi-schema structure)
+make seed     # Seed initial data (definitions, seasons, activities)
 ```
 
-### Schemas and Seeds
+### Database Structure
 
-- PostgreSQL schemas: `infrastructure/postgres/schemas/`
-- PostgreSQL seeds: `infrastructure/postgres/seeds/`
-- ClickHouse views: `infrastructure/clickhouse/views/`
+- **Multi-Schema Architecture**: `core`, `definitions`, `clan`, `extended`, `raw`, `flagging`, `leaderboard`
+- **Migrations**: `infrastructure/postgres/migrations/` (numbered migration files)
+- **Seeds**: `infrastructure/postgres/seeds/` (JSON-based seed data)
+- **ClickHouse Views**: `infrastructure/clickhouse/views/`
 
 ## Environment Variables
 
@@ -263,9 +265,10 @@ GRAFANA_PASSWORD=admin
 
 ### Adding a New Database Migration
 
-1. Create SQL file in `infrastructure/postgres/schemas/`
-2. Follow naming convention: `YYYY-MM-DD-description.sql`
-3. Run with `make migrate`
+1. Create SQL file in `infrastructure/postgres/migrations/`
+2. Follow naming convention: `XXX_description.sql` (where XXX is next number)
+3. Use multi-schema structure (create schemas if needed)
+4. Run with `make migrate`
 
 ## Documentation
 

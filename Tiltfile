@@ -155,7 +155,7 @@ local_resource(
 # Database migrations, builds, and cleanup operations
 local_resource(
     "migrate-db",
-    cmd="go run ./infrastructure/postgres/tools/migrate.go",
+    cmd="make migrate",
     deps=["postgres"],
     auto_init=False,
     labels=["database", "migration", "maintenance"],
