@@ -1,0 +1,521 @@
+{
+  "class_definition": [
+    {
+      "hash": 671679327,
+      "name": "Hunter"
+    },
+    {
+      "hash": 2271682572,
+      "name": "Warlock"
+    },
+    {
+      "hash": 3655393761,
+      "name": "Titan"
+    }
+  ],
+  "season": [
+    {
+      "id": 1,
+      "short_name": "Red War",
+      "long_name": "Red War",
+      "dlc": "Vanilla",
+      "start_date": "2017-09-06T09:00:00Z"
+    },
+    {
+      "id": 2,
+      "short_name": "Curse of Osiris",
+      "long_name": "Curse of Osiris",
+      "dlc": "Curse of Osiris",
+      "start_date": "2017-12-05T17:00:00Z"
+    },
+    {
+      "id": 3,
+      "short_name": "Warmind",
+      "long_name": "Warmind",
+      "dlc": "Warmind",
+      "start_date": "2018-05-08T18:00:00Z"
+    },
+    {
+      "id": 4,
+      "short_name": "Outlaw",
+      "long_name": "Season of the Outlaw",
+      "dlc": "Forsaken",
+      "start_date": "2018-09-04T17:00:00Z"
+    },
+    {
+      "id": 5,
+      "short_name": "Forge",
+      "long_name": "Season of the Forge",
+      "dlc": "Forsaken",
+      "start_date": "2018-11-27T17:00:00Z"
+    },
+    {
+      "id": 6,
+      "short_name": "Drifter",
+      "long_name": "Season of the Drifter",
+      "dlc": "Forsaken",
+      "start_date": "2019-03-05T17:00:00Z"
+    },
+    {
+      "id": 7,
+      "short_name": "Opulence",
+      "long_name": "Season of Opulence",
+      "dlc": "Forsaken",
+      "start_date": "2019-06-04T17:00:00Z"
+    },
+    {
+      "id": 8,
+      "short_name": "Undying",
+      "long_name": "Season of the Undying",
+      "dlc": "Shadowkeep",
+      "start_date": "2019-10-01T17:00:00Z"
+    },
+    {
+      "id": 9,
+      "short_name": "Dawn",
+      "long_name": "Season of Dawn",
+      "dlc": "Shadowkeep",
+      "start_date": "2019-12-10T17:00:00Z"
+    },
+    {
+      "id": 10,
+      "short_name": "Worthy",
+      "long_name": "Season of the Worthy",
+      "dlc": "Shadowkeep",
+      "start_date": "2020-03-10T17:00:00Z"
+    },
+    {
+      "id": 11,
+      "short_name": "Arrivals",
+      "long_name": "Season of Arrivals",
+      "dlc": "Shadowkeep",
+      "start_date": "2020-06-09T17:00:00Z"
+    },
+    {
+      "id": 12,
+      "short_name": "Hunt",
+      "long_name": "Season of the Hunt",
+      "dlc": "Beyond Light",
+      "start_date": "2020-11-10T17:00:00Z"
+    },
+    {
+      "id": 13,
+      "short_name": "Chosen",
+      "long_name": "Season of the Chosen",
+      "dlc": "Beyond Light",
+      "start_date": "2021-02-09T17:00:00Z"
+    },
+    {
+      "id": 14,
+      "short_name": "Splicer",
+      "long_name": "Season of the Splicer",
+      "dlc": "Beyond Light",
+      "start_date": "2021-05-11T17:00:00Z"
+    },
+    {
+      "id": 15,
+      "short_name": "Lost",
+      "long_name": "Season of the Lost",
+      "dlc": "Beyond Light",
+      "start_date": "2021-08-24T17:00:00Z"
+    },
+    {
+      "id": 16,
+      "short_name": "Risen",
+      "long_name": "Season of the Risen",
+      "dlc": "The Witch Queen",
+      "start_date": "2022-02-22T17:00:00Z"
+    },
+    {
+      "id": 17,
+      "short_name": "Haunted",
+      "long_name": "Season of the Haunted",
+      "dlc": "The Witch Queen",
+      "start_date": "2022-05-24T17:00:00Z"
+    },
+    {
+      "id": 18,
+      "short_name": "Plunder",
+      "long_name": "Season of Plunder",
+      "dlc": "The Witch Queen",
+      "start_date": "2022-08-23T17:00:00Z"
+    },
+    {
+      "id": 19,
+      "short_name": "Seraph",
+      "long_name": "Season of the Seraph",
+      "dlc": "The Witch Queen",
+      "start_date": "2022-12-06T17:00:00Z"
+    },
+    {
+      "id": 20,
+      "short_name": "Defiance",
+      "long_name": "Season of Defiance",
+      "dlc": "Lightfall",
+      "start_date": "2023-02-28T17:00:00Z"
+    },
+    {
+      "id": 21,
+      "short_name": "Deep",
+      "long_name": "Season of the Deep",
+      "dlc": "Lightfall",
+      "start_date": "2023-05-23T17:00:00Z"
+    },
+    {
+      "id": 22,
+      "short_name": "Witch",
+      "long_name": "Season of the Witch",
+      "dlc": "Lightfall",
+      "start_date": "2023-08-22T17:00:00Z"
+    },
+    {
+      "id": 23,
+      "short_name": "Wish",
+      "long_name": "Season of the Wish",
+      "dlc": "Lightfall",
+      "start_date": "2023-11-28T17:00:00Z"
+    },
+    {
+      "id": 24,
+      "short_name": "Echoes",
+      "long_name": "Episode: Echoes",
+      "dlc": "The Final Shape",
+      "start_date": "2024-06-04T17:00:00Z"
+    },
+    {
+      "id": 25,
+      "short_name": "Revenant",
+      "long_name": "Episode: Revenant",
+      "dlc": "The Final Shape",
+      "start_date": "2024-10-08T17:00:00Z"
+    },
+    {
+      "id": 26,
+      "short_name": "Heresy",
+      "long_name": "Episode: Heresy",
+      "dlc": "The Final Shape",
+      "start_date": "2025-02-10T17:00:00Z"
+    },
+    {
+      "id": 27,
+      "short_name": "Reclamation",
+      "long_name": "Season: Reclamation",
+      "dlc": "The Edge of Fate",
+      "start_date": "2025-07-15T17:00:00Z"
+    },
+    {
+      "id": 28,
+      "short_name": "Lawless",
+      "long_name": "Season: Lawless",
+      "dlc": "Renegades",
+      "start_date": "2025-12-02T17:00:00Z"
+    }
+  ],
+  "activity_definition": [
+    {
+      "id": 1,
+      "name": "Leviathan",
+      "is_sunset": true,
+      "is_raid": true,
+      "path": "leviathan",
+      "release_date": "2017-09-13T17:00:00Z",
+      "contest_end": null,
+      "week_one_end": "2017-09-19T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "leviathan"
+    },
+    {
+      "id": 2,
+      "name": "Eater of Worlds",
+      "is_sunset": true,
+      "is_raid": true,
+      "path": "eaterofworlds",
+      "release_date": "2017-12-08T18:00:00Z",
+
+      "contest_end": null,
+      "week_one_end": "2017-12-12T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "eow"
+    },
+    {
+      "id": 3,
+      "name": "Spire of Stars",
+      "is_sunset": true,
+      "is_raid": true,
+      "path": "spireofstars",
+      "release_date": "2018-05-11T17:00:00Z",
+
+      "contest_end": null,
+      "week_one_end": "2018-05-15T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "spire"
+    },
+    {
+      "id": 4,
+      "name": "Last Wish",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "lastwish",
+      "release_date": "2018-09-14T17:00:00Z",
+
+      "contest_end": null,
+      "week_one_end": "2018-09-18T17:00:00Z",
+      "milestone_hash": 3181387331,
+      "splash_path": "wish"
+    },
+    {
+      "id": 5,
+      "name": "Scourge of the Past",
+      "is_sunset": true,
+      "is_raid": true,
+      "path": "scourgeofthepast",
+      "release_date": "2018-12-07T17:00:00Z",
+
+      "contest_end": null,
+      "week_one_end": "2018-12-11T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "scourge"
+    },
+    {
+      "id": 6,
+      "name": "Crown of Sorrow",
+      "is_sunset": true,
+      "is_raid": true,
+      "path": "crownofsorrow",
+      "release_date": "2019-06-04T23:00:00Z",
+
+      "contest_end": "2019-06-05T23:00:00Z",
+      "week_one_end": "2019-06-11T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "crown"
+    },
+    {
+      "id": 7,
+      "name": "Garden of Salvation",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "gardenofsalvation",
+      "release_date": "2019-10-05T17:00:00Z",
+
+      "contest_end": "2019-10-06T17:00:00Z",
+      "week_one_end": "2019-10-08T17:00:00Z",
+      "milestone_hash": 2712317338,
+      "splash_path": "gos"
+    },
+    {
+      "id": 8,
+      "name": "Deep Stone Crypt",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "deepstonecrypt",
+      "release_date": "2020-11-21T18:00:00Z",
+
+      "contest_end": "2020-11-22T18:00:00Z",
+      "week_one_end": "2020-11-24T17:00:00Z",
+      "milestone_hash": 2712317338,
+      "splash_path": "dsc"
+    },
+    {
+      "id": 9,
+      "name": "Vault of Glass",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "vaultofglass",
+      "release_date": "2021-05-22T17:00:00Z",
+
+      "contest_end": "2021-05-23T17:00:00Z",
+      "week_one_end": "2021-05-25T17:00:00Z",
+      "milestone_hash": 1888320892,
+      "splash_path": "vog"
+    },
+    {
+      "id": 10,
+      "name": "Vow of the Disciple",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "vowofthedisciple",
+      "release_date": "2022-03-05T18:00:00Z",
+
+      "contest_end": "2022-03-07T18:00:00Z",
+      "week_one_end": "2022-03-08T17:00:00Z",
+      "milestone_hash": 2136320298,
+      "splash_path": "vow"
+    },
+    {
+      "id": 11,
+      "name": "King's Fall",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "kingsfall",
+      "release_date": "2022-08-26T17:00:00Z",
+
+      "contest_end": "2022-08-27T17:00:00Z",
+      "week_one_end": "2022-08-30T17:00:00Z",
+      "milestone_hash": 292102995,
+      "splash_path": "kf"
+    },
+    {
+      "id": 12,
+      "name": "Root of Nightmares",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "rootofnightmares",
+      "release_date": "2023-03-10T17:00:00Z",
+
+      "contest_end": "2023-03-12T17:00:00Z",
+      "week_one_end": "2023-03-14T17:00:00Z",
+      "milestone_hash": 3699252268,
+      "splash_path": "ron"
+    },
+    {
+      "id": 13,
+      "name": "Crota's End",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "crotasend",
+      "release_date": "2023-09-01T17:00:00Z",
+
+      "contest_end": "2023-09-03T17:00:00Z",
+      "week_one_end": "2023-09-05T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "crota"
+    },
+    {
+      "id": 14,
+      "name": "Salvation's Edge",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "salvationsedge",
+      "release_date": "2024-06-07T17:00:00Z",
+
+      "contest_end": "2024-06-09T17:00:00Z",
+      "week_one_end": "2024-06-11T17:00:00Z",
+      "milestone_hash": 4196566271,
+      "splash_path": "edge"
+    },
+    {
+      "id": 15,
+      "name": "The Desert Perpetual",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "desertperpetual",
+      "release_date": "2025-07-19T17:00:00Z",
+
+      "contest_end": "2025-07-21T17:00:00Z",
+      "week_one_end": "2025-07-22T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "dp"
+    },
+    {
+      "id": 16,
+      "name": "The Desert Perpetual (Epic)",
+      "is_sunset": false,
+      "is_raid": true,
+      "path": "desertperpetualepic",
+      "release_date": "2025-09-27T17:00:00Z",
+
+      "contest_end": "2025-09-29T17:00:00Z",
+      "week_one_end": "2025-09-30T17:00:00Z",
+      "milestone_hash": null,
+      "splash_path": "edp"
+    },
+    {
+      "id": 101,
+      "name": "The Pantheon",
+      "is_sunset": false,
+      "is_raid": false,
+      "path": "pantheon",
+      "release_date": "2024-04-30T17:00:00Z",
+      "contest_end": null,
+      "week_one_end": null,
+      "milestone_hash": null,
+      "splash_path": "pantheon"
+    }
+  ],
+  "version_definition": [
+    {
+      "id": 1,
+      "name": "Standard",
+      "associated_activity_id": null,
+      "path": "normal",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 2,
+      "name": "Guided Games",
+      "associated_activity_id": null,
+      "path": "guided",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 3,
+      "name": "Prestige",
+      "associated_activity_id": null,
+      "path": "prestige",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 4,
+      "name": "Master",
+      "associated_activity_id": null,
+      "path": "master",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 32,
+      "name": "Contest",
+      "associated_activity_id": null,
+      "path": "contest",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 64,
+      "name": "Tempo's Edge",
+      "associated_activity_id": 9,
+      "path": "challenge",
+      "is_challenge_mode": true
+    },
+    {
+      "id": 65,
+      "name": "Regicide",
+      "associated_activity_id": 11,
+      "path": "challenge",
+      "is_challenge_mode": true
+    },
+    {
+      "id": 66,
+      "name": "Superior Swordplay",
+      "associated_activity_id": 13,
+      "path": "challenge",
+      "is_challenge_mode": true
+    },
+    {
+      "id": 128,
+      "name": "Atraks Sovereign",
+      "associated_activity_id": 101,
+      "path": "atraks",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 129,
+      "name": "Oryx Exalted",
+      "associated_activity_id": 101,
+      "path": "oryx",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 130,
+      "name": "Rhulk Indomitable",
+      "associated_activity_id": 101,
+      "path": "rhulk",
+      "is_challenge_mode": false
+    },
+    {
+      "id": 131,
+      "name": "Nezarec Sublime",
+      "associated_activity_id": 101,
+      "path": "nezarec",
+      "is_challenge_mode": false
+    }
+  ]
+}

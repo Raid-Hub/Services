@@ -1,0 +1,178 @@
+-- RaidHub Services - Leaderboards Schema Migration
+-- Computed leaderboards and rankings
+
+-- =============================================================================
+-- LEADERBOARD VIEWS
+-- =============================================================================
+
+-- Clan leaderboard
+CREATE MATERIALIZED VIEW "leaderboard"."clan_leaderboard" AS
+WITH ranked_players AS (
+    SELECT
+        cm."group_id",
+        p."membership_id",
+        p."clears",
+        p."fresh_clears",
+        p."sherpas",
+        p."total_time_played_seconds",
+        p."wfr_score",
+        ROW_NUMBER() OVER (PARTITION BY cm."group_id" ORDER BY p."wfr_score" DESC) AS rn
+    FROM "clan"."clan_members" cm
+    JOIN "core"."player" p USING ("membership_id")
+    JOIN "clan"."clan" USING ("group_id")
+)
+SELECT 
+    rp."group_id",
+    COUNT(rp."membership_id") AS "known_member_count",
+    SUM(rp."clears") AS "clears",
+    ROUND(AVG(rp."clears")) AS "average_clears",
+    SUM(rp."fresh_clears") AS "fresh_clears",
+    ROUND(AVG(rp."fresh_clears")) AS "average_fresh_clears",
+    SUM(rp."sherpas") AS "sherpas",
+    ROUND(AVG(rp."sherpas")) AS "average_sherpas",
+    SUM(rp."total_time_played_seconds") AS "time_played_seconds",
+    ROUND(AVG(rp."total_time_played_seconds")) AS "average_time_played_seconds",
+    SUM(rp."wfr_score") AS "total_contest_score",
+    3 * SUM(rp."wfr_score" * POWER(0.9, rp.rn - 6))::DOUBLE PRECISION / (POWER(1 + COUNT(rp."membership_id"), (1.0 / 3))) AS "weighted_contest_score"
+FROM ranked_players rp
+GROUP BY rp."group_id";
+
+CREATE UNIQUE INDEX idx_clan_leaderboard_group_id ON "leaderboard"."clan_leaderboard" (group_id);
+
+-- World first contest leaderboard
+CREATE MATERIALIZED VIEW "leaderboard"."world_first_contest_leaderboard" AS
+   WITH "entries" AS (
+    SELECT
+      "activity_id",
+      ROW_NUMBER() OVER (PARTITION BY "activity_id" ORDER BY "date_completed" ASC) AS "position",
+      RANK() OVER (PARTITION BY "activity_id" ORDER BY "date_completed" ASC) AS "rank",
+      "instance_id",
+      "date_completed",
+      EXTRACT(EPOCH FROM ("date_completed" - "release_date")) AS "time_after_launch",
+      "is_challenge_mode"
+    FROM "definitions"."activity_version"
+    INNER JOIN "definitions"."activity_definition" ON "definitions"."activity_definition"."id" = "definitions"."activity_version"."activity_id"
+    INNER JOIN "definitions"."version_definition" ON "definitions"."version_definition"."id" = "definitions"."activity_version"."version_id"
+    LEFT JOIN LATERAL (
+      SELECT 
+        "core"."instance"."instance_id", 
+        "date_completed"
+      FROM "core"."instance"
+      LEFT JOIN "flagging"."blacklist_instance" b USING ("instance_id")
+      WHERE "hash" = "definitions"."activity_version"."hash" 
+        AND "completed" 
+        AND b."instance_id" IS NULL
+        AND "date_started" < COALESCE("contest_end", NOW())
+        AND "date_completed" < "week_one_end"
+      LIMIT 100000
+    ) as "__inner__" ON true
+    WHERE "is_world_first" = true
+  )
+  SELECT "entries".*, "players"."membership_ids" FROM "entries"
+  LEFT JOIN LATERAL (
+    SELECT JSONB_AGG("membership_id") AS "membership_ids"
+    FROM "core"."instance_player"
+    WHERE "core"."instance_player"."instance_id" = "entries"."instance_id"
+      AND "core"."instance_player"."completed"
+    LIMIT 25
+  ) AS "players" ON true;
+
+CREATE INDEX idx_world_first_contest_leaderboard_rank ON "leaderboard"."world_first_contest_leaderboard" (activity_id, position ASC);
+CREATE UNIQUE INDEX idx_world_first_contest_leaderboard_instance ON "leaderboard"."world_first_contest_leaderboard" (instance_id);
+CREATE INDEX idx_world_first_contest_leaderboard_membership_ids ON "leaderboard"."world_first_contest_leaderboard" USING GIN (membership_ids);
+
+-- Team activity version leaderboard
+CREATE MATERIALIZED VIEW "leaderboard"."team_activity_version_leaderboard" AS
+  WITH raw AS (
+    SELECT
+      activity_id,
+      version_id,
+      instance_id,
+      time_after_launch AS value,
+      ROW_NUMBER() OVER (PARTITION BY activity_id, version_id ORDER BY date_completed ASC) AS position,
+      RANK() OVER (PARTITION BY activity_id, version_id ORDER BY date_completed ASC) AS rank
+    FROM (
+      SELECT hash, activity_id, version_id, release_date_override
+      FROM "definitions"."activity_version"
+      WHERE version_id <> 2 -- Ignore Guided Games
+      ORDER BY activity_id ASC, version_id ASC
+      LIMIT 100
+    ) AS activity_version
+    JOIN "definitions"."activity_definition" ON activity_version.activity_id = "definitions"."activity_definition".id
+    LEFT JOIN LATERAL (
+      SELECT 
+        "core"."instance".instance_id, 
+        date_completed,
+        EXTRACT(EPOCH FROM (date_completed - COALESCE(release_date_override, release_date))) AS time_after_launch 
+      FROM "core"."instance"
+      LEFT JOIN "flagging"."blacklist_instance" b USING ("instance_id")
+      WHERE "core"."instance".hash = activity_version.hash
+        AND "core"."instance".completed 
+        AND b.instance_id IS NULL
+      ORDER BY "core"."instance".date_completed ASC
+      LIMIT 1000
+    ) AS first_thousand ON true
+  )
+  SELECT raw.*, "players".membership_ids FROM raw
+  LEFT JOIN LATERAL (
+    SELECT JSONB_AGG(membership_id) AS membership_ids
+    FROM "core"."instance_player"
+    WHERE "core"."instance_player".instance_id = raw.instance_id
+      AND "core"."instance_player".completed
+    LIMIT 12
+  ) as "players" ON true
+  WHERE position <= 1000;
+
+CREATE UNIQUE INDEX idx_team_activity_version_leaderboard_position ON "leaderboard"."team_activity_version_leaderboard" (activity_id ASC, version_id ASC, position ASC);
+CREATE INDEX idx_team_activity_version_leaderboard_membership_id ON "leaderboard"."team_activity_version_leaderboard" USING GIN (membership_ids);
+
+-- Individual global leaderboard
+CREATE MATERIALIZED VIEW "leaderboard"."individual_global_leaderboard" AS
+WITH total_count AS (
+  SELECT COUNT(*)::float AS cnt
+  FROM "core"."player"
+  WHERE clears > 0 AND NOT is_private AND cheat_level < 2
+)
+SELECT
+  membership_id,
+
+  clears,
+  ROW_NUMBER() OVER (ORDER BY clears DESC, membership_id ASC) AS clears_position,
+  RANK() OVER (ORDER BY clears DESC) AS clears_rank,
+  1.0 - ((RANK() OVER (ORDER BY clears DESC) - 1) / (tc.cnt - 1)) AS clears_percentile,
+
+  fresh_clears,
+  ROW_NUMBER() OVER (ORDER BY fresh_clears DESC, membership_id ASC) AS fresh_clears_position,
+  RANK() OVER (ORDER BY fresh_clears DESC) AS fresh_clears_rank,
+  1.0 - ((RANK() OVER (ORDER BY fresh_clears DESC) - 1) / (tc.cnt - 1)) AS fresh_clears_percentile,
+
+  sherpas,
+  ROW_NUMBER() OVER (ORDER BY sherpas DESC, membership_id ASC) AS sherpas_position,
+  RANK() OVER (ORDER BY sherpas DESC) AS sherpas_rank,
+  1.0 - ((RANK() OVER (ORDER BY sherpas DESC) - 1) / (tc.cnt - 1)) AS sherpas_percentile,
+
+  sum_of_best AS speed,
+  ROW_NUMBER() OVER (ORDER BY sum_of_best ASC, membership_id ASC) AS speed_position,
+  RANK() OVER (ORDER BY sum_of_best ASC) AS speed_rank,
+  1.0 - ((RANK() OVER (ORDER BY sum_of_best ASC) - 1) / (tc.cnt - 1)) AS speed_percentile,
+
+  total_time_played_seconds AS total_time_played,
+  ROW_NUMBER() OVER (ORDER BY total_time_played_seconds DESC, membership_id ASC) AS total_time_played_position,
+  RANK() OVER (ORDER BY total_time_played_seconds DESC) AS total_time_played_rank,
+  1.0 - ((RANK() OVER (ORDER BY total_time_played_seconds DESC) - 1) / (tc.cnt - 1)) AS total_time_played_percentile,
+
+  wfr_score,
+  ROW_NUMBER() OVER (ORDER BY wfr_score DESC, membership_id ASC) AS wfr_score_position,
+  RANK() OVER (ORDER BY wfr_score DESC) AS wfr_score_rank,
+  1.0 - ((RANK() OVER (ORDER BY wfr_score DESC) - 1) / (tc.cnt - 1)) AS wfr_score_percentile
+
+FROM "core"."player", total_count tc
+WHERE clears > 0 AND NOT is_private AND cheat_level < 2;
+
+CREATE UNIQUE INDEX idx_global_leaderboard_membership_id ON "leaderboard"."individual_global_leaderboard" (membership_id ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_clears ON "leaderboard"."individual_global_leaderboard" (clears_position ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_fresh_clears ON "leaderboard"."individual_global_leaderboard" (fresh_clears_position ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_sherpas ON "leaderboard"."individual_global_leaderboard" (sherpas_position ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_speed ON "leaderboard"."individual_global_leaderboard" (speed_position ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_total_time_played ON "leaderboard"."individual_global_leaderboard" (total_time_played_position ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_wfr_score ON "leaderboard"."individual_global_leaderboard" (wfr_score_position ASC);

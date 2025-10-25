@@ -1,0 +1,27 @@
+{
+  "rabbit_version": "3.8",
+  "users": [
+    {
+      "name": "{{RABBITMQ_USER}}",
+      "password": "{{RABBITMQ_PASSWORD}}",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "{{RABBITMQ_USER}}",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [],
+  "queues": [],
+  "bindings": []
+}

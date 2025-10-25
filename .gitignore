@@ -1,6 +1,11 @@
 # Secrets
 .env
-prometheus.yml
+
+# Generated configuration files
+infrastructure/postgres/init/*.sql
+infrastructure/rabbitmq/definitions.json
+infrastructure/clickhouse/users.xml
+infrastructure/prometheus/prometheus.yml
 
 # Volumes
 volumes/
@@ -10,12 +15,13 @@ bin/
 
 # Logs
 *.log
+tilt.log
 
 # OS
 .DS_Store
 
 # tmp
-cmd/tmp
+/tmp
 
 # defs
 *.sqlite3

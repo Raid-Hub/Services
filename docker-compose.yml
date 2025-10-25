@@ -1,55 +1,78 @@
-version: "3"
-name: raidhub
+name: raidhub-services
 
 services:
   postgres:
     image: postgres:13
-    container_name: postgres
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: "raidhub"
-      POSTGRES_USER: "${POSTGRES_USER:-username}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-password}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
-      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready raidhub -U ${POSTGRES_USER:-username}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   rabbitmq:
     image: rabbitmq:3.8-management
-    container_name: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-guest}"
-      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-guest}"
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
+      RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/definitions.json
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_UI_PORT:-15672}:15672"
     volumes:
       - ./volumes/rabbitmq:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
 
   clickhouse:
     image: clickhouse/clickhouse-server
-    container_name: clickhouse
     ports:
       - "${CLICKHOUSE_PORT:-9000}:9000"
       - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
     environment:
-      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-default}"
-      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
     volumes:
       - ./volumes/clickhouse:/var/lib/clickhouse
-      - ./docker/clickhouse.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml
 
   prometheus:
     image: prom/prometheus
-    container_name: prometheus
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./volumes/prometheus:/prometheus
-      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD}"
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_USER}"
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./infrastructure/cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./infrastructure/cloudflared/tunnel.yml:/etc/cloudflared/tunnel.yml:ro
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
+    depends_on:
+      - prometheus
+      - grafana
+    profiles:
+      - tunnel

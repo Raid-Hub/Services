@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "atlas"
+    static_configs:
+      - targets: ["host.docker.internal:8080", "host.docker.internal:8082"]
+
+{{#PROMETHEUS_REMOTE_WRITE_URL}}
+remote_write:
+  - url: {{PROMETHEUS_REMOTE_WRITE_URL}}
+    basic_auth:
+      username: "{{PROMETHEUS_USERNAME}}"
+      password: "{{PROMETHEUS_PASSWORD}}"
+{{/PROMETHEUS_REMOTE_WRITE_URL}}
