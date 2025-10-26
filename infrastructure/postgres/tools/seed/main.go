@@ -96,7 +96,7 @@ func seedFile(db *sql.DB, filePath string) error {
 		return fmt.Errorf("failed to read seed file: %v", err)
 	}
 
-	var seedData map[string][]map[string]interface{}
+	var seedData map[string][]map[string]any
 	if err := json.Unmarshal(data, &seedData); err != nil {
 		return fmt.Errorf("failed to parse JSON: %v", err)
 	}
@@ -120,8 +120,8 @@ func seedFile(db *sql.DB, filePath string) error {
 		placeholders := make([]string, len(columns))
 		for i := range placeholders {
 			placeholders[i] = fmt.Sprintf("$%d", i+1)
-		}		
-		
+		}
+
 		qualifiedTableName := fmt.Sprintf("\"%s\".\"%s\"", "definitions", tableName)
 
 		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
@@ -136,7 +136,7 @@ func seedFile(db *sql.DB, filePath string) error {
 
 		inserted := 0
 		for _, record := range records {
-			values := make([]interface{}, len(columns))
+			values := make([]any, len(columns))
 			for i, col := range columns {
 				values[i] = record[col]
 			}

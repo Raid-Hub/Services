@@ -83,4 +83,3 @@ See `infrastructure/cron/README.md` for more details on cron configuration.
 - **Hermes**: http://localhost:8083/metrics
 - **Atlas**: http://localhost:8080/metrics
 - **Prometheus**: http://localhost:9090
-- **Grafana**: http://localhost:3000

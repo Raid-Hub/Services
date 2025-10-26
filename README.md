@@ -53,7 +53,7 @@ The easiest way to get started with hot reload and service orchestration:
 
 This will:
 
-- Start all infrastructure services (PostgreSQL, RabbitMQ, ClickHouse, Prometheus, Grafana)
+- Start all infrastructure services (PostgreSQL, RabbitMQ, ClickHouse, Prometheus)
 - Build and run Go services with hot reload
 - Provide Tilt UI at http://localhost:10350 for monitoring
 - Enable hot reload for all Go services when code changes
@@ -187,7 +187,6 @@ Once running, these services are available:
 - **RabbitMQ**: `localhost:5672` (AMQP), `localhost:15672` (Management UI)
 - **ClickHouse**: `localhost:9000` (Native), `localhost:8123` (HTTP)
 - **Prometheus**: `localhost:9090` (Metrics)
-- **Grafana**: `localhost:3000` (Dashboards) - Default credentials: admin/admin
 
 ### Application Services
 
@@ -249,9 +248,6 @@ POSTGRES_PORT=5432
 RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 
-# Monitoring
-GRAFANA_USER=admin
-GRAFANA_PASSWORD=admin
 ```
 
 ## Development

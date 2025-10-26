@@ -9,27 +9,6 @@
 load("ext://dotenv", "dotenv")
 dotenv(".env")
 
-
-# Shared environment configuration
-def get_shared_env():
-    return {
-        "POSTGRES_HOST": "localhost",
-        "POSTGRES_PORT": "5432",
-        "POSTGRES_USER": os.getenv("POSTGRES_USER", "username"),
-        "POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD", "password"),
-        "POSTGRES_DB": "raidhub",
-        "RABBITMQ_HOST": "localhost",
-        "RABBITMQ_PORT": "5672",
-        "RABBITMQ_USER": os.getenv("RABBITMQ_USER", "guest"),
-        "RABBITMQ_PASSWORD": os.getenv("RABBITMQ_PASSWORD", "guest"),
-        "CLICKHOUSE_HOST": "localhost",
-        "CLICKHOUSE_PORT": "9000",
-        "CLICKHOUSE_USER": os.getenv("CLICKHOUSE_USER", "default"),
-        "CLICKHOUSE_PASSWORD": os.getenv("CLICKHOUSE_PASSWORD", ""),
-        "BUNGIE_API_KEY": os.getenv("BUNGIE_API_KEY"),
-    }
-
-
 # Development environment setup
 local_resource(
     "dev-setup",
@@ -58,10 +37,6 @@ dc_resource("clickhouse", labels=["database", "infrastructure"])
 
 # Monitoring Services
 dc_resource("prometheus", labels=["monitoring", "metrics"])
-dc_resource("grafana", labels=["monitoring", "dashboard"])
-
-# Networking Services
-dc_resource("cloudflared", labels=["networking", "tunnel"], auto_init=False)
 
 # =============================================================================
 # CORE MICROSERVICES (Always Running)
@@ -70,32 +45,62 @@ dc_resource("cloudflared", labels=["networking", "tunnel"], auto_init=False)
 
 local_resource(
     "hermes",
-    cmd="go run ./apps/hermes",
+    cmd="./bin/hermes",
     deps=["postgres", "rabbitmq"],
-    env=get_shared_env(),
     resource_deps=["postgres", "rabbitmq", "build-binaries"],
     labels=["core-service", "microservice"],
 )
 
 local_resource(
     "atlas",
-    cmd="go run ./apps/atlas",
+    cmd="./bin/atlas",
     deps=["postgres", "rabbitmq", "clickhouse"],
-    env=get_shared_env(),
     resource_deps=["postgres", "rabbitmq", "clickhouse", "build-binaries"],
     labels=["core-service", "microservice"],
 )
 
 local_resource(
     "zeus",
-    cmd="go run ./apps/zeus",
-    env={
-        "BUNGIE_API_KEY": os.getenv("BUNGIE_API_KEY"),
-        "ZEUS_API_KEYS": os.getenv("ZEUS_API_KEYS", ""),
-        "IPV6": os.getenv("IPV6", ""),
-    },
+    cmd="./bin/zeus",
     resource_deps=["build-binaries"],
     labels=["core-service", "microservice", "proxy"],
+)
+
+# =============================================================================
+# CRON SERVICES (Manual Start)
+# =============================================================================
+# These services run on a schedule in production but can be started manually for development
+
+local_resource(
+    "hades",
+    cmd="./bin/hades",
+    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    auto_init=False,
+    labels=["cron-service", "maintenance"],
+)
+
+local_resource(
+    "athena",
+    cmd="./bin/athena",
+    resource_deps=["build-binaries"],
+    auto_init=False,
+    labels=["cron-service", "manifest"],
+)
+
+local_resource(
+    "hera",
+    cmd="./bin/hera",
+    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    auto_init=False,
+    labels=["cron-service", "maintenance"],
+)
+
+local_resource(
+    "nemesis",
+    cmd="./bin/nemesis",
+    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    auto_init=False,
+    labels=["cron-service", "maintenance"],
 )
 
 # =============================================================================
@@ -104,9 +109,8 @@ local_resource(
 # Tools for maintenance, debugging, and development tasks
 local_resource(
     "tools",
-    cmd="go run ./tools",
+    cmd="./bin/tools",
     deps=["postgres", "rabbitmq"],
-    env=get_shared_env(),
     resource_deps=["postgres", "rabbitmq", "build-binaries"],
     auto_init=False,
     labels=["development", "tools", "utilities"],
@@ -140,16 +144,6 @@ local_resource(
 )
 
 # =============================================================================
-# SERVICE ACCESS AND PORT FORWARDING
-# =============================================================================
-# Easy access to all service endpoints and monitoring interfaces
-local_resource(
-    "service-urls",
-    cmd='echo "Service URLs:" && echo "PostgreSQL: localhost:5432" && echo "RabbitMQ UI: http://localhost:15672" && echo "ClickHouse: localhost:9000/8123" && echo "Prometheus: http://localhost:9090" && echo "Grafana: http://localhost:3000" && echo "Hermes Metrics: http://localhost:8083/metrics" && echo "Atlas Metrics: http://localhost:8080/metrics" && echo "Zeus Proxy: http://localhost:7777"',
-    labels=["service-access", "urls", "port-forwarding"],
-)
-
-# =============================================================================
 # DATABASE AND MAINTENANCE COMMANDS
 # =============================================================================
 # Database migrations, builds, and cleanup operations
@@ -161,10 +155,6 @@ local_resource(
     labels=["database", "migration", "maintenance"],
 )
 
-# Build all services command
-local_resource(
-    "build-all", cmd="make bin", auto_init=False, labels=["build", "maintenance"]
-)
 
 # Clean build artifacts
 local_resource(
@@ -203,7 +193,7 @@ local_resource(
 # - Run 'tilt up' to start all services
 # - Use 'tilt down' to stop all services
 # - Individual services can be started/stopped via Tilt UI
-# - For cron services, run them manually: go run ./apps/hades, etc.
+# - For cron services, run them manually: ./bin/hades, etc.
 #
 # Prerequisites:
 # - Docker and Docker Compose installed

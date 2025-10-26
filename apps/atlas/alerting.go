@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
-	"raidhub/packages/discord"
-	"raidhub/shared/pgcr"
+	"raidhub/lib/domains/instance_storage"
+	"raidhub/lib/env"
+	"raidhub/lib/web/discord"
 
 	"golang.org/x/time/rate"
 )
@@ -22,13 +22,13 @@ var (
 
 func getAtlasWebhookURL() string {
 	once.Do(func() {
-		_atlasWebhookURL = os.Getenv("ATLAS_WEBHOOK_URL")
+		_atlasWebhookURL = env.AtlasWebhookURL
 	})
 	return _atlasWebhookURL
 }
 
-func handlePanic(r interface{}) {
-	content := fmt.Sprintf("<@&%s>", os.Getenv("ALERTS_ROLE_ID"))
+func handlePanic(r any) {
+	content := fmt.Sprintf("<@&%s>", env.AlertsRoleID)
 	webhook := discord.Webhook{
 		Content: &content,
 		Embeds: []discord.Embed{{
@@ -110,7 +110,7 @@ func logWorkersStarting(numWorkers int, period int, latestId int64) {
 }
 
 func logMissedInstance(instanceId int64, startTime time.Time) {
-	pgcr.WriteMissedLog(instanceId)
+	instance_storage.WriteMissedLog(instanceId)
 	elapsed := time.Since(startTime).Seconds()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -210,7 +210,7 @@ func logExitGapSupercharge(percentNotFound float64, medianLag float64) {
 }
 
 func logRunawayError(percentNotFound float64, currentInstanceId, latestInstanceId int64, latestInstanceCompletionDate time.Time) {
-	ping := fmt.Sprintf("<@&%s>", os.Getenv("ALERTS_ROLE_ID"))
+	ping := fmt.Sprintf("<@&%s>", env.AlertsRoleID)
 	webhook := discord.Webhook{
 		Content: &ping,
 		Embeds: []discord.Embed{
@@ -249,7 +249,7 @@ func logRunawayError(percentNotFound float64, currentInstanceId, latestInstanceI
 }
 
 func logGapCheckBlockSkip(oldId int64, newId int64) {
-	ping := fmt.Sprintf("<@&%s>", os.Getenv("ALERTS_ROLE_ID"))
+	ping := fmt.Sprintf("<@&%s>", env.AlertsRoleID)
 	webhook := discord.Webhook{
 		Content: &ping,
 		Embeds: []discord.Embed{{

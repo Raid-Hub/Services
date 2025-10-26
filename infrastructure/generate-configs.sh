@@ -32,8 +32,6 @@ required_vars=(
     "RABBITMQ_PASSWORD"
     "CLICKHOUSE_USER"
     "CLICKHOUSE_PASSWORD"
-    "GRAFANA_USER"
-    "GRAFANA_PASSWORD"
 )
 
 for var in "${required_vars[@]}"; do

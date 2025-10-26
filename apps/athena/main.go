@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"raidhub/shared/bungie"
-	"raidhub/shared/database/postgres"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/web/bungie"
 	"strings"
 	"sync"
 	"time"
@@ -37,10 +37,14 @@ func main() {
 
 	var sqlitePath string
 	if !*fromDisk {
-		manifest, err := bungie.GetDestinyManifest()
+		result, _, err := bungie.Client.GetDestinyManifest()
 		if err != nil {
 			log.Fatal("get manifest: ", err)
 		}
+		if result == nil || !result.Success || result.Data == nil {
+			log.Fatal("manifest fetch failed")
+		}
+		manifest := result.Data
 
 		dbURL := fmt.Sprintf("https://www.bungie.net%s", manifest.MobileWorldContentPaths["en"])
 		dbFileName := filepath.Join(*out, filepath.Base(dbURL))
@@ -189,14 +193,10 @@ func main() {
 	}
 	defer definitions.Close()
 
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// postgres.DB is initialized in init()
 	if *verbose {
 		log.Println("Connected to postgres")
 	}
-	defer db.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -204,8 +204,8 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(2)
-	go saveWeaponDefinitions(ctx, &wg, db, definitions)
-	go saveFeatDefinitions(ctx, &wg, db, definitions)
+	go saveWeaponDefinitions(ctx, &wg, postgres.DB, definitions)
+	go saveFeatDefinitions(ctx, &wg, postgres.DB, definitions)
 
 	wg.Wait()
 
@@ -233,7 +233,7 @@ func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, 
 	}
 	defer rows.Close()
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := postgres.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 	defer wg.Done()
 
 	// first, get all raid hashes
-	raidHashRows, err := db.QueryContext(ctx, `SELECT hash FROM activity_version`)
+	raidHashRows, err := postgres.DB.QueryContext(ctx, `SELECT hash FROM activity_version`)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -367,7 +367,7 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 		}
 
 		// Insert the feat into the database
-		_, err := db.ExecContext(ctx, `INSERT INTO activity_feat_definition 
+		_, err := postgres.DB.ExecContext(ctx, `INSERT INTO activity_feat_definition 
 			(hash, skull_hash, name, icon_path, description, description_short, modifier_power_contribution) 
 			VALUES ($1::bigint, $2::bigint, $3, $4, $5, $6, $7) 
 			ON CONFLICT (hash) DO UPDATE SET

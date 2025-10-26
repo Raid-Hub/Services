@@ -145,6 +145,7 @@ help:
 	@echo "  make dev-legacy    Start services with Docker Compose (no hot reload)"
 	@echo "  make build         Build all binaries"
 	@echo "  make <service>     Build a specific service (e.g., make hermes)"
+	@echo "  ./bin/hermes -topic <type>  Run a specific queue topic"
 	@echo ""
 	@echo "Docker Services:"
 	@echo "  make services      Start all services"

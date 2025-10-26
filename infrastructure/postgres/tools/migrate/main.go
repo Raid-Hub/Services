@@ -47,7 +47,7 @@ func connectDB() (*sql.DB, error) {
 	// The init script should have already set up the user and database
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbName)
-	
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
@@ -146,23 +146,23 @@ func main() {
 
 	// Use new unified migration directory
 	migrationDirectory := "infrastructure/postgres/migrations"
-	
+
 	// Check if new structure exists, fallback to old structure
 	if _, err := os.Stat(migrationDirectory); os.IsNotExist(err) {
 		log.Println("New migration structure not found, using legacy structure...")
 		migrationDirectory = "infrastructure/postgres/migrations.new"
 	}
-	
+
 	migrationFiles, err := getMigrationFiles(migrationDirectory)
 	if err != nil {
 		log.Fatalf("Error getting migration files: %v", err)
 	}
-	
+
 	if len(migrationFiles) == 0 {
 		log.Println("No migration files found")
 		return
 	}
-	
+
 	log.Printf("Found %d migration files in %s", len(migrationFiles), migrationDirectory)
 
 	// Check which migrations have been applied
@@ -188,7 +188,7 @@ func main() {
 			log.Printf("✓ %s (already applied)", filename)
 			continue
 		}
-		
+
 		log.Printf("→ Applying migration: %s", filename)
 
 		migrationSQL, err := readMigrationFile(migrationDirectory, filename)

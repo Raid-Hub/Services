@@ -18,13 +18,13 @@ import (
 )
 
 var commands = map[string]func(){
-	"update-skull-hashes":         updateskull.UpdateSkullHashes,
-	"flag-restricted-pgcrs":       flagrestricted.FlagRestrictedPGCRs,
-	"process-single-pgcr":         processpgcr.ProcessSinglePGCR,
-	"activity-history-update":     activityhistory.ActivityHistoryUpdate,
-	"fix-sherpa-clears":           fixsherpa.FixSherpaClears,
-	"pan":                         pan.Main,
-	"bob":                         bob.Main,
+	"update-skull-hashes":     updateskull.UpdateSkullHashes,
+	"flag-restricted-pgcrs":   flagrestricted.FlagRestrictedPGCRs,
+	"process-single-pgcr":     processpgcr.ProcessSinglePGCR,
+	"activity-history-update": activityhistory.ActivityHistoryUpdate,
+	"fix-sherpa-clears":       fixsherpa.FixSherpaClears,
+	"pan":                     pan.Main,
+	"bob":                     bob.Main,
 }
 
 func main() {

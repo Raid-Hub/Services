@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,6 +19,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/paulbellamy/ratecounter"
 	"golang.org/x/time/rate"
+
+	"raidhub/lib/env"
 )
 
 var (
@@ -55,14 +56,14 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	securityKey = os.Getenv("BUNGIE_API_KEY")
+	securityKey = env.BungieAPIKey
 	if securityKey == "" {
 		log.Fatal("must pass BUNGIE_API_KEY")
 	}
 
-	proxyTransport.apiKeys = strings.Split(os.Getenv("ZEUS_API_KEYS"), ",")
+	proxyTransport.apiKeys = strings.Split(env.ZeusAPIKeys, ",")
 
-	addr := netip.MustParseAddr(os.Getenv("IPV6"))
+	addr := netip.MustParseAddr(env.IPV6)
 	for i := 0; i < *ipv6n; i++ {
 		d := &net.Dialer{
 			LocalAddr: &net.TCPAddr{

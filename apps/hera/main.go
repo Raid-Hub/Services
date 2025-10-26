@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"flag"
+	"fmt"
 	"log"
-	"raidhub/queue-workers/player_crawl"
-	"raidhub/shared/bungie"
-	"raidhub/shared/clan"
-	"raidhub/shared/database/postgres"
-	"raidhub/shared/messaging/rabbit"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/domains/clan"
+	"raidhub/lib/messaging/rabbit"
+	"raidhub/lib/messaging/routing"
+	"raidhub/lib/web/bungie"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,29 +32,18 @@ func main() {
 	log.Println("Starting...")
 	log.Printf("Selecting the top %d players from each leaderboard...", *topPlayers)
 
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-	defer db.Close()
-
+	// postgres.DB and rabbit.Conn are initialized in init()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, err := rabbit.Init()
-	if err != nil {
-		log.Fatalf("Error connecting to RabbitMQ: %s", err)
-	}
-	defer rabbit.Cleanup()
-
-	ch, err := conn.Channel()
+	ch, err := rabbit.Conn.Channel()
 	if err != nil {
 		log.Fatalf("Error creating a channel: %s", err)
 	}
 	defer ch.Close()
 
 	// Get all players who are in the top 1000 of individual leaderboard
-	rows, err := db.QueryContext(ctx, `
+	rows, err := postgres.DB.QueryContext(ctx, `
 	SELECT DISTINCT ON (membership_id) membership_id, membership_type FROM (
 		SELECT membership_id FROM individual_global_leaderboard WHERE (
 			clears_rank <= $1 
@@ -94,13 +84,17 @@ func main() {
 			for player := range queue {
 				attempts := 0
 				for attempts < 4 {
-					res, err := bungie.GetGroupsForMember(player.membershipType, player.membershipId)
+					result, _, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
 					if err != nil {
 						// retry
 						attempts++
 						time.Sleep(time.Second * time.Duration(attempts*2))
 						continue
 					}
+					if result == nil || !result.Success || result.Data == nil {
+						break
+					}
+					res := result.Data
 					atomic.AddInt32(playerCountPointer, 1)
 
 					for _, group := range res.Results {
@@ -139,7 +133,7 @@ func main() {
 
 	groupChannel := make(chan bungie.GroupV2)
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := postgres.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Fatalf("Error beginning transaction: %s", err)
 	}
@@ -190,26 +184,29 @@ func main() {
 				for page := 1; ; page++ {
 					var err error
 					var results *bungie.SearchResultOfGroupMember
-					var errCode int
 					attempts := 0
 					for attempts < 4 {
-						results, errCode, err = bungie.GetMembersOfGroup(group.GroupId, page)
-						if errCode == 686 { // Group not found
+						result, errorCode, err := bungie.Client.GetMembersOfGroup(group.GroupId, page)
+						if errorCode == 686 { // Group not found
 							break
 						} else if err != nil {
 							log.Printf("Error getting members of group %d: %s", group.GroupId, err)
 							attempts++
 							continue
 						}
+						if result == nil || !result.Success || result.Data == nil {
+							break
+						}
+						results = result.Data
 
 						atomic.AddInt32(clanMemberCountPointer, int32(len(results.Results)))
 						for _, member := range results.Results {
 							var exists bool
-							err := db.QueryRowContext(ctx, `SELECT true FROM player WHERE membership_id = $1`, member.DestinyUserInfo.MembershipId).Scan(&exists)
+							err := postgres.DB.QueryRowContext(ctx, `SELECT true FROM player WHERE membership_id = $1`, member.DestinyUserInfo.MembershipId).Scan(&exists)
 							if err != nil {
 								atomic.AddInt32(memberFailurePointer, 1)
 								if err == sql.ErrNoRows {
-									player_crawl.SendMessage(ch, member.DestinyUserInfo.MembershipId)
+									routing.Publisher.PublishTextMessage(routing.PlayerCrawl, fmt.Sprintf("%d", member.DestinyUserInfo.MembershipId))
 									// if member.LastOnlineStatusChange != 0 {
 									// 	log.Printf("Player %d, last seen %s, is not in the database, sending to player_crawl", member.DestinyUserInfo.MembershipId, time.Unix(member.LastOnlineStatusChange, 0))
 									// }
@@ -252,7 +249,7 @@ func main() {
 	log.Printf("Inserted %d/%d clan members, failed on %d", *clanMemberCountPointer-*memberFailurePointer, *clanMemberCountPointer, *memberFailurePointer)
 
 	log.Println("Refreshing leaderboards...")
-	_, err = db.ExecContext(ctx, `REFRESH MATERIALIZED VIEW clan_leaderboard WITH DATA`)
+	_, err = postgres.DB.ExecContext(ctx, `REFRESH MATERIALIZED VIEW clan_leaderboard WITH DATA`)
 	if err != nil {
 		log.Fatalf("Error refreshing the clan_leaderboard materialized view: %s", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"raidhub/shared/database/postgres"
+	"raidhub/lib/database/postgres"
 	"sync"
 	"syscall"
 	"time"
@@ -67,7 +67,6 @@ func FixSherpaClears() {
 	log.Println("Updating materialized view firsts_clears_tmp...")
 	start := time.Now()
 
-	
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW firsts_clears_tmp WITH DATA`)
 	if err != nil {
 		log.Fatalf("Error refreshing materialized view firsts_clears_tmp: %s", err)

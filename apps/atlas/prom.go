@@ -7,7 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"raidhub/shared/monitoring"
+	"raidhub/lib/monitoring"
 	"strconv"
 	"time"
 )

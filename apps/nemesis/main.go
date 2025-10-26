@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"raidhub/shared/cheat_detection"
-	"raidhub/shared/database/postgres"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/domains/cheat_detection"
 	"sync"
 	"time"
 )
@@ -24,11 +24,7 @@ type LevelsDTO struct {
 func main() {
 	log.Println("Starting...")
 
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-	defer db.Close()
+	// postgres.DB is initialized in init()
 
 	// step 1: get all player instance flags and check their cheat levels
 	flags := make(chan cheat_detection.PlayerInstanceFlagStats)
@@ -41,7 +37,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for flag := range flags {
-				lvl, cheaterAccountProbability, cheaterFlags := cheat_detection.UpdatePlayerCheatLevel(db, flag)
+				lvl, cheaterAccountProbability, cheaterFlags := cheat_detection.UpdatePlayerCheatLevel(flag)
 
 				if lvl >= 0 {
 					mu.Lock()
@@ -56,7 +52,7 @@ func main() {
 		}()
 	}
 
-	rows := cheat_detection.GetAllInstanceFlagsByPlayer(db, flags, fmt.Sprintf("%s%%", versionPrefix))
+	rows := cheat_detection.GetAllInstanceFlagsByPlayer(flags, fmt.Sprintf("%s%%", versionPrefix))
 	defer rows.Close()
 	for rows.Next() {
 		var flag cheat_detection.PlayerInstanceFlagStats
@@ -112,7 +108,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for instanceId := range instanceIds {
-				_, _, _, _, err := cheat_detection.CheckForCheats(instanceId, db)
+				_, _, _, _, err := cheat_detection.CheckForCheats(instanceId)
 				if err != nil {
 					log.Fatalf("Failed to process cheat_check for instance %d: %s", instanceId, err)
 				}
@@ -120,7 +116,7 @@ func main() {
 		}()
 	}
 
-	rows, err = db.Query(`SELECT DISTINCT instance_id 
+	rows, err := postgres.DB.Query(`SELECT DISTINCT instance_id 
 		FROM instance_player 
 		JOIN player USING (membership_id)
 		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'`)
@@ -142,7 +138,7 @@ func main() {
 	log.Println("Finished re-checking blacklisted player instances.")
 
 	// step 3: upgrade high flagged instances to blacklisted
-	countBlacklisted, err := cheat_detection.BlacklistFlaggedInstances(db)
+	countBlacklisted, err := cheat_detection.BlacklistFlaggedInstances()
 	if err != nil {
 		log.Fatalf("Error blacklisting flagged instances: %s", err)
 	}
@@ -150,7 +146,7 @@ func main() {
 
 	// step 4: select players with cheat level 4 and mark their instances as blacklisted
 	now := time.Now()
-	players, err := cheat_detection.GetRecentlyPlayedBlacklistedPlayers(db, now.Add(-14*24*time.Hour))
+	players, err := cheat_detection.GetRecentlyPlayedBlacklistedPlayers(now.Add(-14 * 24 * time.Hour))
 	if err != nil {
 		log.Fatalf("Error getting recently played blacklisted players: %s", err)
 	}
@@ -159,7 +155,7 @@ func main() {
 	var totalBlacklistedCount int64
 	var totalElligibleCount int64
 	for _, player := range players {
-		count, elligible, err := cheat_detection.BlacklistRecentInstances(db, player)
+		count, elligible, err := cheat_detection.BlacklistRecentInstances(player)
 		if err != nil {
 			log.Fatalf("Error blacklisting instances for player %d: %s", player.MembershipId, err)
 		}

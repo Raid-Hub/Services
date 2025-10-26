@@ -6,17 +6,19 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
-	"raidhub/packages/discord"
-	"raidhub/shared/pgcr"
-	"raidhub/shared/database/postgres"
-	"raidhub/shared/messaging/rabbit"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/domains/instance"
+	"raidhub/lib/domains/instance_storage"
+	"raidhub/lib/domains/pgcr"
+	"raidhub/lib/env"
+	"raidhub/lib/messaging/rabbit"
+	"raidhub/lib/web/discord"
 
 	"slices"
 
@@ -100,13 +102,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-	defer db.Close()
-
-	stmnt, err := db.Prepare("SELECT instance_id FROM instance INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
+	// postgres.DB is initialized in init()
+	stmnt, err := postgres.DB.Prepare("SELECT instance_id FROM instance INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
 	if err != nil {
 		log.Fatalf("Error preparing statement: %s", err)
 	}
@@ -138,18 +135,13 @@ func main() {
 		log.Fatalf("Error connecting to the database: %s", err)
 	}
 
-	latestId, err := postgres.GetLatestInstanceId(db, 5_000)
+	latestId, err := instance.GetLatestInstanceId(5_000)
 	if err != nil {
 		log.Fatalf("Error getting latest instance ID: %s", err)
 	}
 
-	conn, err := rabbit.Init()
-	if err != nil {
-		log.Fatalf("Error connecting to rabbit: %s", err)
-	}
-	defer rabbit.Cleanup()
-
-	rabbitChannel, err := conn.Channel()
+	// rabbit.Conn is initialized in init()
+	rabbitChannel, err := rabbit.Conn.Channel()
 	if err != nil {
 		log.Fatalf("Failed to create channel: %s", err)
 	}
@@ -174,7 +166,7 @@ func main() {
 		log.Printf("Workers starting at %d", firstId)
 		wg.Add(numWorkers)
 		for i := 0; i < numWorkers; i++ {
-			go worker(ch, successes, failures, db, rabbitChannel, &wg, latestId)
+			go worker(ch, successes, failures, postgres.DB, rabbitChannel, &wg, latestId)
 		}
 
 		var wg2 sync.WaitGroup
@@ -219,9 +211,6 @@ func main() {
 
 func worker(ch chan int64, successes chan int64, failures chan int64, db *sql.DB, rabbitChannel *amqp091.Channel, wg *sync.WaitGroup, latestId int64) {
 	defer wg.Done()
-	securityKey := os.Getenv("BUNGIE_API_KEY")
-
-	client := &http.Client{}
 
 	for instanceID := range ch {
 		if instanceID > latestId {
@@ -233,14 +222,14 @@ func worker(ch chan int64, successes chan int64, failures chan int64, db *sql.DB
 
 		var errors = 0
 		for errors < 10 {
-			result, activity, raw, err := pgcr.FetchAndProcessPGCR(client, instanceID, securityKey)
+			result, activity, raw, err := pgcr.FetchAndProcessPGCR(instanceID)
 
 			if result == pgcr.NonRaid {
 				break
 			} else if result == pgcr.Success {
-				_, committed, err := pgcr.StorePGCR(activity, raw, db, rabbitChannel)
+				_, committed, err := instance_storage.StorePGCR(activity, raw)
 				if err != nil {
-					log.Printf("Failed to store raid %d: %s", instanceID, err)
+					log.Printf("Failed to store PGCR: %v", err)
 					time.Sleep(3 * time.Second)
 					errors++
 					continue
@@ -316,7 +305,7 @@ type Gap struct {
 
 func postResults(count int, failed int, found int, minFailed int64, maxFailed int64, gaps []Gap) {
 	// Discord webhook URL
-	webhookURL := os.Getenv("HADES_WEBHOOK_URL")
+	webhookURL := env.HadesWebhookURL
 
 	// Message to be sent
 	message := fmt.Sprintf("Info: Processed %d missing PGCR(s). Failed on %d. Added %d to the dataset.", count, failed, found)

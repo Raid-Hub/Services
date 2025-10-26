@@ -42,8 +42,6 @@ This document defines how RaidHub Services applications are categorized by their
 - `flag-restricted-pgcrs` - Flags restricted PGCRs
 - `process-single-pgcr` - Processes a single PGCR
 - `update-skull-hashes` - Updates skull hashes
-- `pan` - Activity history crawler (moved from cmd/)
-- `bob` - Sherpa/first clear rebuild script (moved from cmd/)
 
 **Execute**: `./bin/tools <command>` when needed
 
@@ -88,8 +86,6 @@ These are commands for the consolidated tools binary:
 ./bin/tools flag-restricted-pgcrs
 ./bin/tools process-single-pgcr
 ./bin/tools update-skull-hashes
-./bin/tools pan
-./bin/tools bob
 ```
 
 ## Naming Conventions

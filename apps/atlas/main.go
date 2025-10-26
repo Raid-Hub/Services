@@ -1,23 +1,21 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"math"
-	"net/http"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/joho/godotenv"
 
-	"raidhub/shared/monitoring"
-	"raidhub/shared/pgcr"
-	"raidhub/shared/database/postgres"
-	"raidhub/shared/messaging/rabbit"
+	"raidhub/lib/domains/instance"
+	"raidhub/lib/domains/instance_storage"
+	"raidhub/lib/domains/pgcr"
+	"raidhub/lib/messaging/rabbit"
+	"raidhub/lib/monitoring"
 )
 
 var (
@@ -39,15 +37,11 @@ func main() {
 		log.Fatalln("Invalid flags")
 	}
 
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-	defer db.Close()
-
+	// postgres.DB is initialized in init()
 	var instanceId int64
+	var err error
 	if *targetInstanceId == -1 {
-		instanceId, err = postgres.GetLatestInstanceId(db, *buffer)
+		instanceId, err = instance.GetLatestInstanceId(*buffer)
 		if err != nil {
 			log.Fatalf("Error getting latest instance id: %s", err)
 		}
@@ -56,24 +50,19 @@ func main() {
 	}
 
 	monitoring.RegisterAtlas(8080)
-	run(instanceId, db)
+	run(instanceId)
 
 }
 
-func run(latestId int64, db *sql.DB) {
+func run(latestId int64) {
 	defer func() {
 		if r := recover(); r != nil {
 			handlePanic(r)
 		}
 	}()
 
-	conn, err := rabbit.Init()
-	if err != nil {
-		log.Fatalf("Failed to create connection: %s", err)
-	}
-	defer rabbit.Cleanup()
-
-	rabbitChannel, err := conn.Channel()
+	// rabbit.Conn is initialized in init()
+	rabbitChannel, err := rabbit.Conn.Channel()
 	if err != nil {
 		log.Fatalf("Failed to create channel: %s", err)
 	}
@@ -88,15 +77,15 @@ func run(latestId int64, db *sql.DB) {
 	sendStartUpAlert()
 
 	// Start a goroutine to offload malformed or slowly resolving PGCRs
-	go offloadWorker(consumerConfig.OffloadChannel, consumerConfig.RabbitChannel, db)
+	go offloadWorker(consumerConfig.OffloadChannel)
 
 	// check for gaps
-	go gapCheckWorker(db, &consumerConfig)
+	go gapCheckWorker(&consumerConfig)
 
 	periodLength := 10_000
 	for {
 		startTime := time.Now()
-		spawnWorkers(workers, periodLength, db, &consumerConfig)
+		spawnWorkers(workers, periodLength, &consumerConfig)
 
 		monitoring.ActiveWorkers.Set(float64(workers))
 
@@ -152,7 +141,7 @@ func run(latestId int64, db *sql.DB) {
 
 }
 
-func spawnWorkers(countWorkers int, periodLength int, db *sql.DB, consumerConfig *ConsumerConfig) {
+func spawnWorkers(countWorkers int, periodLength int, consumerConfig *ConsumerConfig) {
 	var wg sync.WaitGroup
 	// unbuffered channel ensures ids don't sit in the buffer and are immediately passed to workers
 	ids := make(chan int64)
@@ -161,7 +150,7 @@ func spawnWorkers(countWorkers int, periodLength int, db *sql.DB, consumerConfig
 
 	wg.Add(countWorkers)
 	for i := 0; i < countWorkers; i++ {
-		go Worker(&wg, ids, consumerConfig.OffloadChannel, consumerConfig.RabbitChannel, db)
+		go Worker(&wg, ids, consumerConfig.OffloadChannel)
 	}
 
 	// Pass IDs to workers
@@ -174,7 +163,7 @@ func spawnWorkers(countWorkers int, periodLength int, db *sql.DB, consumerConfig
 	wg.Wait()
 }
 
-func gapCheckWorker(db *sql.DB, consumerConfig *ConsumerConfig) {
+func gapCheckWorker(consumerConfig *ConsumerConfig) {
 
 	// Check for gaps in the PGCRs
 	for {
@@ -190,7 +179,7 @@ func gapCheckWorker(db *sql.DB, consumerConfig *ConsumerConfig) {
 			startTime := time.Now()
 			logHigh404Rate(int(count), frac*100)
 			// spawn an additional 500 workers to process the potential gap
-			spawnWorkers(500, 10_000, db, consumerConfig)
+			spawnWorkers(500, 10_000, consumerConfig)
 
 			medianLag, err := getMedianLag(min(5, int(time.Since(startTime).Minutes())))
 			if err != nil {
@@ -212,7 +201,7 @@ func gapCheckWorker(db *sql.DB, consumerConfig *ConsumerConfig) {
 
 				if err != nil {
 					log.Println("Error finding block start:", err)
-					latestId, completionDate, err := postgres.GetLatestInstance(db)
+					latestId, completionDate, err := instance.GetLatestInstance()
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -225,7 +214,7 @@ func gapCheckWorker(db *sql.DB, consumerConfig *ConsumerConfig) {
 					prevId := consumerConfig.LatestId
 
 					for id := prevId; id < foundId; id++ {
-						pgcr.WriteMissedLog(id)
+						instance_storage.WriteMissedLog(id)
 					}
 
 					// push the crawler forward
@@ -240,15 +229,13 @@ func gapCheckWorker(db *sql.DB, consumerConfig *ConsumerConfig) {
 }
 
 func binarySearchForBlockStart(minCursor, maxCursor int64) (int64, error) {
-	client := &http.Client{}
-	securityKey := os.Getenv("BUNGIE_API_KEY")
 
 	// Binary search to find the latest instanceId
 	hasFound := false
 	for minCursor < maxCursor {
 		log.Println("Gap Mode Block Search: Searching between", minCursor, "and", maxCursor)
 		mid := (minCursor + maxCursor) / 2
-		result, _, _, err := pgcr.FetchAndProcessPGCR(client, mid, securityKey)
+		result, _, _, err := pgcr.FetchAndProcessPGCR(mid)
 		if result == pgcr.Success || result == pgcr.NonRaid {
 			hasFound = true
 			maxCursor = mid

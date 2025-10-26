@@ -55,18 +55,18 @@ func FlagRestrictedPGCRs() {
 		if err := rows.Scan(&instanceId); err != nil {
 			log.Fatalln("Error scanning instance_id:", err)
 		}
-	
+
 		result, _, _, _ := pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)
 		total++
-		
+
 		switch result {
-			case pgcr.InsufficientPrivileges:
-				log.Printf("Instance %d is restricted", instanceId)
-			case pgcr.Success:
-				log.Printf("Instance %d is not restricted", instanceId)
-			default:
-				log.Printf("Instance %d returned unexpected result: %d", instanceId, result)
-				result, _, _, _ = pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)
+		case pgcr.InsufficientPrivileges:
+			log.Printf("Instance %d is restricted", instanceId)
+		case pgcr.Success:
+			log.Printf("Instance %d is not restricted", instanceId)
+		default:
+			log.Printf("Instance %d returned unexpected result: %d", instanceId, result)
+			result, _, _, _ = pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)
 		}
 
 		if result == pgcr.InsufficientPrivileges {

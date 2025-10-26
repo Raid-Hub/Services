@@ -2,9 +2,9 @@ package activityhistory
 
 import (
 	"log"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/messaging/rabbit"
 	"raidhub/queue-workers/activity_history"
-	"raidhub/shared/database/postgres"
-	"raidhub/shared/messaging/rabbit"
 )
 
 const (

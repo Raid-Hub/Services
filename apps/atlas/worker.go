@@ -1,28 +1,21 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
-	"os"
 	"sync"
 	"time"
 
-	"raidhub/queue-workers/pgcr_blocked"
-	"raidhub/shared/monitoring"
-	"raidhub/shared/pgcr"
-
-	amqp "github.com/rabbitmq/amqp091-go"
+	"raidhub/lib/domains/instance_storage"
+	"raidhub/lib/domains/pgcr"
+	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/routing"
+	"raidhub/lib/monitoring"
 )
 
-func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbitChannel *amqp.Channel, db *sql.DB) {
+func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 	defer wg.Done()
-
-	securityKey := os.Getenv("BUNGIE_API_KEY")
-
-	client := &http.Client{}
 
 	randomVariation := retryDelayTime / 3
 
@@ -34,7 +27,7 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 
 		for {
 			reqStartTime := time.Now()
-			result, activity, raw, err := pgcr.FetchAndProcessPGCR(client, instanceID, securityKey)
+			result, activity, raw, err := pgcr.FetchAndProcessPGCR(instanceID)
 			if err != nil && result != pgcr.NotFound {
 				log.Println(err)
 			}
@@ -58,18 +51,19 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 				}
 				break
 			} else if result == pgcr.Success {
-				lag, committed, err := pgcr.StorePGCR(activity, raw, db, rabbitChannel)
-				if lag != nil {
-					monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
-				}
+				// Publish to queue for async storage
+				storeMessage := messages.NewPGCRStoreMessage(activity, raw)
+				err := routing.Publisher.PublishJSONMessage(routing.PGCRStore, storeMessage)
 				if err != nil {
 					errCount++
-					log.Println(err)
+					log.Printf("Failed to publish PGCR store message: %v", err)
 					time.Sleep(5 * time.Second)
 				} else {
-					if committed {
-						endTime := time.Now()
-						workerTime := endTime.Sub(startTime).Milliseconds()
+					endTime := time.Now()
+					workerTime := endTime.Sub(startTime).Milliseconds()
+					lag := time.Since(activity.DateCompleted)
+					if lag >= 0 {
+						monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
 						reqTime := endTime.Sub(reqStartTime)
 						log.Printf("Added PGCR with instanceId %d (%d / %d / %d / %.0f)", instanceID, i, workerTime, reqTime.Milliseconds(), lag.Seconds())
 					}
@@ -82,7 +76,7 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 				time.Sleep(45 * time.Second)
 				continue
 			} else if result == pgcr.InsufficientPrivileges {
-				pgcr_blocked.SendMessage(rabbitChannel, instanceID)
+				routing.Publisher.PublishJSONMessage(routing.PGCRBlocked, fmt.Sprintf("%d", instanceID))
 				break
 			} else if result == pgcr.InternalError || result == pgcr.DecodingError {
 				errCount++
@@ -91,7 +85,7 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 				errCount++
 				time.Sleep(time.Duration(30) * time.Second)
 			} else if result == pgcr.BadFormat || result == pgcr.ExternalError {
-				pgcr.WriteMissedLog(instanceID)
+				instance_storage.WriteMissedLog(instanceID)
 				if errCount > 0 {
 					offloadChannel <- instanceID
 					break
@@ -102,7 +96,7 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64, rabbit
 
 			// If we have not found the instance id after some time
 			if notFoundCount > 3 || errCount > 2 {
-				pgcr.WriteMissedLog(instanceID)
+				instance_storage.WriteMissedLog(instanceID)
 				offloadChannel <- instanceID
 				break
 			}

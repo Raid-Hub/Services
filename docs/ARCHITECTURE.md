@@ -59,9 +59,7 @@ RaidHub-Services/
 │   ├── cron/                    # Cron job infrastructure
 │   │   ├── crontab/             # Crontab definitions
 │   │   └── scripts/             # Cron job scripts
-│   ├── cloudflared/             # Cloudflare tunnel config
 │   ├── prometheus/              # Prometheus config
-│   └── grafana/                 # Grafana dashboards
 ├── docker/                      # Docker configs
 ├── docs/                        # Documentation
 ├── bin/                         # Built binaries
@@ -157,8 +155,6 @@ Background processing workers that handle asynchronous tasks:
 - **RabbitMQ**: Message queue for async processing
 - **ClickHouse**: Analytics database
 - **Prometheus**: Metrics collection
-- **Grafana**: Monitoring dashboards
-- **Cloudflared**: Secure tunnel for remote access
 
 ### Database Management
 
@@ -215,7 +211,6 @@ Key variables:
 - `BUNGIE_API_KEY`: Bungie API key for data access
 - Database credentials (POSTGRES*\*, RABBITMQ*\_, CLICKHOUSE\_\_)
 - Monitoring credentials (PROMETHEUS*\*, GRAFANA*\*)
-- Cloudflare tunnel configuration
 
 ## Future Improvements
 
@@ -226,9 +221,189 @@ The architecture is designed to support future enhancements:
 3. Performance optimizations
 4. Extended queue worker capabilities
 
+## Domain Package Organization (`lib/domains/`)
+
+The `lib/domains/` directory contains domain logic organized by entity type. Each domain package encapsulates all operations, data access, and business logic related to a specific entity.
+
+### Domain Package Purposes
+
+#### **`player/`** - Player Domain
+
+**Purpose**: Manages player data, profiles, and statistics.
+
+**Responsibilities**:
+
+- Fetch player profiles from Bungie API
+- Store and update player information in database
+- Track player activity history
+- Query player statistics and metadata
+
+**Key Functions**:
+
+- `Crawl()` - Fetch player data from Bungie API
+- `GetPlayer()` - Retrieve player by membership ID
+- `CreateOrUpdatePlayer()` - Insert or update player record
+- `UpdateHistoryLastCrawled()` - Update activity history timestamp
+- `GetPlayersNeedingHistoryUpdate()` - Find players needing refresh
+- `GetPlayerCharacters()` - Get all characters for a player
+- `UpdateActivityHistory()` - Fetch and store activity history
+
+#### **`pgcr/`** - PGCR Domain
+
+**Purpose**: Manages Post-Game Carnage Reports (raid completion data).
+
+**Responsibilities**:
+
+- Fetch PGCRs from Bungie API via Zeus proxy
+- Process raw PGCR data into structured format
+- Store PGCR instances in PostgreSQL
+- Store raw JSON in database
+- Determine if instance is "fresh" or checkpoint
+- Handle PGCR processing workflow
+
+**Key Functions**:
+
+- `FetchAndProcessPGCR()` - Fetch and parse PGCR from API
+- `ProcessDestinyReport()` - Convert Bungie API response to internal format
+- `StorePGCR()` - Store processed PGCR to database
+- `StoreJSON()` - Store compressed raw JSON
+- `RetrieveJSON()` - Retrieve raw JSON by instance ID
+- `ProcessBlocked()` - Handle blocked PGCRs
+- `CheckExists()` - Check if PGCR exists in database
+- `CheckCheat()` - Trigger cheat detection on PGCR
+- `StoreClickhouse()` - Queue PGCR for ClickHouse
+- `CalculateDateCompleted()` - Calculate completion timestamp
+- `CalculateDurationSeconds()` - Calculate activity duration
+- `WriteMissedLog()` - Log missed PGCR IDs
+
+#### **`cheat_detection/`** - Cheat Detection Domain
+
+**Purpose**: Detects and flags cheating behavior in raid completions.
+
+**Responsibilities**:
+
+- Analyze instance data for cheating patterns
+- Apply heuristic algorithms to detect impossible/low-probability runs
+- Flag instances and players with cheat probability scores
+- Update player cheat levels
+- Generate webhooks for flagged content
+- Manage blacklisted players and instances
+
+**Key Functions**:
+
+- `CheckForCheats()` - Main entry point for cheat detection
+- `getInstance()` - Fetch full instance data with players/characters/weapons
+- `flagInstance()` - Flag an instance as cheated
+- `flagPlayerInstance()` - Flag a player within an instance
+- `GetAllInstanceFlagsByPlayer()` - Get all flags for a player
+- `GetRecentlyPlayedBlacklistedPlayers()` - Get recently active blacklisted players
+- `BlacklistRecentInstances()` - Auto-blacklist instances for blacklisted players
+- `BlacklistFlaggedInstances()` - Upgrade high-probability flagged instances to blacklist
+- `GetCheaterAccountChance()` - Calculate account-level cheat probability
+- `UpdatePlayerCheatLevel()` - Update player cheat level based on flags
+- `GetMinimumCheatLevel()` - Determine minimum cheat level from flags
+- `SendFlaggedInstanceWebhook()` - Send Discord webhook for flagged instance
+- `SendFlaggedPlayerWebhooks()` - Send Discord webhook for flagged players
+
+**Heuristics** (in `methods.go` and `profile_heuristics.go`):
+
+- Lowman detection (too few players)
+- Speedrun time analysis
+- Total kills analysis
+- Time dilation detection
+- Player-specific heuristics (kills per second, weapon diversity, etc.)
+
+#### **`character/`** - Character Domain
+
+**Purpose**: Manages character data for players.
+
+**Responsibilities**:
+
+- Fill missing character information
+- Fetch character details from Bungie API
+
+**Key Functions**:
+
+- `Fill()` - Fetch and store character data
+
+#### **`clan/`** - Clan Domain
+
+**Purpose**: Manages clan (group) data.
+
+**Responsibilities**:
+
+- Fetch clan information from Bungie API
+- Parse clan details
+- Store clan data
+
+**Key Functions**:
+
+- `Crawl()` - Fetch clan data from API
+- `ParseClanDetails()` - Parse clan banner/name/motto
+
+#### **`stats/`** - Statistics Domain
+
+**Purpose**: Calculates statistical aggregations.
+
+**Responsibilities**:
+
+- Update player sum-of-best times
+- Aggregate raid completion statistics
+
+**Key Functions**:
+
+- `UpdatePlayerSumOfBest()` - Calculate and update sum of best clear times
+
+#### **`instance/`** - Instance Domain
+
+**Purpose**: Manages raid instance data and storage.
+
+Contains types and operations for raid instances:
+
+- `Instance` - Processed raid instance
+- `InstancePlayer` - Player within an instance
+- `InstanceCharacter` - Character within an instance
+- `InstanceCharacterWeapon` - Weapon used by character
+- Storage and retrieval operations for instances
+
+### Package Boundary Rules
+
+#### **`lib/database/postgres/`** - Database Infrastructure Only
+
+**Should contain**:
+
+- Database connection singleton (`singleton.go`)
+- Connection initialization (`init()` functions)
+- Database monitoring utilities (`watch.go`)
+- **ONLY low-level database utilities**
+
+**Should NOT contain**:
+
+- Domain-specific query logic
+- Business rules
+- Entity operations
+- Transaction management for specific domains
+
+#### **`lib/domains/*/`** - Domain Logic Only
+
+**Should contain**:
+
+- All queries specific to that domain
+- Business logic for that domain
+- Entity operations
+- Domain-specific types
+
+**Should NOT contain**:
+
+- Database connection setup
+- Generic utilities (use `lib/utils/`)
+- Cross-domain logic (create shared package or import between domains as needed)
+
 ## Contributing
 
 1. Follow the architecture principles
 2. Keep infrastructure and app code separate
-3. Document new services and workers
-4. Update this document with significant changes
+3. Keep database utilities separate from domain logic
+4. Each domain should be self-contained
+5. Document new services and workers
+6. Update this document with significant changes
