@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"log"
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/domains/instance"
-	"raidhub/lib/domains/pgcr"
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring"
 	"raidhub/lib/web/bungie"
-	"sync"
 	"time"
 )
 
@@ -31,14 +28,14 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	defer tx.Rollback()
 
 	// 1. Store raw JSON (pgcr domain) - within transaction
-	_, err = pgcr.StoreRawJSON(tx, raw)
+	_, err = StoreRawJSON(tx, raw)
 	if err != nil {
 		log.Printf("Error storing raw PGCR: %s", err)
 		return nil, false, err
 	}
 
 	// 2. Store instance data (instance domain) - within same transaction
-	sideEffects, err := instance.Store(tx, inst)
+	sideEffects, err := Store(tx, inst)
 	if err != nil {
 		log.Printf("Error storing instance data: %s", err)
 		return nil, false, err
@@ -46,7 +43,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 
 	// 3. Store to ClickHouse BEFORE committing Postgres transaction
 	// This ensures best-effort atomicity: if ClickHouse fails, we roll back everything
-	err = instance.StoreToClickHouse(inst)
+	err = StoreToClickHouse(inst)
 	if err != nil {
 		log.Printf("Failed to store to ClickHouse: %v", err)
 		return nil, false, err // Roll back the entire transaction
@@ -76,52 +73,8 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 			routing.Publisher.PublishJSONMessage(routing.PlayerCrawl, playerCrawlRequest)
 		}
 	}
-	if sideEffects.CheatCheckRequest {
-		routing.Publisher.PublishTextMessage(routing.PGCRCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
-	}
+	routing.Publisher.PublishTextMessage(routing.PGCRCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
 
 	log.Printf("Successfully stored instance %d", inst.InstanceId)
 	return &lag, true, nil
-}
-
-var (
-	activityInfoCache = make(map[uint32]activityInfoCacheEntry)
-	cacheMu           = sync.RWMutex{}
-)
-
-type activityInfoCacheEntry struct {
-	activityId   int
-	activityName string
-	versionName  string
-}
-
-// getActivityInfo retrieves activity information from the database (with caching)
-func getActivityInfo(hash uint32) (int, string, string, error) {
-	// Try cache first
-	cacheMu.RLock()
-	cached, found := activityInfoCache[hash]
-	cacheMu.RUnlock()
-
-	if found {
-		return cached.activityId, cached.activityName, cached.versionName, nil
-	}
-
-	// Query database
-	cacheEntry := activityInfoCacheEntry{}
-	err := postgres.DB.QueryRow(`SELECT activity_id, activity_definition.name, version_definition.name
-			FROM activity_version 
-			JOIN activity_definition ON activity_version.activity_id = activity_definition.id 
-			JOIN version_definition ON activity_version.version_id = version_definition.id
-			WHERE hash = $1`,
-		hash).Scan(&cacheEntry.activityId, &cacheEntry.activityName, &cacheEntry.versionName)
-	if err != nil {
-		return 0, "", "", fmt.Errorf("error finding activity_id for hash %d: %w", hash, err)
-	}
-
-	// Store in cache
-	cacheMu.Lock()
-	activityInfoCache[hash] = cacheEntry
-	cacheMu.Unlock()
-
-	return cacheEntry.activityId, cacheEntry.activityName, cacheEntry.versionName, nil
 }

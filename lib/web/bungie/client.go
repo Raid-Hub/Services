@@ -127,9 +127,7 @@ func (c *BungieClient) GetCommonSettings() (*BungieHttpResult[CoreSettingsConfig
 	return get[CoreSettingsConfiguration](c, url)
 }
 
-
 func (c *BungieClient) GetActivityHistoryPage(membershipType int, membershipId int64, characterId int64, count int, page int, mode int) (*BungieHttpResult[DestinyActivityHistoryResults], int, error) {
 	url := fmt.Sprintf("%s/Platform/Destiny2/%d/Account/%d/Character/%d/Stats/Activities/?mode=%d&count=%d&page=%d", c.baseURL, membershipType, membershipId, characterId, mode, count, page)
 	return get[DestinyActivityHistoryResults](c, url)
 }
-

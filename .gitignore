@@ -4,7 +4,9 @@
 # Generated configuration files
 infrastructure/postgres/init/*.sql
 infrastructure/rabbitmq/definitions.json
+infrastructure/clickhouse/config.xml
 infrastructure/clickhouse/users.xml
+infrastructure/clickhouse/named_collections.xml
 infrastructure/prometheus/prometheus.yml
 
 # Volumes

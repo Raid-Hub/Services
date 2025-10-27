@@ -75,8 +75,25 @@ ps:
 	$(DOCKER_COMPOSE) ps
 
 # Database management
-migrate:
-	go run ./infrastructure/postgres/tools/migrate/
+migrate: migrate-postgres migrate-clickhouse
+	@echo "✓ All migrations complete"
+
+migrate-%:
+	@case "$*" in \
+		postgres) \
+			echo "Running PostgreSQL migrations..."; \
+			go run ./infrastructure/postgres/tools/migrate/; \
+			;; \
+		clickhouse) \
+			echo "Running ClickHouse migrations..."; \
+			go run ./infrastructure/clickhouse/tools/migrate/; \
+			;; \
+		*) \
+			echo "Unknown database: $*"; \
+			echo "Available options: postgres, clickhouse"; \
+			exit 1; \
+			;; \
+	esac
 
 seed:
 	go run ./infrastructure/postgres/tools/seed/
@@ -97,7 +114,7 @@ TOOLS_DIR = ./tools/
 # Dynamically discover all services in apps/ directory
 SERVICES = $(shell find $(APPS_DIR) -maxdepth 1 -type d -name '*' ! -name '.' | sed 's|$(APPS_DIR)||' | sort)
 
-.PHONY: bin tools
+.PHONY: bin tools seed
 bin:
 	@echo "Building all services..."
 	@mkdir -p bin
@@ -154,6 +171,11 @@ help:
 	@echo "  make logs          View logs"
 	@echo "  make restart       Restart services"
 	@echo "  make ps            View running services"
+	@echo ""
+	@echo "Database Migrations:"
+	@echo "  make migrate              Run all migrations (PostgreSQL + ClickHouse)"
+	@echo "  make migrate-postgres     Run PostgreSQL migrations only"
+	@echo "  make migrate-clickhouse   Run ClickHouse migrations only"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean         Remove containers, networks, volumes, and binaries"

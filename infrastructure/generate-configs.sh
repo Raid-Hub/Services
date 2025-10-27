@@ -75,10 +75,14 @@ replace_template() {
         -e "s|{{POSTGRES_DB}}|${POSTGRES_DB}|g" \
         -e "s|{{POSTGRES_READONLY_USER}}|${POSTGRES_READONLY_USER}|g" \
         -e "s|{{POSTGRES_READONLY_PASSWORD}}|${POSTGRES_READONLY_PASSWORD}|g" \
+        -e "s|{{POSTGRES_PORT}}|${POSTGRES_PORT}|g" \
         -e "s|{{RABBITMQ_USER}}|${RABBITMQ_USER}|g" \
         -e "s|{{RABBITMQ_PASSWORD}}|${RABBITMQ_PASSWORD}|g" \
         -e "s|{{CLICKHOUSE_USER}}|${CLICKHOUSE_USER}|g" \
+        -e "s|{{CLICKHOUSE_DB}}|${CLICKHOUSE_DB}|g" \
         -e "s|{{CLICKHOUSE_PASSWORD}}|${CLICKHOUSE_PASSWORD}|g" \
+        -e "s|{{POSTGRES_HOST}}|${POSTGRES_HOST:-localhost}|g" \
+        -e "s|{{POSTGRES_PORT}}|${POSTGRES_PORT:-5432}|g" \
         -e "s|{{PROMETHEUS_REMOTE_WRITE_URL}}|${PROMETHEUS_REMOTE_WRITE_URL}|g" \
         -e "s|{{PROMETHEUS_USERNAME}}|${PROMETHEUS_USERNAME}|g" \
         -e "s|{{PROMETHEUS_PASSWORD}}|${PROMETHEUS_PASSWORD}|g" \
@@ -99,11 +103,23 @@ replace_template \
     infrastructure/rabbitmq/definitions.json.template \
     infrastructure/rabbitmq/definitions.json
 
+# Generate ClickHouse config.xml
+echo "  → Generating ClickHouse config..."
+replace_template \
+    infrastructure/clickhouse/config.xml.template \
+    infrastructure/clickhouse/config.xml
+
 # Generate ClickHouse users.xml
 echo "  → Generating ClickHouse users..."
 replace_template \
     infrastructure/clickhouse/users.xml.template \
     infrastructure/clickhouse/users.xml
+
+# Generate ClickHouse named collections
+echo "  → Generating ClickHouse named collections..."
+replace_template \
+    infrastructure/clickhouse/named_collections.xml.template \
+    infrastructure/clickhouse/named_collections.xml
 
 # Generate Prometheus prometheus.yml
 echo "  → Generating Prometheus config..."

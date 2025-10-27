@@ -29,6 +29,9 @@ func init() {
 }
 
 func connect() (*sql.DB, error) {
-	connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable", env.PostgresUser, env.PostgresDB, env.PostgresPassword)
+	// Set search_path to include all schemas in priority order
+	searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
+	connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable search_path=%s",
+		env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
 	return sql.Open("postgres", connStr)
 }

@@ -4,6 +4,8 @@ import (
 	"log"
 	"time"
 
+	"raidhub/lib/env"
+
 	"github.com/ClickHouse/clickhouse-go/v2"
 	ch "github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
@@ -26,12 +28,23 @@ func init() {
 }
 
 func connect() (ch.Conn, error) {
-	return clickhouse.Open(&clickhouse.Options{
-		Addr: []string{"localhost:9000"},
+	host := env.ClickHouseHost
+	if host == "" {
+		host = "localhost"
+	}
+
+	// First connect to default database to create our custom database
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Addr: []string{host + ":" + env.ClickHousePort},
 		Auth: clickhouse.Auth{
-			Database: "default",
-			Username: "default",
-			Password: "",
+			Database: env.ClickHouseDB,
+			Username: env.ClickHouseUser,
+			Password: env.ClickHousePassword,
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }

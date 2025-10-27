@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Named collections for PostgreSQL engine -->
+<clickhouse>
+    <named_collections>
+        <postgres_creds>
+            <host>postgres</host>
+            <port>{{POSTGRES_PORT}}</port>
+            <user>{{POSTGRES_READONLY_USER}}</user>
+            <password>{{POSTGRES_READONLY_PASSWORD}}</password>
+            <database>{{POSTGRES_DB}}</database>
+        </postgres_creds>
+    </named_collections>
+</clickhouse>

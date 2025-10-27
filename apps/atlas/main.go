@@ -235,23 +235,24 @@ func binarySearchForBlockStart(minCursor, maxCursor int64) (int64, error) {
 	for minCursor < maxCursor {
 		log.Println("Gap Mode Block Search: Searching between", minCursor, "and", maxCursor)
 		mid := (minCursor + maxCursor) / 2
-		result, _, _, err := pgcr.FetchAndProcessPGCR(mid)
-		if result == pgcr.Success || result == pgcr.NonRaid {
+		result, _, _, _ := pgcr.FetchAndProcessPGCR(mid)
+		switch result {
+		case pgcr.Success, pgcr.NonRaid:
 			hasFound = true
 			maxCursor = mid
-		} else if result == pgcr.NotFound {
+		case pgcr.NotFound:
 			if hasFound {
 				minCursor = mid + 1
 			} else {
 				maxCursor = mid
 			}
-		} else if result == pgcr.SystemDisabled {
+		case pgcr.SystemDisabled:
 			time.Sleep(60 * time.Second)
-		} else if result == pgcr.InternalError || result == pgcr.DecodingError || result == pgcr.ExternalError || result == pgcr.RateLimited {
+		case pgcr.InternalError, pgcr.DecodingError, pgcr.ExternalError, pgcr.RateLimited:
 			// retry the request
 			time.Sleep(5 * time.Second)
-		} else {
-			return -1, fmt.Errorf("unexpected result %d for instanceId %d while binary searching", err, mid)
+		default:
+			return -1, fmt.Errorf("unexpected result %d for instanceId %d while binary searching", result, mid)
 		}
 	}
 

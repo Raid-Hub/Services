@@ -15,10 +15,11 @@ func UpsertPlayer(tx *sql.Tx, player *dto.PlayerInfo) (sql.Result, error) {
 				"display_name",
 				"bungie_global_display_name",
 				"bungie_global_display_name_code",
-				"last_seen"
+				"last_seen",
+				"first_seen"
 			)
 			VALUES (
-				$1, $2, $3, $4, $5, $6, $7
+				$1, $2, $3, $4, $5, $6, $7, $8
 			)
 			ON CONFLICT (membership_id)
 			DO UPDATE SET
@@ -44,5 +45,5 @@ func UpsertPlayer(tx *sql.Tx, player *dto.PlayerInfo) (sql.Result, error) {
 				;
 			`,
 		player.MembershipId, player.MembershipType, player.IconPath, player.DisplayName,
-		player.BungieGlobalDisplayName, player.BungieGlobalDisplayNameCode, player.LastSeen)
+		player.BungieGlobalDisplayName, player.BungieGlobalDisplayNameCode, player.LastSeen, player.FirstSeen)
 }

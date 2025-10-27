@@ -12,19 +12,18 @@ var (
 	PostgresUser     string
 	PostgresPassword string
 	PostgresDB       string
-	PostgresHost     string
 	PostgresPort     string
 
 	// RabbitMQ
 	RabbitMQUser     string
 	RabbitMQPassword string
-	RabbitMQHost     string
 	RabbitMQPort     string
 
 	// ClickHouse
+	ClickHouseHost     string
 	ClickHouseUser     string
 	ClickHousePassword string
-	ClickHouseHost     string
+	ClickHouseDB       string
 	ClickHousePort     string
 
 	// API
@@ -58,19 +57,18 @@ func init() {
 	PostgresUser = requireEnv("POSTGRES_USER")
 	PostgresPassword = requireEnv("POSTGRES_PASSWORD")
 	PostgresDB = requireEnv("POSTGRES_DB")
-	PostgresHost = requireEnv("POSTGRES_HOST")
 	PostgresPort = requireEnv("POSTGRES_PORT")
 
 	// RabbitMQ
 	RabbitMQUser = requireEnv("RABBITMQ_USER")
 	RabbitMQPassword = requireEnv("RABBITMQ_PASSWORD")
-	RabbitMQHost = requireEnv("RABBITMQ_HOST")
 	RabbitMQPort = requireEnv("RABBITMQ_PORT")
 
 	// ClickHouse
+	ClickHouseHost = getEnv("CLICKHOUSE_HOST") // Optional, defaults to localhost
 	ClickHouseUser = requireEnv("CLICKHOUSE_USER")
 	ClickHousePassword = requireEnv("CLICKHOUSE_PASSWORD")
-	ClickHouseHost = requireEnv("CLICKHOUSE_HOST")
+	ClickHouseDB = requireEnv("CLICKHOUSE_DB")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
 
 	// API
@@ -89,12 +87,12 @@ func init() {
 	GMReportWebhookURL = getEnv("GM_REPORT_WEBHOOK_URL")
 	GMReportWebhookAuth = getEnv("GM_REPORT_WEBHOOK_AUTH")
 
-	// Other
+	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
-	MissedPGCRLogFilePath = getEnv("MISSED_PGCR_LOG_FILE_PATH")
+	MissedPGCRLogFilePath = requireEnv("MISSED_PGCR_LOG_FILE_PATH")
 
 	if len(envIssues) > 0 {
-		panic("Required environment variables are not set: " + strings.Join(envIssues, ", "))
+		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))
 	}
 }
 

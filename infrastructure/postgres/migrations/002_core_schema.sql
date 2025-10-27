@@ -21,14 +21,6 @@ SET search_path TO "core", "definitions", "clan", "flagging", "leaderboard", "ex
 -- CORE TABLES
 -- =============================================================================
 
--- Helper function for search score calculation (immutable)
-CREATE OR REPLACE FUNCTION "core".calculate_search_score(clears INTEGER, last_seen TIMESTAMP WITH TIME ZONE)
-RETURNS NUMERIC AS $$
-BEGIN
-    RETURN sqrt(clears + 1) * power(2, GREATEST(0, EXTRACT(EPOCH FROM (last_seen - TIMESTAMP '2017-08-27')) / 20000000));
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
 -- Player table
 CREATE TABLE "core"."player" (
     "membership_id" BIGINT NOT NULL PRIMARY KEY,
@@ -46,17 +38,18 @@ CREATE TABLE "core"."player" (
         END
     ) STORED, 
     "last_seen" TIMESTAMP(3) NOT NULL,
+    "first_seen" TIMESTAMP(3) NOT NULL,
     "clears" INTEGER NOT NULL DEFAULT 0,
     "fresh_clears" INTEGER NOT NULL DEFAULT 0,
     "sherpas" INTEGER NOT NULL DEFAULT 0,
     "total_time_played_seconds" INTEGER NOT NULL DEFAULT 0,
     "sum_of_best" INTEGER,
     "last_crawled" TIMESTAMP(3),
-    "_search_score" NUMERIC(14, 4),
+    "wfr_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "cheat_level" SMALLINT NOT NULL DEFAULT 0,
     "is_private" BOOLEAN NOT NULL DEFAULT false,
     "history_last_crawled" TIMESTAMP(3),
-    "wfr_score" DOUBLE PRECISION NOT NULL DEFAULT 0
+    "_search_score" NUMERIC(14, 4) GENERATED ALWAYS AS (sqrt("clears" + 1) * power(2, GREATEST(0, EXTRACT(EPOCH FROM ("last_seen" - TIMESTAMP '2017-08-27')) / 20000000)) * sqrt("wfr_score" + 1)) STORED
 );
 CREATE INDEX "primary_search_idx" ON "core"."player"(lower("bungie_name") text_pattern_ops, "_search_score" DESC);
 CREATE INDEX "secondary_search_idx" ON "core"."player"(lower("display_name") text_pattern_ops, "_search_score" DESC);
@@ -75,7 +68,8 @@ CREATE TABLE "core"."instance" (
     "duration" INTEGER NOT NULL,
     "platform_type" INTEGER NOT NULL,
     "season_id" INTEGER,
-    "cheat_override" BOOLEAN NOT NULL DEFAULT False
+    "cheat_override" BOOLEAN NOT NULL DEFAULT False,
+    "skull_hashes" BIGINT[]
 );
 
 CREATE INDEX "hash_date_completed_index_partial" ON "core"."instance"("hash", "date_completed") WHERE "completed";

@@ -1,14 +1,6 @@
 <?xml version="1.0"?>
 <clickhouse>
     <users>
-        <default>
-            <password>{{CLICKHOUSE_PASSWORD}}</password>
-            <networks>
-                <ip>::/0</ip>
-            </networks>
-            <profile>default</profile>
-            <quota>default</quota>
-        </default>
         <{{CLICKHOUSE_USER}}>
             <password>{{CLICKHOUSE_PASSWORD}}</password>
             <networks>
@@ -16,6 +8,7 @@
             </networks>
             <profile>default</profile>
             <quota>default</quota>
+            <access_management>1</access_management>
         </{{CLICKHOUSE_USER}}>
     </users>
     <quotas>

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -17,58 +16,82 @@ import (
 	"raidhub/lib/domains/instance_storage"
 	"raidhub/lib/domains/pgcr"
 	"raidhub/lib/env"
-	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/web/discord"
 
 	"slices"
-
-	"github.com/rabbitmq/amqp091-go"
 )
 
 var (
-	gap = flag.Bool("gap", false, "process gaps in the missed log")
+	gap        = flag.Bool("gap", false, "process gaps in the missed log")
+	force      = flag.Bool("force", false, "force processing all PGCRs, ignoring database recency check")
+	numWorkers = flag.Int("workers", 1, "number of workers to spawn")
+	retries    = flag.Int("retries", 5, "number of retries for each PGCR")
+
+	// Global worker state
+	workerLatestId   int64
+	workerForce      bool
+	workerMaxRetries int
 )
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
 	flag.Parse()
 
 	// monitoring.RegisterPrometheus(9091)
 
-	src := filepath.Join(cwd, "logs", "missed.log")
-	temp := filepath.Join(cwd, "logs", "missed.temp.log")
+	// missedLogPath is where new missed PGCRs are accumulated
+	missedLogPath := env.MissedPGCRLogFilePath
+	logDir := filepath.Dir(missedLogPath)
+	// processingLogPath is where we temporarily store logs to process
+	processingLogPath := filepath.Join(logDir, filepath.Base(missedLogPath)+".temp")
 
-	_, err = os.Stat(temp)
+	_, err := os.Stat(processingLogPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = moveFile(src, temp)
-			if err != nil {
+			// Check if missedLogPath exists before trying to move it
+			_, err = os.Stat(missedLogPath)
+			if err == nil {
+				// missedLogPath exists, move it to processingLogPath for processing
+				err = moveFile(missedLogPath, processingLogPath)
+				if err != nil {
+					panic(err)
+				}
+			} else if !os.IsNotExist(err) {
+				// Some other error checking missedLogPath
 				panic(err)
+			} else {
+				// missedLogPath doesn't exist, nothing to process - just create empty missedLogPath and exit
+				if err := os.MkdirAll(logDir, 0755); err != nil {
+					panic(err)
+				}
+				missedLogFile, err := createFile(missedLogPath)
+				if err != nil {
+					panic(err)
+				}
+				missedLogFile.Close()
+				log.Println("No missed PGCRs to process")
+				return
 			}
-
-			_, err = createFile(src)
-			if err != nil {
-				panic(err)
-			}
+			// After moving missedLogPath to processingLogPath, we don't create a new missedLogPath yet
+			// It will be created at the end after processing completes, so that any failed PGCRs
+			// written during processing are preserved
 		} else {
 			panic(err)
 		}
 	}
 
-	file, err := os.Open(temp)
+	logFile, err := os.Open(processingLogPath)
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
+	defer logFile.Close()
+
+	log.Printf("Reading missed PGCRs from: %s", processingLogPath)
 
 	// Create a map to store unique numbers
 	uniqueNumbers := make(map[int64]bool)
 
 	// Read the file line by line
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(logFile)
 	minN := int64(0)
 	maxN := int64(0)
 	for scanner.Scan() {
@@ -131,42 +154,40 @@ func main() {
 	// Sort the numbers
 	slices.Sort(numbers)
 
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-
-	latestId, err := instance.GetLatestInstanceId(5_000)
-	if err != nil {
-		log.Fatalf("Error getting latest instance ID: %s", err)
-	}
-
-	// rabbit.Conn is initialized in init()
-	rabbitChannel, err := rabbit.Conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to create channel: %s", err)
-	}
-	defer rabbitChannel.Close()
-
 	var found []int64
 	var failed []int64
 	minFailed := int64(^uint64(0) >> 1) // Max int64 value
 	maxFailed := int64(0)
 	if len(numbers) > 0 {
+		var latestId int64
+		if !*force {
+			var err error
+			latestId, err = instance.GetLatestInstanceId(5_000)
+			if err != nil {
+				panic(fmt.Sprintf("error getting latest instance ID: %s", err))
+			}
+		} else {
+			latestId = 0 // Set to 0 when forcing, worker will skip the comparison
+		}
+
+		// Set global worker state
+		workerLatestId = latestId
+		workerForce = *force
+		workerMaxRetries = *retries
+
 		firstId := numbers[0]
 		ch := make(chan int64)
 		successes := make(chan int64)
 		failures := make(chan int64)
 		var wg sync.WaitGroup
 
-		numWorkers := len(numbers) / 10
-		numWorkers = max(5, numWorkers)
-		numWorkers = min(numWorkers, 200)
+		workerCount := *numWorkers
 
 		// Start workers
 		log.Printf("Workers starting at %d", firstId)
-		wg.Add(numWorkers)
-		for i := 0; i < numWorkers; i++ {
-			go worker(ch, successes, failures, postgres.DB, rabbitChannel, &wg, latestId)
+		wg.Add(workerCount)
+		for i := 0; i < workerCount; i++ {
+			go worker(ch, successes, failures, &wg)
 		}
 
 		var wg2 sync.WaitGroup
@@ -199,33 +220,50 @@ func main() {
 		wg2.Wait()
 	}
 
-	if err := os.Remove(temp); err != nil {
-		panic(err)
+	// Remove processingLogPath file
+	if _, err := os.Stat(processingLogPath); err == nil {
+		if err := os.Remove(processingLogPath); err != nil {
+			panic(err)
+		}
+		log.Println("Temporary file deleted successfully")
 	}
 
-	log.Println("Temporary file deleted successfully")
+	// Create new empty missedLogPath only if it doesn't exist
+	// (failed PGCRs written during processing should be preserved)
+	if _, err := os.Stat(missedLogPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			panic(err)
+		}
+		missedLogFile, err := createFile(missedLogPath)
+		if err != nil {
+			panic(err)
+		}
+		missedLogFile.Close()
+	}
 
 	gaps := findGaps(failed)
 	postResults(len(numbers), len(failed), len(found), minFailed, maxFailed, gaps)
 }
 
-func worker(ch chan int64, successes chan int64, failures chan int64, db *sql.DB, rabbitChannel *amqp091.Channel, wg *sync.WaitGroup, latestId int64) {
+func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for instanceID := range ch {
-		if instanceID > latestId {
+		if !workerForce && instanceID > workerLatestId {
 			log.Printf("PGCR %d is newer than latestId, skipping", instanceID)
-			writeMissedLog(instanceID)
+			instance_storage.WriteMissedLog(instanceID)
 			failures <- instanceID
 			continue
 		}
 
 		var errors = 0
-		for errors < 10 {
+		var processed = false
+		for errors <= workerMaxRetries && !processed {
 			result, activity, raw, err := pgcr.FetchAndProcessPGCR(instanceID)
 
 			if result == pgcr.NonRaid {
-				break
+				processed = true
+				// NonRaid activities are successfully processed, just not raids
 			} else if result == pgcr.Success {
 				_, committed, err := instance_storage.StorePGCR(activity, raw)
 				if err != nil {
@@ -236,65 +274,40 @@ func worker(ch chan int64, successes chan int64, failures chan int64, db *sql.DB
 				} else if committed {
 					log.Printf("Found raid %d", instanceID)
 					successes <- instanceID
+					processed = true
+				} else {
+					log.Printf("Non-raid activity %d", instanceID)
+					processed = true
+					// Not a raid, successfully processed and ignored
 				}
-				break
 			} else if result == pgcr.ExternalError || result == pgcr.InternalError || result == pgcr.DecodingError || result == pgcr.RateLimited {
 				log.Printf("Error fetching instanceId %d: %s", instanceID, err)
 				time.Sleep(5 * time.Second)
 				errors++
-				continue
+				// continue loop to retry
 			} else {
 				log.Printf("Could not resolve instance id %d: %s", instanceID, err)
-				writeMissedLog(instanceID)
+				instance_storage.WriteMissedLog(instanceID)
 				failures <- instanceID
-				break
+				processed = true
 			}
 		}
-		if errors >= 10 {
-			log.Printf("Failed to fetch instanceId %d 10+ times, skipping", instanceID)
-			writeMissedLog(instanceID)
+		if errors >= workerMaxRetries {
+			log.Printf("Failed to fetch instanceId %d %d+ times, skipping", instanceID, workerMaxRetries)
+			instance_storage.WriteMissedLog(instanceID)
 			failures <- instanceID
 		}
 	}
 }
 
-func createFile(src string) (*os.File, error) {
-	file, err := os.Create(src)
+func createFile(filePath string) (*os.File, error) {
+	file, err := os.Create(filePath)
 	return file, err
 }
 
-func moveFile(src, dst string) error {
-	err := os.Rename(src, dst)
+func moveFile(srcPath, dstPath string) error {
+	err := os.Rename(srcPath, dstPath)
 	return err
-}
-
-func writeMissedLog(instanceId int64) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-
-	// Open the file in append mode with write permissions
-	file, err := os.OpenFile(filepath.Join(cwd, "logs", "missed.log"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer file.Close()
-
-	// Create a writer to append to the file
-	writer := bufio.NewWriter(file)
-
-	// Write the line you want to append
-	_, err = writer.WriteString(fmt.Sprint(instanceId) + "\n")
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// Flush the writer to ensure the data is written to the file
-	err = writer.Flush()
-	if err != nil {
-		log.Fatalln(err)
-	}
 }
 
 type Gap struct {

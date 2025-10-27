@@ -14,7 +14,6 @@ var logFilePath string
 func init() {
 	// Get log file path from environment variable
 	logFilePath = env.MissedPGCRLogFilePath
-
 	// Ensure parent directories exist
 	logDir := filepath.Dir(logFilePath)
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -32,8 +31,8 @@ func init() {
 }
 
 func WriteMissedLog(instanceId int64) {
-	// Open the file in append-only mode (prevents overwriting)
-	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+	// Open the file in append mode, creating it if it doesn't exist
+	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open missed pgcr log file: %s", err))
 	}

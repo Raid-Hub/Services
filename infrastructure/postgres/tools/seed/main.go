@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/joho/godotenv"
+	"raidhub/lib/env"
+
 	_ "github.com/lib/pq"
 )
 
@@ -24,31 +24,12 @@ type DatabaseConfig struct {
 }
 
 func loadConfig() (*DatabaseConfig, error) {
-	godotenv.Load()
-
 	config := &DatabaseConfig{
-		Host:     os.Getenv("POSTGRES_HOST"),
-		Port:     os.Getenv("POSTGRES_PORT"),
-		User:     os.Getenv("POSTGRES_USER"),
-		Password: os.Getenv("POSTGRES_PASSWORD"),
-		DBName:   os.Getenv("POSTGRES_DB"),
-	}
-
-	// Set defaults
-	if config.Host == "" {
-		config.Host = "localhost"
-	}
-	if config.Port == "" {
-		config.Port = "5432"
-	}
-	if config.User == "" {
-		config.User = "username"
-	}
-	if config.Password == "" {
-		config.Password = "password"
-	}
-	if config.DBName == "" {
-		config.DBName = "raidhub"
+		Host:     "localhost",
+		Port:     env.PostgresPort,
+		User:     env.PostgresUser,
+		Password: env.PostgresPassword,
+		DBName:   env.PostgresDB,
 	}
 
 	return config, nil

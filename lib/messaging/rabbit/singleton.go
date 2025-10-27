@@ -28,6 +28,6 @@ func init() {
 }
 
 func connect() (*amqp.Connection, error) {
-	rabbitURL := fmt.Sprintf("amqp://%s:%s@%s:%s/", env.RabbitMQUser, env.RabbitMQPassword, env.RabbitMQHost, env.RabbitMQPort)
+	rabbitURL := fmt.Sprintf("amqp://%s:%s@localhost:%s/", env.RabbitMQUser, env.RabbitMQPassword, env.RabbitMQPort)
 	return amqp.Dial(rabbitURL)
 }

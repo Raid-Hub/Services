@@ -231,7 +231,6 @@
       "is_raid": true,
       "path": "eaterofworlds",
       "release_date": "2017-12-08T18:00:00Z",
-
       "contest_end": null,
       "week_one_end": "2017-12-12T17:00:00Z",
       "milestone_hash": null,
@@ -244,7 +243,6 @@
       "is_raid": true,
       "path": "spireofstars",
       "release_date": "2018-05-11T17:00:00Z",
-
       "contest_end": null,
       "week_one_end": "2018-05-15T17:00:00Z",
       "milestone_hash": null,
@@ -257,7 +255,6 @@
       "is_raid": true,
       "path": "lastwish",
       "release_date": "2018-09-14T17:00:00Z",
-
       "contest_end": null,
       "week_one_end": "2018-09-18T17:00:00Z",
       "milestone_hash": 3181387331,
@@ -270,7 +267,6 @@
       "is_raid": true,
       "path": "scourgeofthepast",
       "release_date": "2018-12-07T17:00:00Z",
-
       "contest_end": null,
       "week_one_end": "2018-12-11T17:00:00Z",
       "milestone_hash": null,
@@ -283,7 +279,6 @@
       "is_raid": true,
       "path": "crownofsorrow",
       "release_date": "2019-06-04T23:00:00Z",
-
       "contest_end": "2019-06-05T23:00:00Z",
       "week_one_end": "2019-06-11T17:00:00Z",
       "milestone_hash": null,
@@ -296,7 +291,6 @@
       "is_raid": true,
       "path": "gardenofsalvation",
       "release_date": "2019-10-05T17:00:00Z",
-
       "contest_end": "2019-10-06T17:00:00Z",
       "week_one_end": "2019-10-08T17:00:00Z",
       "milestone_hash": 2712317338,
@@ -309,7 +303,6 @@
       "is_raid": true,
       "path": "deepstonecrypt",
       "release_date": "2020-11-21T18:00:00Z",
-
       "contest_end": "2020-11-22T18:00:00Z",
       "week_one_end": "2020-11-24T17:00:00Z",
       "milestone_hash": 2712317338,
@@ -322,7 +315,6 @@
       "is_raid": true,
       "path": "vaultofglass",
       "release_date": "2021-05-22T17:00:00Z",
-
       "contest_end": "2021-05-23T17:00:00Z",
       "week_one_end": "2021-05-25T17:00:00Z",
       "milestone_hash": 1888320892,
@@ -335,7 +327,6 @@
       "is_raid": true,
       "path": "vowofthedisciple",
       "release_date": "2022-03-05T18:00:00Z",
-
       "contest_end": "2022-03-07T18:00:00Z",
       "week_one_end": "2022-03-08T17:00:00Z",
       "milestone_hash": 2136320298,
@@ -348,7 +339,6 @@
       "is_raid": true,
       "path": "kingsfall",
       "release_date": "2022-08-26T17:00:00Z",
-
       "contest_end": "2022-08-27T17:00:00Z",
       "week_one_end": "2022-08-30T17:00:00Z",
       "milestone_hash": 292102995,
@@ -361,7 +351,6 @@
       "is_raid": true,
       "path": "rootofnightmares",
       "release_date": "2023-03-10T17:00:00Z",
-
       "contest_end": "2023-03-12T17:00:00Z",
       "week_one_end": "2023-03-14T17:00:00Z",
       "milestone_hash": 3699252268,
@@ -374,7 +363,6 @@
       "is_raid": true,
       "path": "crotasend",
       "release_date": "2023-09-01T17:00:00Z",
-
       "contest_end": "2023-09-03T17:00:00Z",
       "week_one_end": "2023-09-05T17:00:00Z",
       "milestone_hash": null,
@@ -387,7 +375,6 @@
       "is_raid": true,
       "path": "salvationsedge",
       "release_date": "2024-06-07T17:00:00Z",
-
       "contest_end": "2024-06-09T17:00:00Z",
       "week_one_end": "2024-06-11T17:00:00Z",
       "milestone_hash": 4196566271,
@@ -400,7 +387,6 @@
       "is_raid": true,
       "path": "desertperpetual",
       "release_date": "2025-07-19T17:00:00Z",
-
       "contest_end": "2025-07-21T17:00:00Z",
       "week_one_end": "2025-07-22T17:00:00Z",
       "milestone_hash": null,
@@ -413,7 +399,6 @@
       "is_raid": true,
       "path": "desertperpetualepic",
       "release_date": "2025-09-27T17:00:00Z",
-
       "contest_end": "2025-09-29T17:00:00Z",
       "week_one_end": "2025-09-30T17:00:00Z",
       "milestone_hash": null,
@@ -516,6 +501,482 @@
       "associated_activity_id": 101,
       "path": "nezarec",
       "is_challenge_mode": false
+    }
+  ],
+  "activity_version": [
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136600,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136601,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136602,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136603,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136604,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 1,
+      "hash": 2693136605,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 89727599,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 287649202,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 1699948563,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 1875726950,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 3916343513,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 2,
+      "hash": 4039317196,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 417231112,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 508802457,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 757116822,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 771164842,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 1685065161,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 1800508819,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 2449714930,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 3446541099,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 4206123728,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 3912437239,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 3879860661,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 1,
+      "version_id": 3,
+      "hash": 3857338478,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 2,
+      "version_id": 1,
+      "hash": 3089205900,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 2,
+      "version_id": 2,
+      "hash": 2164432138,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 2,
+      "version_id": 3,
+      "hash": 809170886,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 3,
+      "version_id": 1,
+      "hash": 119944200,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 3,
+      "version_id": 2,
+      "hash": 3004605630,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 3,
+      "version_id": 3,
+      "hash": 3213556450,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 4,
+      "version_id": 1,
+      "hash": 2122313384,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 4,
+      "version_id": 1,
+      "hash": 2214608157,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 4,
+      "version_id": 2,
+      "hash": 1661734046,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 5,
+      "version_id": 1,
+      "hash": 548750096,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 5,
+      "version_id": 2,
+      "hash": 2812525063,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 6,
+      "version_id": 1,
+      "hash": 3333172150,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 6,
+      "version_id": 2,
+      "hash": 960175301,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 7,
+      "version_id": 1,
+      "hash": 2659723068,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 7,
+      "version_id": 1,
+      "hash": 3458480158,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 7,
+      "version_id": 1,
+      "hash": 1042180643,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 7,
+      "version_id": 2,
+      "hash": 2497200493,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 7,
+      "version_id": 2,
+      "hash": 3845997235,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 7,
+      "version_id": 2,
+      "hash": 3823237780,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 8,
+      "version_id": 1,
+      "hash": 910380154,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 8,
+      "version_id": 2,
+      "hash": 3976949817,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 9,
+      "version_id": 1,
+      "hash": 3881495763,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 9,
+      "version_id": 2,
+      "hash": 3711931140,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 9,
+      "version_id": 64,
+      "hash": 1485585878,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 9,
+      "version_id": 4,
+      "hash": 1681562271,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 9,
+      "version_id": 4,
+      "hash": 3022541210,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 10,
+      "version_id": 1,
+      "hash": 1441982566,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 10,
+      "version_id": 1,
+      "hash": 2906950631,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 10,
+      "version_id": 2,
+      "hash": 4156879541,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 10,
+      "version_id": 4,
+      "hash": 4217492330,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 10,
+      "version_id": 4,
+      "hash": 3889634515,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 11,
+      "version_id": 1,
+      "hash": 1374392663,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 11,
+      "version_id": 2,
+      "hash": 2897223272,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 11,
+      "version_id": 65,
+      "hash": 1063970578,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 11,
+      "version_id": 4,
+      "hash": 2964135793,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 11,
+      "version_id": 4,
+      "hash": 3257594522,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 12,
+      "version_id": 1,
+      "hash": 2381413764,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 12,
+      "version_id": 2,
+      "hash": 1191701339,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 12,
+      "version_id": 4,
+      "hash": 2918919505,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 13,
+      "version_id": 1,
+      "hash": 4179289725,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 13,
+      "version_id": 1,
+      "hash": 107319834,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 13,
+      "version_id": 2,
+      "hash": 4103176774,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 13,
+      "version_id": 66,
+      "hash": 156253568,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 13,
+      "version_id": 4,
+      "hash": 1507509200,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 101,
+      "version_id": 128,
+      "hash": 4169648179,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 101,
+      "version_id": 129,
+      "hash": 4169648176,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 101,
+      "version_id": 130,
+      "hash": 4169648177,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 101,
+      "version_id": 131,
+      "hash": 4169648182,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 14,
+      "version_id": 1,
+      "hash": 1541433876,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 14,
+      "version_id": 32,
+      "hash": 2192826039,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 14,
+      "version_id": 4,
+      "hash": 4129614942,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 15,
+      "version_id": 1,
+      "hash": 1044919065,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 15,
+      "version_id": 32,
+      "hash": 3896382790,
+      "is_world_first": true
+    },
+    {
+      "activity_id": 16,
+      "version_id": 1,
+      "hash": 3817322389,
+      "is_world_first": false
+    },
+    {
+      "activity_id": 16,
+      "version_id": 32,
+      "hash": 2586252122,
+      "is_world_first": true
     }
   ]
 }

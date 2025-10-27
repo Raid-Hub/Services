@@ -12,12 +12,7 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
 
   rabbitmq:
     image: rabbitmq:3.8-management
@@ -30,7 +25,7 @@ services:
       - "${RABBITMQ_UI_PORT:-15672}:15672"
     volumes:
       - ./volumes/rabbitmq:/var/lib/rabbitmq
-      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
 
   clickhouse:
     image: clickhouse/clickhouse-server
@@ -40,9 +35,18 @@ services:
     environment:
       CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+      CLICKHOUSE_DB: "${CLICKHOUSE_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     volumes:
+      # Data
       - ./volumes/clickhouse:/var/lib/clickhouse
-      - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./volumes/logs/clickhouse-server:/var/log/clickhouse-server
+      # Config
+      - ./infrastructure/clickhouse/config.xml:/etc/clickhouse-server/config.d/default_database.xml:ro
+      - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
+      - ./infrastructure/clickhouse/named_collections.xml:/etc/clickhouse-server/named_collections.d/postgres_creds.xml:ro
 
   prometheus:
     image: prom/prometheus
@@ -50,4 +54,4 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./volumes/prometheus:/prometheus
-      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro

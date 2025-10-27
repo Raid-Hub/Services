@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<yandex>
+    <default_database>{{CLICKHOUSE_DB}}</default_database>
+    <access_management>1</access_management>
+</yandex>
