@@ -58,14 +58,18 @@ replace_template() {
     
     # First, handle conditional sections
     if [ -n "${PROMETHEUS_REMOTE_WRITE_URL}" ] && [ -n "${PROMETHEUS_USERNAME}" ] && [ -n "${PROMETHEUS_PASSWORD}" ]; then
-        # Include the remote_write section
-        sed '/{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{{\/PROMETHEUS_REMOTE_WRITE_URL}}}/ {
-            s/{{#PROMETHEUS_REMOTE_WRITE_URL}}//
-            s/{{{\/PROMETHEUS_REMOTE_WRITE_URL}}}//
-        }' "$template_file" > "$temp_file"
+        # Include the remote_write section - remove the template tags
+        awk '
+            /{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{\/PROMETHEUS_REMOTE_WRITE_URL}}/ {
+                if (/{{#PROMETHEUS_REMOTE_WRITE_URL}}/ || /{{\/PROMETHEUS_REMOTE_WRITE_URL}}/) { next }
+                print
+                next
+            }
+            { print }
+        ' "$template_file" > "$temp_file"
     else
         # Remove the entire remote_write section
-        sed '/{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{{\/PROMETHEUS_REMOTE_WRITE_URL}}}/d' "$template_file" > "$temp_file"
+        awk '/{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{\/PROMETHEUS_REMOTE_WRITE_URL}}/ { next } { print }' "$template_file" > "$temp_file"
     fi
     
     # Then replace all {{VAR}} placeholders with actual values (using | as delimiter to avoid conflicts with URLs)
