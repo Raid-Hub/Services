@@ -69,6 +69,15 @@ func getSeedFiles(seedsDir string) ([]string, error) {
 	return seedFiles, nil
 }
 
+type StepData struct {
+	Step   int                         `json:"step"`
+	Tables map[string][]map[string]any `json:"tables"`
+}
+
+type SeedFile struct {
+	Steps []StepData `json:"steps"`
+}
+
 func seedFile(db *sql.DB, filePath string) error {
 	log.Printf("  → Seeding from %s", filepath.Base(filePath))
 
@@ -77,66 +86,70 @@ func seedFile(db *sql.DB, filePath string) error {
 		return fmt.Errorf("failed to read seed file: %v", err)
 	}
 
-	var seedData map[string][]map[string]any
-	if err := json.Unmarshal(data, &seedData); err != nil {
+	var seedFile SeedFile
+	if err := json.Unmarshal(data, &seedFile); err != nil {
 		return fmt.Errorf("failed to parse JSON: %v", err)
 	}
 
 	totalInserted := 0
-	for tableName, records := range seedData {
-		if len(records) == 0 {
-			log.Printf("    %s: No records to insert", tableName)
-			continue
-		}
+	for _, step := range seedFile.Steps {
+		log.Printf("  Step %d:", step.Step)
 
-		log.Printf("    %s: %d records", tableName, len(records))
-
-		// Get column names from first record
-		var columns []string
-		for col := range records[0] {
-			columns = append(columns, col)
-		}
-
-		// Build INSERT statement
-		placeholders := make([]string, len(columns))
-		for i := range placeholders {
-			placeholders[i] = fmt.Sprintf("$%d", i+1)
-		}
-
-		qualifiedTableName := fmt.Sprintf("\"%s\".\"%s\"", "definitions", tableName)
-
-		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
-			qualifiedTableName,
-			strings.Join(columns, ", "),
-			strings.Join(placeholders, ", "))
-
-		stmt, err := db.Prepare(query)
-		if err != nil {
-			return fmt.Errorf("failed to prepare statement for %s: %v", tableName, err)
-		}
-
-		inserted := 0
-		for _, record := range records {
-			values := make([]any, len(columns))
-			for i, col := range columns {
-				values[i] = record[col]
-			}
-
-			result, err := stmt.Exec(values...)
-			if err != nil {
-				log.Printf("      Warning: failed to insert record: %v", err)
+		for tableName, records := range step.Tables {
+			if len(records) == 0 {
+				log.Printf("    %s: No records to insert", tableName)
 				continue
 			}
 
-			rowsAffected, _ := result.RowsAffected()
-			if rowsAffected > 0 {
-				inserted++
-			}
-		}
+			log.Printf("    %s: %d records", tableName, len(records))
 
-		stmt.Close()
-		log.Printf("      Inserted %d/%d records", inserted, len(records))
-		totalInserted += inserted
+			// Get column names from first record
+			var columns []string
+			for col := range records[0] {
+				columns = append(columns, col)
+			}
+
+			// Build INSERT statement
+			placeholders := make([]string, len(columns))
+			for i := range placeholders {
+				placeholders[i] = fmt.Sprintf("$%d", i+1)
+			}
+
+			qualifiedTableName := fmt.Sprintf("\"%s\".\"%s\"", "definitions", tableName)
+
+			query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
+				qualifiedTableName,
+				strings.Join(columns, ", "),
+				strings.Join(placeholders, ", "))
+
+			stmt, err := db.Prepare(query)
+			if err != nil {
+				return fmt.Errorf("failed to prepare statement for %s: %v", tableName, err)
+			}
+
+			inserted := 0
+			for _, record := range records {
+				values := make([]any, len(columns))
+				for i, col := range columns {
+					values[i] = record[col]
+				}
+
+				result, err := stmt.Exec(values...)
+				if err != nil {
+					log.Printf("      Warning: failed to insert record: %v", err)
+					continue
+				}
+
+				rowsAffected, _ := result.RowsAffected()
+				if rowsAffected > 0 {
+					inserted++
+				}
+			}
+
+			stmt.Close()
+			log.Printf("      Inserted %d/%d records", inserted, len(records))
+			totalInserted += inserted
+		}
 	}
 
 	log.Printf("    Total inserted: %d records", totalInserted)

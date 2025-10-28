@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"raidhub/lib/domains/instance_storage"
 	"raidhub/lib/env"
+	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/web/discord"
 
 	"golang.org/x/time/rate"

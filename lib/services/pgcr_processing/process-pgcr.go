@@ -1,4 +1,4 @@
-package pgcr
+package pgcr_processing
 
 import (
 	"errors"

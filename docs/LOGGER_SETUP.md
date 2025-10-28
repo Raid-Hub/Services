@@ -4,9 +4,9 @@ Each domain package should have its own logger that uses the shared `utils.Logge
 
 ## Quick Setup
 
-For any new domain package (e.g., `lib/domains/clan`, `lib/domains/pgcr`), create a `logger.go` file:
+For any new domain package (e.g., `lib/services/clan`, `lib/services/pgcr`), create a `logger.go` file:
 
-## File: `lib/domains/{domain}/logger.go`
+## File: `lib/services/{domain}/logger.go`
 
 ```go
 package {domain}
@@ -18,27 +18,25 @@ import (
 var {domain}Logger utils.Logger
 
 func init() {
-	{domain}Logger = utils.NewLogger("{domain}")
+	{domain}Logger = utils.NewLogger("{DOMAIN_SERVICE}")
 }
 ```
 
-## Example: Player Logger
+## Example: Real Implementation
 
-See `lib/domains/player/logger.go`:
+See `lib/services/pgcr_processing/logger.go`:
 
 ```go
-package player
+package pgcr_processing
 
 import (
 	"raidhub/lib/utils"
 )
 
-var PlayerLogger utils.Logger
-
-func init() {
-	PlayerLogger = utils.NewLogger("player")
-}
+var PGCRLogger = utils.NewLogger("PGCR_PROCESSING_SERVICE")
 ```
+
+Note: The `init()` function is optional - you can initialize the logger at package level as shown above.
 
 ## Usage
 
@@ -47,13 +45,18 @@ Once set up, you can use the logger anywhere in your domain package:
 ```go
 package {domain}
 
-import "raidhub/lib/domains/{domain}"
-
 func doSomething() {
-	{domain}.{Domain}Logger.Info("Starting process", "key", "value")
-	{domain}.{Domain}Logger.Error("Something went wrong", "error", err)
-	{domain}.{Domain}Logger.Warn("Warning message", "field", value)
-	{domain}.{Domain}Logger.Debug("Debug info", "detail", info)
+	// Simple logging with variadic arguments
+	{domain}Logger.Info("Starting process", "user_id", userId)
+	{domain}Logger.Error("Something went wrong:", err)
+	{domain}Logger.Warn("Warning message", "field_name", value)
+	{domain}Logger.Debug("Debug info", "detail", info)
+
+	// Formatted logging
+	{domain}Logger.InfoF("Processing user %s with ID %d", username, userId)
+	{domain}Logger.ErrorF("Failed to process: %v", err)
+	{domain}Logger.WarnF("Warning for %s: %s", component, message)
+	{domain}Logger.DebugF("Debug: %+v", debugObject)
 }
 ```
 
@@ -66,9 +69,52 @@ func doSomething() {
 
 ## Interface Methods
 
-- `Info(msg string, fields ...any)` - Informational messages
-- `Warn(msg string, fields ...any)` - Warning messages
-- `Error(msg string, fields ...any)` - Error messages
-- `Debug(msg string, fields ...any)` - Debug messages
+### Basic Logging Methods
 
-All methods accept a message string followed by key-value pairs for structured logging.
+- `Info(v ...any)` - Informational messages
+- `Warn(v ...any)` - Warning messages
+- `Error(v ...any)` - Error messages
+- `Debug(v ...any)` - Debug messages
+
+### Formatted Logging Methods
+
+- `InfoF(format string, args ...any)` - Formatted informational messages
+- `WarnF(format string, args ...any)` - Formatted warning messages
+- `ErrorF(format string, args ...any)` - Formatted error messages
+- `DebugF(format string, args ...any)` - Formatted debug messages
+
+**Basic methods** accept any number of arguments that will be printed space-separated.
+**Formatted methods** use printf-style formatting with format strings and arguments.
+
+## Migration from Standard Log Package
+
+Many applications currently use the standard Go `log` package. To migrate:
+
+### Before (using standard log):
+
+```go
+import "log"
+
+log.Println("Starting process...")
+log.Printf("Processing user %s", username)
+log.Fatalf("Fatal error: %v", err)
+```
+
+### After (using domain logger):
+
+```go
+// In logger.go
+var AppLogger = utils.NewLogger("APP_NAME")
+
+// In your code
+AppLogger.Info("Starting process...")
+AppLogger.InfoF("Processing user %s", username)
+AppLogger.Error("Fatal error:", err) // Note: no automatic exit like log.Fatal
+```
+
+**Benefits of migration:**
+
+- Consistent log formatting across all services
+- Service identification in log prefixes
+- Better error separation (stderr vs stdout)
+- Future extensibility (can easily add structured logging, file output, etc.)

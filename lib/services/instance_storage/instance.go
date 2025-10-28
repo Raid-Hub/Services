@@ -3,10 +3,10 @@ package instance_storage
 import (
 	"database/sql"
 	"fmt"
-	"raidhub/lib/domains/player"
-	"raidhub/lib/domains/stats"
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/messages"
+	"raidhub/lib/services/player"
+	"raidhub/lib/services/stats"
 	"sync"
 
 	"github.com/lib/pq"

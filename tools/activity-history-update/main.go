@@ -1,10 +1,10 @@
 package activityhistory
 
 import (
+	"fmt"
 	"log"
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/messaging/rabbit"
-	"raidhub/queue-workers/activity_history"
+	"raidhub/lib/messaging/routing"
 )
 
 const (
@@ -15,33 +15,15 @@ const (
 // ActivityHistoryUpdate is the command function
 func ActivityHistoryUpdate() {
 	log.Println("starting")
-	db, err := postgres.Connect()
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	log.Println("connecting")
-	conn, err := rabbit.Init()
-	if err != nil {
-		panic(err)
-	}
-	defer rabbit.Cleanup()
-
-	ch, err := conn.Channel()
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
 
 	log.Println("querying")
-	rows, err := db.Query(`SELECT * FROM (
-			SELECT membership_id FROM player
-			WHERE history_last_crawled IS NULL OR (history_last_crawled < NOW() - INTERVAL '25 weeks')
-			ORDER BY clears DESC
-			LIMIT $1
-		) foo
-		ORDER BY RANDOM() LIMIT $2`, clearsRange, numProfiles)
+	rows, err := postgres.DB.Query(`SELECT * FROM (
+		SELECT membership_id FROM player
+		WHERE history_last_crawled IS NULL OR (history_last_crawled < NOW() - INTERVAL '25 weeks')
+		ORDER BY clears DESC
+		LIMIT $1
+	) foo
+	ORDER BY RANDOM() LIMIT $2`, clearsRange, numProfiles)
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +33,7 @@ func ActivityHistoryUpdate() {
 	log.Println("scanning")
 	for rows.Next() {
 		rows.Scan(&id)
-		err = activity_history.SendMessage(ch, id)
+		err = routing.Publisher.PublishTextMessage(routing.ActivityCrawl, fmt.Sprintf("%d", id))
 		if err != nil {
 			panic(err)
 		}

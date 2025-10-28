@@ -1,9 +1,9 @@
 package queueworkers
 
 import (
-	"raidhub/lib/domains/player"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/player"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -11,7 +11,7 @@ import (
 // ActivityHistoryTopic creates a new activity history topic
 func ActivityHistoryTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.ActivityHistory,
+		QueueName:             routing.ActivityCrawl,
 		MinWorkers:            1,
 		MaxWorkers:            20,
 		DesiredWorkers:        3,

@@ -7,9 +7,12 @@ import (
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring"
+	"raidhub/lib/utils"
 	"raidhub/lib/web/bungie"
 	"time"
 )
+
+var InstanceStorageLogger = utils.NewLogger("INSTANCE_STORAGE_SERVICE")
 
 // StorePGCR orchestrates the complete PGCR storage workflow
 // It coordinates storage across:
@@ -73,8 +76,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 			routing.Publisher.PublishJSONMessage(routing.PlayerCrawl, playerCrawlRequest)
 		}
 	}
-	routing.Publisher.PublishTextMessage(routing.PGCRCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
+	routing.Publisher.PublishTextMessage(routing.InstanceCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
 
-	log.Printf("Successfully stored instance %d", inst.InstanceId)
 	return &lag, true, nil
 }

@@ -1,18 +1,18 @@
 package queueworkers
 
 import (
-	"raidhub/lib/domains/instance"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/instance"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// PgcrExistsTopic creates a new PGCR exists topic
-func PgcrExistsTopic() processing.Topic {
+// PgcrCrawlTopic creates a new PGCR crawl topic
+func PgcrCrawlTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.PGCRExists,
+		QueueName:             routing.PGCRCrawl,
 		MinWorkers:            1,
 		MaxWorkers:            20,
 		DesiredWorkers:        2,
@@ -23,11 +23,11 @@ func PgcrExistsTopic() processing.Topic {
 		ScaleDownThreshold:    10,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
-	}, processPgcrExists)
+	}, processPgcrCrawl)
 }
 
-// processPgcrExists handles PGCR exists messages
-func processPgcrExists(worker *processing.Worker, message amqp.Delivery) error {
+// processPgcrCrawl handles PGCR crawl messages
+func processPgcrCrawl(worker *processing.Worker, message amqp.Delivery) error {
 	instanceIdStr := string(message.Body)
 	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
 	if err != nil {

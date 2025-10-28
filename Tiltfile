@@ -9,194 +9,124 @@
 load("ext://dotenv", "dotenv")
 dotenv(".env")
 
-# Development environment setup
-local_resource(
-    "dev-setup",
-    cmd='echo "Setting up development environment..."',
-    deps=[".env"],
-    labels=["setup", "configuration"],
-)
-
 # Docker Compose Services
 docker_compose("docker-compose.yml")
 
-# Build all Go binaries first
-local_resource(
-    "build-binaries", cmd="make bin", deps=["dev-setup"], labels=["build", "setup"]
-)
+# =============================================================================
+# DOCKER SERVICES
+# =============================================================================
+# These services auto-start via docker_compose() above
+# dc_resource() calls expose them in Tilt UI
+
+dc_resource("postgres", labels=["infrastructure"])
+dc_resource("rabbitmq", labels=["infrastructure"])
+dc_resource("clickhouse", labels=["infrastructure"])
+dc_resource("prometheus", labels=["infrastructure"])
 
 # =============================================================================
-# INFRASTRUCTURE SERVICES (Docker Containers)
+# HERMES / ATLAS / ZEUS
 # =============================================================================
-# Individual Docker Compose services with proper labeling
-
-# Database Services
-dc_resource("postgres", labels=["database", "infrastructure"])
-dc_resource("rabbitmq", labels=["message-queue", "infrastructure"])
-dc_resource("clickhouse", labels=["database", "infrastructure"])
-
-# Monitoring Services
-dc_resource("prometheus", labels=["monitoring", "metrics"])
-
-# =============================================================================
-# CORE MICROSERVICES (Always Running)
-# =============================================================================
-# These services are essential for the application to function
 
 local_resource(
     "hermes",
-    cmd="./bin/hermes",
-    deps=["postgres", "rabbitmq"],
-    resource_deps=["postgres", "rabbitmq", "build-binaries"],
-    labels=["core-service", "microservice"],
+    serve_cmd="go run ./apps/hermes/",
+    resource_deps=["postgres", "rabbitmq", "clickhouse"],
+    auto_init=False,
+    labels=["core"],
 )
 
 local_resource(
     "atlas",
-    cmd="./bin/atlas",
-    deps=["postgres", "rabbitmq", "clickhouse"],
-    resource_deps=["postgres", "rabbitmq", "clickhouse", "build-binaries"],
-    labels=["core-service", "microservice"],
+    serve_cmd="go run ./apps/atlas/",
+    resource_deps=["postgres", "rabbitmq", "clickhouse"],
+    auto_init=False,
+    labels=["core"],
 )
 
 local_resource(
     "zeus",
-    cmd="./bin/zeus",
-    resource_deps=["build-binaries"],
-    labels=["core-service", "microservice", "proxy"],
+    serve_cmd="go run ./apps/zeus/",
+    auto_init=False,
+    labels=["core"],
 )
 
 # =============================================================================
-# CRON SERVICES (Manual Start)
+# CRON SERVICES
 # =============================================================================
-# These services run on a schedule in production but can be started manually for development
 
 local_resource(
     "hades",
-    cmd="./bin/hades",
-    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    cmd="go run ./apps/hades/",
+    resource_deps=["postgres", "rabbitmq", "clickhouse"],
     auto_init=False,
-    labels=["cron-service", "maintenance"],
+    labels=["cron"],
 )
 
 local_resource(
     "athena",
-    cmd="./bin/athena",
-    resource_deps=["build-binaries"],
+    cmd="go run ./apps/athena/",
     auto_init=False,
-    labels=["cron-service", "manifest"],
+    labels=["cron"],
 )
 
 local_resource(
     "hera",
-    cmd="./bin/hera",
-    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    cmd="go run ./apps/hera/",
+    resource_deps=["postgres", "rabbitmq"],
     auto_init=False,
-    labels=["cron-service", "maintenance"],
+    labels=["cron"],
 )
 
 local_resource(
     "nemesis",
-    cmd="./bin/nemesis",
-    resource_deps=["build-binaries", "postgres", "rabbitmq"],
+    cmd="go run ./apps/nemesis/",
+    resource_deps=["postgres", "rabbitmq"],
     auto_init=False,
-    labels=["cron-service", "maintenance"],
+    labels=["cron"],
 )
 
 # =============================================================================
-# DEVELOPMENT TOOLS AND UTILITIES
+# TOOLS
 # =============================================================================
-# Tools for maintenance, debugging, and development tasks
+
 local_resource(
     "tools",
-    cmd="./bin/tools",
-    deps=["postgres", "rabbitmq"],
-    resource_deps=["postgres", "rabbitmq", "build-binaries"],
+    cmd="go run ./tools/",
+    resource_deps=["postgres", "rabbitmq"],
     auto_init=False,
-    labels=["development", "tools", "utilities"],
+    labels=["tools"],
 )
 
 # =============================================================================
-# HEALTH MONITORING AND DIAGNOSTICS
+# DATABASE
 # =============================================================================
-# Health checks and monitoring for all infrastructure services
+
 local_resource(
-    "postgres-health",
-    cmd="pg_isready -h localhost -p 5432 -U " + os.getenv("POSTGRES_USER", "username"),
-    resource_deps=["postgres", "build-binaries"],
-    labels=["health-check", "monitoring", "postgres"],
+    "migrate-postgres",
+    cmd="make migrate-postgres",
+    resource_deps=["postgres"],
+    auto_init=False,
+    labels=["database"],
 )
 
-# Health check for RabbitMQ
 local_resource(
-    "rabbitmq-health",
-    cmd="curl -f http://localhost:15672/api/overview || exit 1",
-    resource_deps=["rabbitmq"],
-    labels=["health-check", "monitoring", "rabbitmq"],
-)
-
-# Health check for ClickHouse
-local_resource(
-    "clickhouse-health",
-    cmd="curl -f http://localhost:8123/ping || exit 1",
+    "migrate-clickhouse",
+    cmd="make migrate-clickhouse",
     resource_deps=["clickhouse"],
-    labels=["health-check", "monitoring", "clickhouse"],
-)
-
-# =============================================================================
-# DATABASE AND MAINTENANCE COMMANDS
-# =============================================================================
-# Database migrations, builds, and cleanup operations
-local_resource(
-    "migrate-db",
-    cmd="make migrate",
-    deps=["postgres"],
     auto_init=False,
-    labels=["database", "migration", "maintenance"],
+    labels=["database"],
 )
-
-
-# Clean build artifacts
-local_resource(
-    "clean", cmd="rm -rf bin/", auto_init=False, labels=["cleanup", "maintenance"]
-)
-
-# =============================================================================
-# ENVIRONMENT AND CONFIGURATION
-# =============================================================================
-# Environment variable management and configuration watching
-local_resource(
-    "env-watcher",
-    cmd='echo "Watching .env file for changes..."',
-    deps=[".env"],
-    labels=["configuration", "environment", "watcher"],
-)
-
 # =============================================================================
 # DEVELOPMENT NOTES
 # =============================================================================
 
-# This Tiltfile provides organized development environment with:
-# 1. CONFIGURATION: Environment setup and binary building
-# 2. INFRASTRUCTURE: Docker services (PostgreSQL, RabbitMQ, ClickHouse, etc.)
-# 3. CORE SERVICES: Essential microservices (Hermes, Atlas, Zeus)
-# 4. DEVELOPMENT TOOLS: Maintenance and debugging utilities
-# 5. HEALTH MONITORING: Service health checks and diagnostics
-# 6. SERVICE ACCESS: Port forwarding and URL management
-# 7. DATABASE COMMANDS: Migrations, builds, and cleanup
-# 8. ENVIRONMENT: Configuration management and watching
-#
-# Note: Background/cron services (Hades, Hera, Nemesis, Athena) are NOT included
-# as they should be run via actual cron jobs, not continuously in development.
-#
-# Usage:
-# - Run 'tilt up' to start all services
-# - Use 'tilt down' to stop all services
-# - Individual services can be started/stopped via Tilt UI
-# - For cron services, run them manually: ./bin/hades, etc.
+# Behavior:
+# - Run 'tilt up' to automatically start Docker infrastructure (postgres, rabbitmq, clickhouse, prometheus)
+# - Go services (hermes, atlas, zeus, etc.) are available but don't auto-start - manually start via Tilt UI
+# - All Go services use 'go run' for hot reloading
+# - Run 'tilt down' to stop all services
 #
 # Prerequisites:
 # - Docker and Docker Compose installed
 # - Go 1.21+ installed
-# - .env file configured with required variables
-# - BUNGIE_API_KEY must be set for API access
+# - .env file configured

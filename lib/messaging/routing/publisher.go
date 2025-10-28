@@ -27,8 +27,9 @@ func (p *RabbitMQPublisher) PublishJSONMessage(queueName string, body any) error
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        jsonBody,
+			ContentType:  "application/json",
+			Body:         jsonBody,
+			DeliveryMode: amqp.Persistent, // Make messages persistent
 		},
 	)
 }
@@ -42,8 +43,9 @@ func (p *RabbitMQPublisher) PublishTextMessage(queueName string, text string) er
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(text),
+			ContentType:  "text/plain",
+			Body:         []byte(text),
+			DeliveryMode: amqp.Persistent, // Make messages persistent
 		},
 	)
 }

@@ -2,18 +2,18 @@ package queueworkers
 
 import (
 	"encoding/json"
-	"raidhub/lib/domains/instance_storage"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/instance_storage"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// PgcrStoreTopic creates a new PGCR store topic
-func PgcrStoreTopic() processing.Topic {
+// InstanceStoreTopic creates a new instance store topic
+func InstanceStoreTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.PGCRStore,
+		QueueName:             routing.InstanceStore,
 		MinWorkers:            1,
 		MaxWorkers:            50,
 		DesiredWorkers:        10,
@@ -24,32 +24,30 @@ func PgcrStoreTopic() processing.Topic {
 		ScaleDownThreshold:    100,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
-	}, processPgcrStore)
+	}, processInstanceStore)
 }
 
-// processPgcrStore handles PGCR store messages
-func processPgcrStore(worker *processing.Worker, message amqp.Delivery) error {
+// processInstanceStore handles instance store messages
+func processInstanceStore(worker *processing.Worker, message amqp.Delivery) error {
 	var msg messages.PGCRStoreMessage
 	if err := json.Unmarshal(message.Body, &msg); err != nil {
-		worker.Error("Failed to unmarshal PGCR store message", "error", err)
+		worker.ErrorF("Failed to unmarshal PGCR store message: %v", err)
 		return err
 	}
 
-	worker.Info("Processing PGCR store", "instanceId", msg.Activity.InstanceId)
+	worker.InfoF("Processing PGCR store instanceId=%d", msg.Activity.InstanceId)
 
 	// Store the PGCR using the orchestrator
 	lag, isNew, err := instance_storage.StorePGCR(&msg.Activity, &msg.Raw)
 	if err != nil {
-		worker.Error("Failed to store PGCR", "error", err)
+		worker.ErrorF("Failed to store PGCR instanceId=%d: %v", msg.Activity.InstanceId, err)
 		return err
 	}
 
 	if isNew {
-		worker.Info("Successfully stored new PGCR",
-			"instanceId", msg.Activity.InstanceId,
-			"lag", lag)
+		worker.InfoF("Successfully stored new PGCR instanceId=%d lag=%v", msg.Activity.InstanceId, lag)
 	} else {
-		worker.Info("Duplicate PGCR", "instanceId", msg.Activity.InstanceId)
+		worker.InfoF("Duplicate PGCR instanceId=%d", msg.Activity.InstanceId)
 	}
 
 	return nil

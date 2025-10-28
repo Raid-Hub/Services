@@ -6,8 +6,10 @@
 
 set -e
 
-echo "🚀 RaidHub Services Bootstrap"
-echo "============================="
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  🚀 RaidHub Services Bootstrap"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # Function to detect OS
@@ -88,27 +90,99 @@ install_tilt() {
     echo "✅ Tilt installed"
 }
 
+# Function to verify and add missing keys from example.env to .env
+verify_env_keys() {
+    if [ ! -f example.env ]; then
+        echo "⚠️  example.env not found, skipping key verification"
+        return
+    fi
+    
+    if [ ! -f .env ]; then
+        echo "⚠️  .env not found, skipping key verification"
+        return
+    fi
+    
+    missing_keys=()
+    missing_values=()
+    added_count=0
+    
+    # Extract keys from example.env and check/add to .env
+    while IFS='=' read -r key value; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^# ]] && continue
+        [[ -z "$key" ]] && continue
+        
+        # Remove leading/trailing whitespace
+        key=$(echo "$key" | xargs)
+        value="${value%$'\r'}"  # Remove carriage return if present
+        value=$(echo "$value" | xargs)  # Trim whitespace
+        
+        # Check if key exists in .env with a non-empty value
+        grep_result=$(grep "^${key}=" .env 2>/dev/null || echo "")
+        
+        if [ -z "$grep_result" ]; then
+            # Key doesn't exist at all
+            missing_keys+=("$key")
+            missing_values+=("${key}=${value}")
+            added_count=$((added_count + 1))
+        else
+            # Key exists, check if value is empty
+            env_value=$(echo "$grep_result" | cut -d'=' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ -z "${env_value}" ]; then
+                # Value is empty, replace it
+                missing_keys+=("$key")
+                missing_values+=("${key}=${value}")
+                grep -v "^${key}=" .env > .env.tmp 2>/dev/null && mv .env.tmp .env || true
+                added_count=$((added_count + 1))
+            fi
+        fi
+    done < example.env
+    
+    if [ ${#missing_keys[@]} -gt 0 ]; then
+        # Add timestamp comment before adding keys
+        echo "" >> .env
+        echo "# Keys automatically added by bootstrap.sh on $(date)" >> .env
+        for entry in "${missing_values[@]}"; do
+            echo "$entry" >> .env
+        done
+        
+        echo "📝 Added ${added_count} missing key(s) to .env"
+        for key in "${missing_keys[@]}"; do
+            echo "   + $key"
+        done
+    else
+        echo "✅ All keys from example.env are present in .env"
+    fi
+}
+
 # Check if .env exists
 if [ ! -f .env ]; then
     echo "📝 Creating .env file from example.env..."
     cp example.env .env
-    echo "✅ .env file created. Please update it with your configuration."
-    echo "⚠️  IMPORTANT: Edit .env and set your BUNGIE_API_KEY before continuing!"
+    echo "✅ .env file created"
+    echo ""
 else
     echo "✅ .env file already exists"
 fi
 
+# Verify all keys from example.env are present in .env
+verify_env_keys
+echo ""
+
+echo "📋 Checking dependencies..."
+echo ""
+
 # Check and install Go
 if ! command -v go &> /dev/null; then
-    echo "❌ Go is not installed."
+    echo "❌ Go not found"
     install_go
 else
-    echo "✅ Go is installed ($(go version))"
+    echo "✅ Go is installed"
 fi
 
 # Check and install Docker
 if ! command -v docker &> /dev/null; then
-    echo "❌ Docker is not installed."
+    echo "❌ Docker not found"
     install_docker
 else
     echo "✅ Docker is installed"
@@ -116,17 +190,17 @@ fi
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker is not running. Please start Docker and try again."
+    echo "❌ Docker is not running"
     echo "   On macOS: Start Docker Desktop"
     echo "   On Linux: sudo systemctl start docker"
     exit 1
+else
+    echo "✅ Docker is running"
 fi
-
-echo "✅ Docker is running"
 
 # Check and install Tilt
 if ! command -v tilt &> /dev/null; then
-    echo "❌ Tilt is not installed."
+    echo "❌ Tilt not found"
     install_tilt
 else
     echo "✅ Tilt is installed"
@@ -135,57 +209,123 @@ fi
 # Create necessary directories
 echo ""
 echo "📁 Creating necessary directories..."
-mkdir -p volumes
-mkdir -p logs
-mkdir -p bin
+mkdir -p volumes logs bin
 echo "✅ Directories created"
+echo ""
 
 # Generate service configurations from .env
-echo ""
 echo "🔧 Generating service configurations..."
-./infrastructure/generate-configs.sh
-echo "✅ Service configurations generated"
+./infrastructure/generate-configs.sh 2>&1
+echo ""
+
+
+# Stop any existing services and start fresh
+echo "🐳 Stopping any existing services..."
+docker-compose -f docker-compose.yml --env-file ./.env down --remove-orphans 2>/dev/null || true
+echo ""
+
+# Start infrastructure services (postgres, clickhouse, rabbitmq)
+echo "🐳 Starting containerized infrastructure services..."
+docker-compose -f docker-compose.yml --env-file ./.env up -d
+echo "✅ Infrastructure services started"
+echo ""
 
 # Build all applications and tools
-echo ""
 echo "🔨 Building applications and tools..."
-make bin
-make tools
-echo "✅ All binaries built successfully"
+if ! make 2>&1; then
+    exit_code=$?
+    echo "❌ Build failed with exit code $exit_code"
+    exit 1
+fi
+echo ""
+
+# Wait for databases to be ready
+echo "⏳ Waiting for databases to be ready..."
+max_attempts=30
+attempt=0
+
+# Wait for PostgreSQL
+while [ $attempt -lt $max_attempts ]; do
+    if docker-compose -f docker-compose.yml --env-file ./.env exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+        echo "✅ PostgreSQL is ready"
+        break
+    fi
+    attempt=$((attempt + 1))
+    echo "  Waiting for PostgreSQL... ($attempt/$max_attempts)"
+    sleep 2
+done
+echo ""
+
+if [ $attempt -eq $max_attempts ]; then
+    echo "❌ PostgreSQL failed to start within $max_attempts attempts"
+    exit 1
+fi
+
+# Wait for ClickHouse
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+    # Check if container is running and ClickHouse is responding
+    if docker-compose -f docker-compose.yml --env-file ./.env ps clickhouse | grep -q "Up" && \
+       docker-compose -f docker-compose.yml --env-file ./.env exec -T clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
+        echo "✅ ClickHouse is ready"
+        break
+    fi
+    attempt=$((attempt + 1))
+    echo "  Waiting for ClickHouse... ($attempt/$max_attempts)"
+    sleep 2
+done
+echo ""
+
+if [ $attempt -eq $max_attempts ]; then
+    echo "❌ ClickHouse failed to start within $max_attempts attempts"
+    exit 1
+fi
 
 # Run database migrations
 echo ""
 echo "🗄️  Running database migrations..."
-make migrate
-echo "✅ Database migrations completed"
-
-# Verify binaries were created
-echo ""
-echo "🔍 Verifying build artifacts..."
-if [ ! -f "./bin/hermes" ] || [ ! -f "./bin/atlas" ] || [ ! -f "./bin/zeus" ]; then
-    echo "❌ Critical services failed to build"
-    exit 1
+if make migrate 2>&1; then
+    echo "✅ Migrations completed"
+else
+    exit_code=$?
+    echo "❌ Migrations failed with exit code $exit_code"
 fi
 
-if [ ! -f "./bin/tools" ]; then
-    echo "❌ Tools binary failed to build"
-    exit 1
+# Run database seeding
+echo ""
+echo "🌱 Seeding database..."
+if make seed 2>&1; then
+    echo "✅ Seeding completed"
+else
+    exit_code=$?
+    echo "⚠️  Seeding failed with exit code $exit_code (non-critical)"
 fi
 
-echo "✅ All build artifacts verified"
-
-# Stop any existing services and start fresh
+# Final summary
 echo ""
-echo "🐳 Stopping any existing services..."
-docker-compose -f docker-compose.yml --env-file ./.env down --remove-orphans 2>/dev/null || true
-
-echo "🐳 Starting services with Docker Compose..."
-docker-compose -f docker-compose.yml --env-file ./.env up -d
-echo "✅ Services started successfully"
-
-echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 Bootstrap complete!"
-echo "⚠️  Remember to set your BUNGIE_API_KEY in the .env file!"
-echo "📊 You can view logs with: docker-compose logs -f"
-echo "🛑 Stop services with: make down"
+echo ""
+echo "📚 Useful commands:"
+echo ""
+echo "🚀 Development:"
+echo "   ▶️  Start dev:    make dev        (Tilt UI at http://localhost:10350)"
+echo "   🛑 Stop dev:      make dev-down"
+echo "   📊 View logs:     make dev-logs"
+echo ""
+echo "🔧 Service Management:"
+echo "   🗺️  Run Atlas Crawler:           ./bin/atlas --workers 10"
+echo "   🗺️  Run Async Queue Worker:      ./bin/hermes"
+echo ""
+echo "🗄️  Database:"
+echo "   🔄 Migrate:       make migrate"
+echo "   🌱 Seed:          make seed"
+echo ""
+echo "🛠️  Investigation:"
+echo "   📊 Service logs:  docker-compose logs -f <service>"
+echo "   🧹 Clean:         make clean      (removes volumes and data)"
+echo ""
+echo "⚠️  IMPORTANT: Set your BUNGIE_API_KEY in .env"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
 

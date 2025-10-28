@@ -3,19 +3,20 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/rabbit"
+	"raidhub/lib/utils"
 	qw "raidhub/queue-workers"
 )
 
 func main() {
 	// Parse command line arguments
-	var topicType = flag.String("topic", "", "Type of topic to run (player_crawl, pgcr_blocked, activity_history, etc.). If empty, starts all topics.")
+	var topicType = flag.String("topic", "", "Type of topic to run (player_crawl, pgcr_blocked_retry, activity_history_crawl, character_fill, clan_crawl, pgcr_crawl, instance_cheat_check, instance_store). If empty, starts all topics.")
 	flag.Parse()
 
-	log.SetFlags(0)
+	// Create Hermes logger
+	hermesLogger := utils.NewLogger("Hermes")
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -31,29 +32,30 @@ func main() {
 		qw.ActivityHistoryTopic(),
 		qw.CharacterFillTopic(),
 		qw.ClanCrawlTopic(),
-		qw.PgcrExistsTopic(),
-		qw.PgcrCheatCheckTopic(),
-		qw.PgcrStoreTopic(),
+		qw.PgcrCrawlTopic(),
+		qw.InstanceCheatCheckTopic(),
+		qw.InstanceStoreTopic(),
 	}
 
 	if *topicType == "" {
 		// Start all topics
-		log.Printf("Starting all topics...")
+		hermesLogger.Info("Starting all topics...")
 		for _, t := range topics {
-			err := processing.StartTopicManager(t, processing.TopicManagerConfig{
+			tm, err := processing.StartTopicManager(t, processing.TopicManagerConfig{
 				Context: ctx,
 				Wg:      nil,
 			})
 			if err != nil {
-				log.Printf("Failed to start topic %s: %v", t.Config.QueueName, err)
+				hermesLogger.ErrorF("Failed to start topic %s: %v", t.Config.QueueName, err)
 				continue
 			}
-			log.Printf("Started %s topic", t.Config.QueueName)
+			hermesLogger.InfoF("Started %s topic", t.Config.QueueName)
+			tm.InfoF("Started self-scaling worker initialWorkers=%d", tm.GetInitialWorkers())
 		}
-		log.Printf("All topics started. Press Ctrl+C to shutdown.")
+		hermesLogger.Info("All topics started. Press Ctrl+C to shutdown.")
 	} else {
 		// Start a specific topic
-		log.Printf("Starting %s Topic", *topicType)
+		hermesLogger.InfoF("Starting %s Topic", *topicType)
 
 		var topicInstance processing.Topic
 		var found bool
@@ -66,17 +68,20 @@ func main() {
 		}
 
 		if !found {
-			log.Fatalf("Unknown topic type: %s", *topicType)
+			hermesLogger.ErrorF("Unknown topic type: %s", *topicType)
+			return
 		}
 
-		err := processing.StartTopicManager(topicInstance, processing.TopicManagerConfig{
+		tm, err := processing.StartTopicManager(topicInstance, processing.TopicManagerConfig{
 			Context: ctx,
 		})
 		if err != nil {
-			log.Fatal("Failed to start topic:", err)
+			hermesLogger.ErrorF("Failed to start topic: %v", err)
+			return
 		}
 
-		log.Printf("%s Topic started. Press Ctrl+C to shutdown.", *topicType)
+		hermesLogger.InfoF("%s Topic started. Press Ctrl+C to shutdown.", *topicType)
+		tm.InfoF("Started self-scaling worker initialWorkers=%d", tm.GetInitialWorkers())
 	}
 
 	// Keep running

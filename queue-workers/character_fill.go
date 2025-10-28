@@ -2,10 +2,10 @@ package queueworkers
 
 import (
 	"encoding/json"
-	"raidhub/lib/domains/character"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/character"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

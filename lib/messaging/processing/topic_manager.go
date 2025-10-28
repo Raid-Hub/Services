@@ -2,7 +2,7 @@ package processing
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -22,21 +22,20 @@ type TopicManager struct {
 	mutex         sync.RWMutex
 	wg            *utils.ReadOnlyWaitGroup
 	ctx           context.Context
+	logger        utils.Logger
 }
 
-// Info logs an informational message
-func (tm *TopicManager) Info(msg string, fields ...any) {
-	log.Printf("[%s] INFO: %s %v", tm.config.QueueName, msg, fields)
+// InfoF logs a formatted informational message
+func (tm *TopicManager) InfoF(format string, args ...any) {
+	tm.logger.InfoF(format, args...)
 }
 
-// Warn logs a warning message
-func (tm *TopicManager) Warn(msg string, fields ...any) {
-	log.Printf("[%s] WARN: %s %v", tm.config.QueueName, msg, fields)
-}
-
-// Error logs an error message
-func (tm *TopicManager) Error(msg string, fields ...any) {
-	log.Printf("[%s] ERROR: %s %v", tm.config.QueueName, msg, fields)
+// GetInitialWorkers returns the initial worker count for this topic
+func (tm *TopicManager) GetInitialWorkers() int {
+	if isContestWeekend() {
+		return tm.config.ContestWeekendWorkers
+	}
+	return tm.config.DesiredWorkers
 }
 
 // TopicManagerConfig contains configuration and resources for a TopicManager
@@ -53,7 +52,7 @@ func (tm *TopicManager) GetContext() TopicManagerConfig {
 }
 
 // StartTopicManager starts a TopicManager with self-scaling worker goroutines
-func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) error {
+func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) (*TopicManager, error) {
 	// Get the topic config directly from the topic
 	topicConfig := topic.Config
 
@@ -81,6 +80,7 @@ func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) error {
 		config:        topicConfig,
 		wg:            managerConfig.Wg,
 		ctx:           managerConfig.Context,
+		logger:        utils.NewLogger(topicConfig.QueueName),
 	}
 
 	// Check if this is a contest weekend
@@ -88,24 +88,33 @@ func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) error {
 	initialWorkers := topicConfig.DesiredWorkers
 	if isContestWeekend {
 		initialWorkers = topicConfig.ContestWeekendWorkers
-		topicManager.Info("Contest weekend detected - scaling workers", "count", initialWorkers)
+		topicManager.logger.InfoF("Contest weekend detected - scaling workers count=%d", initialWorkers)
 	}
 
 	// Start with initial worker count
-	err := topicManager.scaleTo(initialWorkers)
+	err := topicManager.scaleToInitial(initialWorkers)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Start self-scaling monitor
 	go topicManager.monitorSelfScaling()
 
-	topicManager.Info("Started self-scaling worker", "initialWorkers", initialWorkers)
-	return nil
+	return topicManager, nil
+}
+
+// scaleToInitial scales to the target number of workers during initial startup (no logging)
+func (tm *TopicManager) scaleToInitial(targetWorkers int) error {
+	return tm.scaleToInternal(targetWorkers, true)
 }
 
 // scaleTo scales to the target number of workers
 func (tm *TopicManager) scaleTo(targetWorkers int) error {
+	return tm.scaleToInternal(targetWorkers, false)
+}
+
+// scaleToInternal scales to the target number of workers
+func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error {
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
 
@@ -124,13 +133,15 @@ func (tm *TopicManager) scaleTo(targetWorkers int) error {
 		for i := currentWorkers; i < targetWorkers; i++ {
 			cancelFunc, err := tm.startWorkerGoroutine(i)
 			if err != nil {
-				tm.Error("Failed to start worker", "workerID", i, "error", err)
+				tm.logger.ErrorF("Failed to start worker workerID=%d: %v", i, err)
 				continue
 			}
 			tm.workers[i] = cancelFunc
 			tm.activeWorkers++
 		}
-		tm.Info("Scaled up workers", "from", currentWorkers, "to", tm.activeWorkers)
+		if !isInitial {
+			tm.logger.InfoF("Scaled up workers from=%d to=%d", currentWorkers, tm.activeWorkers)
+		}
 	} else if targetWorkers < currentWorkers {
 		// Scale down - remove workers
 		for i := currentWorkers - 1; i >= targetWorkers; i-- {
@@ -140,7 +151,9 @@ func (tm *TopicManager) scaleTo(targetWorkers int) error {
 				tm.activeWorkers--
 			}
 		}
-		tm.Info("Scaled down workers", "from", currentWorkers, "to", tm.activeWorkers)
+		if !isInitial {
+			tm.logger.InfoF("Scaled down workers from=%d to=%d", currentWorkers, tm.activeWorkers)
+		}
 	}
 
 	return nil
@@ -196,18 +209,22 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (context.CancelFunc, 
 
 	// Create Worker struct for this goroutine
 	topicManagerConfig := tm.GetContext()
+	prefix := fmt.Sprintf("%s::%d", tm.config.QueueName, workerID)
 	worker := &Worker{
 		ID:        workerID,
 		QueueName: tm.config.QueueName,
 		Config:    topicManagerConfig,
+		logger:    utils.NewLogger(prefix),
 		ctx:       workerCtx,
 		channel:   msgs,
 		processor: tm.topic.processor,
 	}
 
-	// Run the worker loop
-	defer ch.Close()
-	go worker.Run()
+	// Run the worker loop - close channel when worker exits
+	go func() {
+		defer ch.Close()
+		worker.Run()
+	}()
 
 	return cancelFunc, nil
 }
@@ -220,13 +237,13 @@ func (tm *TopicManager) monitorSelfScaling() {
 	for range ticker.C {
 		// Skip autoscaling during contest weekends
 		if isContestWeekend() {
-			tm.Warn("Contest weekend active - skipping autoscaling")
+			tm.logger.Warn("Contest weekend active - skipping autoscaling")
 			continue
 		}
 
 		queueDepth, err := tm.getQueueDepth()
 		if err != nil {
-			tm.Error("Failed to get queue depth", "error", err)
+			tm.logger.ErrorF("Failed to get queue depth: %v", err)
 			continue
 		}
 
@@ -249,7 +266,7 @@ func (tm *TopicManager) monitorSelfScaling() {
 			continue
 		}
 
-		tm.Info("Scaling workers", "queueDepth", queueDepth, "from", currentWorkers, "to", targetWorkers)
+		tm.logger.InfoF("Scaling workers queueDepth=%d from=%d to=%d", queueDepth, currentWorkers, targetWorkers)
 		tm.scaleTo(targetWorkers)
 	}
 }

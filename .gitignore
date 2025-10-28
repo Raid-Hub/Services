@@ -15,6 +15,13 @@ volumes/
 # Binaries
 bin/
 
+# Root-level binaries
+atlas
+hermes
+zeus
+migrate
+seed
+
 # Logs
 *.log
 tilt.log

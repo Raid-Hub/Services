@@ -8,7 +8,7 @@ import (
 var CharacterLogger utils.Logger
 
 func init() {
-	CharacterLogger = utils.NewLogger("character")
+	CharacterLogger = utils.NewLogger("INSTANCE_CHARACTER_SERVICE")
 }
 
 // Fill fetches and fills missing character data

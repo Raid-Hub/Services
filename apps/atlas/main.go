@@ -11,11 +11,11 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"raidhub/lib/domains/instance"
-	"raidhub/lib/domains/instance_storage"
-	"raidhub/lib/domains/pgcr"
 	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/monitoring"
+	"raidhub/lib/services/instance"
+	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/services/pgcr_processing"
 )
 
 var (
@@ -235,20 +235,20 @@ func binarySearchForBlockStart(minCursor, maxCursor int64) (int64, error) {
 	for minCursor < maxCursor {
 		log.Println("Gap Mode Block Search: Searching between", minCursor, "and", maxCursor)
 		mid := (minCursor + maxCursor) / 2
-		result, _, _, _ := pgcr.FetchAndProcessPGCR(mid)
+		result, _, _, _ := pgcr_processing.FetchAndProcessPGCR(mid)
 		switch result {
-		case pgcr.Success, pgcr.NonRaid:
+		case pgcr_processing.Success, pgcr_processing.NonRaid:
 			hasFound = true
 			maxCursor = mid
-		case pgcr.NotFound:
+		case pgcr_processing.NotFound:
 			if hasFound {
 				minCursor = mid + 1
 			} else {
 				maxCursor = mid
 			}
-		case pgcr.SystemDisabled:
+		case pgcr_processing.SystemDisabled:
 			time.Sleep(60 * time.Second)
-		case pgcr.InternalError, pgcr.DecodingError, pgcr.ExternalError, pgcr.RateLimited:
+		case pgcr_processing.InternalError, pgcr_processing.DecodingError, pgcr_processing.ExternalError, pgcr_processing.RateLimited:
 			// retry the request
 			time.Sleep(5 * time.Second)
 		default:

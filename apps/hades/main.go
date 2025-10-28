@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/domains/instance"
-	"raidhub/lib/domains/instance_storage"
-	"raidhub/lib/domains/pgcr"
 	"raidhub/lib/env"
+	"raidhub/lib/services/instance"
+	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/web/discord"
 
 	"slices"
@@ -259,12 +259,12 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 		var errors = 0
 		var processed = false
 		for errors <= workerMaxRetries && !processed {
-			result, activity, raw, err := pgcr.FetchAndProcessPGCR(instanceID)
+			result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceID)
 
-			if result == pgcr.NonRaid {
+			if result == pgcr_processing.NonRaid {
 				processed = true
 				// NonRaid activities are successfully processed, just not raids
-			} else if result == pgcr.Success {
+			} else if result == pgcr_processing.Success {
 				_, committed, err := instance_storage.StorePGCR(activity, raw)
 				if err != nil {
 					log.Printf("Failed to store PGCR: %v", err)
@@ -280,7 +280,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 					processed = true
 					// Not a raid, successfully processed and ignored
 				}
-			} else if result == pgcr.ExternalError || result == pgcr.InternalError || result == pgcr.DecodingError || result == pgcr.RateLimited {
+			} else if result == pgcr_processing.ExternalError || result == pgcr_processing.InternalError || result == pgcr_processing.DecodingError || result == pgcr_processing.RateLimited {
 				log.Printf("Error fetching instanceId %d: %s", instanceID, err)
 				time.Sleep(5 * time.Second)
 				errors++

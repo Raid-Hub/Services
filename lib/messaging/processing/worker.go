@@ -2,7 +2,8 @@ package processing
 
 import (
 	"context"
-	"log"
+
+	"raidhub/lib/utils"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -13,6 +14,7 @@ type Worker struct {
 	ID        int
 	QueueName string
 	Config    TopicManagerConfig
+	logger    utils.Logger
 
 	// Private fields (internal worker state)
 	ctx       context.Context
@@ -40,7 +42,11 @@ func (w *Worker) Run() {
 			err := w.ProcessMessage(msg)
 			if err != nil {
 				w.Error("Error processing message", "error", err)
-				// Don't ack on error - let message retry
+				// NACK with requeue=false to prevent infinite retries on permanent failures
+				// The message will be sent to the dead letter queue if configured
+				if err := msg.Nack(false, false); err != nil {
+					panic(err)
+				}
 				continue
 			}
 
@@ -60,17 +66,34 @@ func (w *Worker) ProcessMessage(message amqp.Delivery) error {
 	return w.processor(w, message)
 }
 
-// Info logs an informational message
-func (w *Worker) Info(msg string, v ...any) {
-	log.Printf("[%s][%d] INFO: %s %v", w.QueueName, w.ID, msg, v)
+func (w *Worker) Info(v ...any) {
+	w.logger.Info(v...)
 }
 
-// Warn logs a warning message
-func (w *Worker) Warn(msg string, v ...any) {
-	log.Printf("[%s][%d] WARN: %s %v", w.QueueName, w.ID, msg, v)
+func (w *Worker) Warn(v ...any) {
+	w.logger.Warn(v...)
 }
 
-// Error logs an error message
-func (w *Worker) Error(msg string, v ...any) {
-	log.Printf("[%s][%d] ERROR: %s %v", w.QueueName, w.ID, msg, v)
+func (w *Worker) Error(v ...any) {
+	w.logger.Error(v...)
+}
+
+func (w *Worker) Debug(v ...any) {
+	w.logger.Debug(v...)
+}
+
+func (w *Worker) InfoF(format string, args ...any) {
+	w.logger.InfoF(format, args...)
+}
+
+func (w *Worker) WarnF(format string, args ...any) {
+	w.logger.WarnF(format, args...)
+}
+
+func (w *Worker) ErrorF(format string, args ...any) {
+	w.logger.ErrorF(format, args...)
+}
+
+func (w *Worker) DebugF(format string, args ...any) {
+	w.logger.DebugF(format, args...)
 }

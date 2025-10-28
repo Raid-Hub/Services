@@ -2,33 +2,21 @@ package flagrestricted
 
 import (
 	"log"
-	"net/http"
-	"os"
-	"raidhub/packages/cheat_detection"
-	"raidhub/packages/pgcr"
-	"raidhub/packages/postgres"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/services/cheat_detection"
+	"raidhub/lib/services/pgcr_processing"
 )
 
 const cheatCheckVersion = ""
 
 func FlagRestrictedPGCRs() {
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatal("Error connecting to postgres:", err)
-	}
-	defer db.Close()
-
-	rows, err := db.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
+	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
 	if err != nil {
 		log.Fatal("Error querying instance table:", err)
 	}
 	defer rows.Close()
 
-	// for each pgcr, query bungie API to check if it is restricted
-	client := &http.Client{}
-	securityKey := os.Getenv("BUNGIE_API_KEY")
-
-	stmnt, err := db.Prepare(
+	stmnt, err := postgres.DB.Prepare(
 		`INSERT INTO flag_instance (instance_id, cheat_check_version, cheat_check_bitmask, flagged_at, cheat_probability)
 		VALUES ($1, $2, $3, NOW(), $4)
 		ON CONFLICT DO NOTHING`,
@@ -38,7 +26,7 @@ func FlagRestrictedPGCRs() {
 	}
 	defer stmnt.Close()
 
-	stmnt2, err := db.Prepare(`INSERT INTO blacklist_instance (instance_id, report_source, cheat_check_version, reason)
+	stmnt2, err := postgres.DB.Prepare(`INSERT INTO blacklist_instance (instance_id, report_source, cheat_check_version, reason)
 		VALUES ($1, 'Manual', $2, $3)
         ON CONFLICT (instance_id)
 		DO UPDATE SET report_source = 'Manual', cheat_check_version = $2, reason = $3, created_at = NOW()`)
@@ -56,20 +44,20 @@ func FlagRestrictedPGCRs() {
 			log.Fatalln("Error scanning instance_id:", err)
 		}
 
-		result, _, _, _ := pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)
+		result, _, _, _ := pgcr_processing.FetchAndProcessPGCR(instanceId)
 		total++
 
 		switch result {
-		case pgcr.InsufficientPrivileges:
+		case pgcr_processing.InsufficientPrivileges:
 			log.Printf("Instance %d is restricted", instanceId)
-		case pgcr.Success:
+		case pgcr_processing.Success:
 			log.Printf("Instance %d is not restricted", instanceId)
 		default:
 			log.Printf("Instance %d returned unexpected result: %d", instanceId, result)
-			result, _, _, _ = pgcr.FetchAndProcessPGCR(client, instanceId, securityKey)
+			result, _, _, _ = pgcr_processing.FetchAndProcessPGCR(instanceId)
 		}
 
-		if result == pgcr.InsufficientPrivileges {
+		if result == pgcr_processing.InsufficientPrivileges {
 			badApples++
 			_, err = stmnt.Exec(instanceId, cheatCheckVersion, cheat_detection.RestrictedPGCR|cheat_detection.DesertPerpetual, 1.0)
 			if err != nil {

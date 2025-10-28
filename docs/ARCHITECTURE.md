@@ -2,408 +2,502 @@
 
 ## Overview
 
-RaidHub Services is a microservices architecture built in Go, managing data collection, processing, and analysis for Destiny 2 raid completion tracking.
+RaidHub Services is a microservices architecture built in Go, managing data collection, processing, and analysis for Destiny 2 raid completion tracking. The system is designed to handle high-throughput PGCR (Post-Game Carnage Report) crawling, intelligent queue-based processing, and comprehensive cheat detection.
 
 ## Folder Structure
 
 ```
 RaidHub-Services/
 ├── apps/                        # Main application services
-│   ├── atlas/                   # PGCR crawler
-│   ├── hermes/                  # Queue worker manager
-│   ├── hades/                   # Missed PGCR collector
-│   ├── athena/                  # Manifest downloader
-│   ├── zeus/                    #
-│   ├── bob/                     #
-│   ├── hera/                    #
-│   ├── nemesis/                 # Cheat detection service
-│   └── pan/                     # Player analytics
-├── queue-workers/               # Background processing workers
-│   ├── activity_history/        # Activity history processor
-│   ├── character_fill/          # Character data filler
-│   ├── clan_crawl/              # Clan crawler
-│   ├── pgcr_blocked/            # Blocked PGCR handler
-│   ├── pgcr_cheat_check/        # Cheat check processor
-│   ├── pgcr_clickhouse/         # ClickHouse writer
-│   ├── pgcr_exists/             # PGCR existence checker
-│   └── player_crawl/            # Player data crawler
-├── tools/                       # Utilities and one-off tools
-│   ├── main.go                 # Command dispatcher
-│   ├── activity-history-update/ # Activity history updater
-│   ├── fix-sherpa-clears/      # Sherpa clears fixer
-│   ├── flag-restricted-pgcrs/  # PGCR flagger
-│   ├── process-single-pgcr/    # Single PGCR processor
-│   └── update-skull-hashes/    # Skull hash updater
-├── shared/                      # Shared libraries
-│   ├── config/                  # Configuration management
-│   ├── database/                # Database connection logic
-│   │   ├── postgres/            # PostgreSQL connection
-│   │   └── clickhouse/          # ClickHouse connection
-│   ├── messaging/               # Message queue libraries
-│   │   └── rabbit/              # RabbitMQ connection
-│   ├── monitoring/              # Monitoring and metrics
-│   └── utils/                   # Common utilities
-├── infrastructure/              # Infrastructure tooling (NO app code)
+│   ├── atlas/                   # Intelligent PGCR crawler with adaptive scaling
+│   ├── zeus/                    # Bungie API reverse proxy with IPv6 load balancing
+│   ├── hermes/                  # Queue worker manager with self-scaling topics
+│   ├── athena/                  # Destiny 2 manifest downloader
+│   ├── hades/                   # Missed PGCR recovery processor
+│   ├── hera/                    # Top player crawler for leaderboard maintenance
+│   └── nemesis/                 # Cheat detection and player account maintenance
+├── queue-workers/               # Queue worker topic definitions
+│   ├── activity_history.go      # Player activity history processing
+│   ├── character_fill.go        # Character data completion
+│   ├── clan_crawl.go            # Clan information crawler
+│   ├── pgcr_blocked.go          # Retry mechanism for blocked PGCRs
+│   ├── instance_cheat_check.go  # Post-storage cheat detection
+│   ├── instance_store.go        # Primary PGCR data storage
+│   ├── pgcr_crawl.go            # General PGCR processing (legacy)
+│   └── player_crawl.go          # Player profile data crawler
+├── lib/                         # Shared libraries and business logic
+│   ├── database/                # Database connection singletons
+│   │   ├── postgres/            # PostgreSQL connection management
+│   │   └── clickhouse/          # ClickHouse connection management
+│   ├── messaging/               # RabbitMQ messaging infrastructure
+│   │   ├── processing/          # Topic managers and workers
+│   │   ├── routing/             # Queue routing constants
+│   │   ├── rabbit/              # RabbitMQ connection singleton
+│   │   └── messages/            # Message type definitions
+│   ├── services/                # Domain-specific business logic
+│   │   ├── pgcr_processing/     # PGCR fetch and processing logic
+│   │   ├── instance_storage/    # Multi-database storage orchestration
+│   │   ├── cheat_detection/     # Comprehensive cheat detection system
+│   │   ├── player/              # Player data management
+│   │   ├── character/           # Character data operations
+│   │   ├── clan/                # Clan data operations
+│   │   ├── instance/            # Instance data queries
+│   │   └── stats/               # Statistical calculations
+│   ├── web/                     # External API clients
+│   │   ├── bungie/              # Bungie.net API client
+│   │   ├── discord/             # Discord webhook client
+│   │   └── gm_report/           # Game Master reporting
+│   ├── monitoring/              # Prometheus metrics
+│   ├── utils/                   # Common utilities
+│   └── env/                     # Environment configuration
+├── tools/                       # Utilities and one-off maintenance tools
+│   ├── main.go                 # Tool dispatcher
+│   ├── activity-history-update/ # Batch activity history updates
+│   ├── fix-sherpa-clears/      # Data correction utilities
+│   ├── flag-restricted-pgcrs/  # Batch PGCR flagging
+│   ├── process-single-pgcr/    # Individual PGCR processing
+│   └── update-skull-hashes/    # Manifest hash updates
+├── infrastructure/              # Infrastructure configuration (NO application code)
 │   ├── postgres/                # PostgreSQL infrastructure
-│   │   ├── migrations/          # Migration files (multi-schema)
-│   │   ├── seeds/               # Seed data (JSON format)
-│   │   ├── init/                # Database initialization
-│   │   └── tools/               # Migration and seeding tools
-│   │       ├── migrate/         # Migration tool
-│   │       └── seed/            # Seeding tool
-│   ├── clickhouse/              # ClickHouse infrastructure
-│   │   ├── migrations/          # ClickHouse migrations
-│   │   ├── seeds/               # Seed data
-│   │   ├── views/               # ClickHouse views
-│   │   └── tools/               # Migration tools
-│   ├── cron/                    # Cron job infrastructure
-│   │   ├── crontab/             # Crontab definitions
-│   │   └── scripts/             # Cron job scripts
-│   ├── prometheus/              # Prometheus config
-├── docker/                      # Docker configs
-├── docs/                        # Documentation
-├── bin/                         # Built binaries
-├── volumes/                     # Docker volumes
-└── logs/                        # Log files
+│   │   ├── migrations/          # Schema migrations
+│   │   ├── init/                # Database initialization scripts
+│   │   └── tools/               # Migration and seeding utilities
+│   ├── clickhouse/              # ClickHouse analytics database
+│   │   ├── migrations/          # ClickHouse schema migrations
+│   │   ├── views/               # Materialized views for analytics
+│   │   └── tools/               # ClickHouse utilities
+│   ├── cron/                    # Scheduled task configuration
+│   ├── prometheus/              # Monitoring configuration
+│   └── rabbitmq/                # Message queue configuration
+├── docs/                        # Architecture and API documentation
+├── bin/                         # Built application binaries
+├── volumes/                     # Docker persistent volumes
+└── logs/                        # Application log files
 ```
 
 ## Key Architectural Principles
 
-### 1. Clear Separation of Concerns
+### 1. Microservices with Clear Boundaries
 
-- **`apps/`** - Main application services
-- **`queue-workers/`** - Background processing workers
-- **`tools/`** - Utilities and one-off tools
-- **`shared/`** - Shared libraries used by apps
-- **`infrastructure/`** - Infrastructure tooling (NO app code)
+- **`apps/`** - Independent, deployable application services
+- **`queue-workers/`** - Topic-based asynchronous processing definitions
+- **`lib/`** - Shared business logic and infrastructure libraries
+- **`tools/`** - Maintenance utilities and one-off operations
+- **`infrastructure/`** - Pure infrastructure configuration (NO application code)
 
-### 2. Infrastructure vs App Code
+### 2. Event-Driven Architecture
 
-- **`infrastructure/`** contains ONLY tooling and configuration
-  - Database schemas, migrations, seeds, views
-  - Cron job definitions and wrapper scripts
-  - Service configuration files
-  - Migration and seeding tools
-- **`shared/`** contains ONLY application code libraries
-  - Database connection logic
-  - Message queue connection logic
-  - Configuration management
-  - Monitoring libraries
-  - Common utilities
+- **Message Queues**: RabbitMQ with topic-based routing for async processing
+- **Self-Scaling Workers**: Automatic scaling based on queue depth and processing metrics
+- **Side Effects**: Storage operations trigger downstream processing via message queues
+- **Failure Recovery**: Dedicated retry mechanisms and missed item recovery
 
-### 3. Database Organization
+### 3. Infrastructure vs Application Code
 
-- **PostgreSQL**: Multi-schema migrations, seeds, initialization in `infrastructure/postgres/`
-- **ClickHouse**: Migrations, seeds, views in `infrastructure/clickhouse/`
-- **Schema Structure**: `core`, `definitions`, `clan`, `extended`, `raw`, `flagging`, `leaderboard`
-- Connection logic in `shared/database/` for use by apps
-- Separate migrate/seed tools for each database
+- **`infrastructure/`** contains ONLY configuration and tooling:
+  - Database schemas, migrations, and views
+  - Service configuration templates
+  - Cron job definitions
+  - Migration and deployment tools
+- **`lib/`** contains ONLY application logic:
+  - Database connection management
+  - Business domain logic
+  - External API clients
+  - Message queue processing framework
+  - Monitoring and utilities
 
-### 4. Cron Job Management
+### 4. Domain-Driven Design
 
-- Crontab definitions in `infrastructure/cron/`
-- Wrapper scripts in `infrastructure/cron/scripts/`
-- Environment-specific crontabs (dev/staging/prod)
-- No hardcoded credentials - use environment variables
+- **Services** organized by business domain (player, instance, cheat_detection)
+- **Clear boundaries** between domains with well-defined interfaces
+- **Dependency injection** through singleton pattern for shared resources
+- **Separation of concerns** between data access, business logic, and external integrations
 
-## Services
+## Application Services
 
-### Main Applications (`apps/`)
+### Long-Running Services
 
-#### Atlas
+These services run continuously and are started with `make up`:
 
-PGCR (Post-Game Carnage Report) crawler service that fetches and processes raid completion data from the Bungie API.
+#### Atlas - Intelligent PGCR Crawler
 
-#### Hermes
+**Purpose**: Crawls PostGame Carnage Reports from the Bungie API with intelligent scaling and recovery mechanisms.
 
-Queue worker manager that coordinates all background processing workers.
+**Key Features**:
 
-#### Hades
+- **Adaptive Worker Scaling**: Dynamically adjusts worker count based on 404 rates and lag metrics
+- **Offload Workers**: Handles problematic PGCRs with exponential backoff retry logic
+- **Gap Detection**: Automatically identifies and handles missing PGCR sequences
+- **Rate Limiting**: Respects Bungie API limits with intelligent throttling
+- **Monitoring**: Comprehensive Prometheus metrics and Discord alerting
 
-Missed PGCR collector that handles retrieval of PGCs that were missed during initial crawling.
+**Configuration**:
 
-#### Athena
+- Default workers: 25 (configurable via flags)
+- Buffer distance: 10,000 IDs behind latest
+- Monitoring port: 8080
 
-Manifest downloader that fetches and processes Destiny 2 manifest data.
+#### Zeus - Bungie API Reverse Proxy
 
-#### Nemesis
+**Purpose**: Provides load balancing and rate limiting for Bungie API requests across multiple IPv6 addresses and API keys.
 
-Cheat detection service that analyzes player behavior to detect potential cheating.
+**Key Features**:
 
-#### Pan
+- **IPv6 Load Balancing**: Distributes requests across sequential IPv6 addresses
+- **API Key Rotation**: Cycles through multiple Bungie API keys
+- **Differentiated Rate Limiting**: Separate limits for stats.bungie.net vs www.bungie.net
+- **Health Monitoring**: BetterUptime probe support
 
-Player analytics service for aggregating player statistics.
+**Configuration**:
 
-### Queue Workers (`queue-workers/`)
+- Default port: 7777
+- Configurable IPv6 interface and address count
+- Stats API: 40 requests/second per IP, 90 burst
+- WWW API: 12 requests/second per IP, 25 burst
 
-Background processing workers that handle asynchronous tasks:
+#### Hermes - Queue Worker Manager
 
-- **activity_history**: Processes player activity history
-- **character_fill**: Fills missing character data
-- **clan_crawl**: Crawls clan information
-- **pgcr_blocked**: Handles blocked PGCRs
-- **pgcr_cheat_check**: Performs cheat checking on PGCRs
-- **pgcr_clickhouse**: Writes PGCR data to ClickHouse
-- **pgcr_exists**: Checks if PGCRs exist in the database
-- **player_crawl**: Crawls player data
+**Purpose**: Manages all queue workers with self-scaling topic managers for different processing types.
 
-## Infrastructure
+**Key Features**:
+
+- **Topic Management**: Coordinates multiple queue types with independent scaling
+- **Contest Mode Support**: Higher worker counts during contest weekends
+- **Dynamic Scaling**: Scales workers up/down based on queue depth and processing metrics
+- **Graceful Shutdown**: Proper cleanup and resource management
+
+**Managed Topics**:
+
+- `player_crawl`: Player profile data processing
+- `activity_history_crawl`: Player activity history updates
+- `character_fill`: Missing character data completion
+- `clan_crawl`: Clan information processing
+- `pgcr_blocked_retry`: Retry mechanism for failed PGCRs
+- `instance_store`: Primary PGCR data storage
+- `instance_cheat_check`: Post-storage cheat detection
+
+### Scheduled Services (Cron Jobs)
+
+These services run on a schedule via system crontab:
+
+#### Hera - Top Player Crawler
+
+**Purpose**: Keeps player data fresh by crawling top players from various leaderboards.
+
+**Key Features**:
+
+- **Leaderboard Analysis**: Processes top N players from individual and raid leaderboards
+- **Clan Discovery**: Discovers and processes clans from top players
+- **Bulk Operations**: Efficient batch processing with configurable concurrency
+- **Member Validation**: Ensures discovered players exist in the system
+
+**Usage**: `./bin/hera -top 1500 -reqs 14`
+
+#### Hades - Missed PGCR Recovery
+
+**Purpose**: Processes PGCRs that were missed during normal crawling operations.
+
+**Key Features**:
+
+- **Gap Processing**: Handles missing PGCR sequences with configurable range limits
+- **Retry Logic**: Intelligent retry with exponential backoff
+- **Progress Tracking**: Detailed reporting of recovery success/failure rates
+- **Safety Limits**: Prevents processing of overly large gaps
+
+**Usage**:
+
+- `./bin/hades`: Process missed PGCRs
+- `./bin/hades -gap`: Process gaps in sequences
+
+#### Nemesis - Cheat Detection & Player Maintenance
+
+**Purpose**: Runs comprehensive cheat detection analysis and player account maintenance.
+
+**Key Features**:
+
+- **Player Cheat Level Analysis**: Calculates and updates player cheat levels
+- **Instance Re-checking**: Re-processes instances for high-risk players
+- **Blacklist Management**: Automatically blacklists flagged instances and player instances
+- **Statistical Reporting**: Provides detailed cheat detection statistics
+
+#### Athena - Manifest Downloader
+
+**Purpose**: Downloads and processes Destiny 2 manifest data for weapon and feature definitions.
+
+**Key Features**:
+
+- **Manifest Fetching**: Downloads latest manifest from Bungie API
+- **Definition Processing**: Extracts weapon and feature definitions
+- **Database Updates**: Updates PostgreSQL with latest definitions
+- **Version Management**: Only processes new manifests
+
+**Processing**:
+
+- Weapon definitions (hash, name, icon, element, ammo type, slot, type, rarity)
+- Activity feat definitions (skulls/modifiers for raids)
+
+## Queue Worker System
+
+### Message Queue Architecture
+
+The system uses RabbitMQ with a topic-based architecture where each queue type is managed as a "topic" with:
+
+- **Self-Scaling Workers**: Automatically scales based on queue depth and processing metrics
+- **Contest Mode Support**: Higher worker counts during contest periods
+- **Configurable Parameters**: Min/max workers, scale thresholds, prefetch counts
+- **Failure Handling**: Built-in retry mechanisms and error handling
+
+### Queue Types
+
+#### Primary Data Flow Queues
+
+1. **`instance_store`** - Primary PGCR storage pipeline
+
+   - **Purpose**: Stores processed PGCRs to PostgreSQL and ClickHouse
+   - **Triggers**: Character fill, player crawl, cheat check side effects
+   - **Workers**: 5-50 (15 desired, 30 contest)
+
+2. **`instance_cheat_check`** - Post-storage cheat detection
+   - **Purpose**: Runs cheat detection algorithms on stored instances
+   - **Workers**: 5-100 (25 desired, 75 contest)
+
+#### Support Queues
+
+3. **`player_crawl`** - Player data updates
+
+   - **Purpose**: Fetches and updates player profile data
+   - **Workers**: 5-100 (20 desired, 50 contest)
+
+4. **`activity_history_crawl`** - Activity history processing
+
+   - **Purpose**: Updates player activity history from Bungie API
+   - **Workers**: 1-20 (3 desired, 10 contest)
+
+5. **`character_fill`** - Character data completion
+
+   - **Purpose**: Fills missing character information
+   - **Workers**: 1-50 (5 desired, 20 contest)
+
+6. **`clan_crawl`** - Clan information updates
+
+   - **Purpose**: Processes clan data and membership
+   - **Workers**: 1-25 (3 desired, 10 contest)
+
+7. **`pgcr_blocked_retry`** - Failed PGCR retry mechanism
+   - **Purpose**: Retries PGCRs that failed due to permissions or rate limiting
+   - **Workers**: 1-10 (2 desired, 5 contest)
+
+### Scaling Parameters
+
+Each topic has configurable scaling parameters:
+
+- **MinWorkers/MaxWorkers**: Hard limits on worker count
+- **DesiredWorkers**: Target worker count under normal conditions
+- **ContestWeekendWorkers**: Higher target during contest periods
+- **ScaleUpThreshold**: Queue depth that triggers scaling up
+- **ScaleDownThreshold**: Queue depth that triggers scaling down
+- **ScaleUpPercent/ScaleDownPercent**: Rate of scaling changes
+
+## Data Flow Architecture
+
+### Primary PGCR Processing Flow
+
+1. **Atlas** crawls PGCR IDs sequentially from Bungie API
+2. **Zeus** proxies API requests with load balancing and rate limiting
+3. **PGCR Processing** validates and transforms raw API responses
+4. **Instance Store Queue** receives successful PGCRs for storage
+5. **Orchestrated Storage** saves to both PostgreSQL and ClickHouse atomically
+6. **Side Effects** trigger downstream processing:
+   - Character fill for missing character data
+   - Player crawl for new or stale players
+   - Cheat check for completed instances
+
+### Recovery and Retry Mechanisms
+
+1. **Offload Workers** (Atlas): Handle slow or problematic PGCRs
+2. **Missed Log Processing** (Hades): Recovers PGCRs that failed completely
+3. **Blocked Retry Queue**: Handles permission-based failures
+4. **Gap Detection**: Identifies and fills missing PGCR sequences
+
+### Cheat Detection Pipeline
+
+1. **Instance Analysis**: Examines completed instances for suspicious patterns
+2. **Heuristic Application**: Applies multiple cheat detection algorithms
+3. **Player Flag Management**: Updates player cheat levels and flags
+4. **Blacklist Management**: Automatically promotes high-confidence flags
+5. **Webhook Notifications**: Sends Discord alerts for flagged content
+
+## Domain Services Architecture
+
+### Service Organization
+
+Services in `lib/services/` are organized by business domain with clear boundaries:
+
+#### `pgcr_processing/` - PGCR Domain
+
+- **FetchAndProcessPGCR()**: Coordinates API fetch and data transformation
+- **ProcessDestinyReport()**: Converts Bungie API format to internal structure
+- **CalculateDateCompleted()**: Determines instance completion timestamp
+- **Result Types**: Success, NotFound, NonRaid, SystemDisabled, etc.
+
+#### `instance_storage/` - Storage Orchestration
+
+- **StorePGCR()**: Orchestrates multi-database storage with atomicity
+- **StoreRawJSON()**: Compressed JSON storage in PostgreSQL
+- **Store()**: Structured instance data storage
+- **StoreToClickHouse()**: Analytics database storage
+- **Side Effect Management**: Triggers downstream queue processing
+
+#### `cheat_detection/` - Anti-Cheat System
+
+- **CheckForCheats()**: Main cheat detection entry point
+- **Heuristic Algorithms**: Lowman, speedrun, kill analysis, time dilation
+- **Player Management**: Cheat level calculation and blacklist management
+- **Webhook Integration**: Discord notifications for flagged content
+
+#### `player/` - Player Domain
+
+- **Crawl()**: Fetches player data from Bungie API
+- **UpdateActivityHistory()**: Processes player activity timeline
+- **Data Management**: Player profiles, characters, statistics
+
+#### `character/` - Character Domain
+
+- **Fill()**: Completes missing character information
+
+#### `clan/` - Clan Domain
+
+- **Crawl()**: Fetches clan data and membership
+- **ParseClanDetails()**: Processes clan banner and metadata
+
+### Database Architecture
+
+#### PostgreSQL - Primary Data Store
+
+- **Multi-schema structure**: core, definitions, clan, extended, raw, flagging, leaderboard
+- **ACID Compliance**: Ensures data consistency for critical operations
+- **Relationship Management**: Complex queries across normalized tables
+- **JSON Storage**: Compressed raw PGCR data for replay capability
+
+#### ClickHouse - Analytics Database
+
+- **Time-series Optimization**: Optimized for analytical queries
+- **Materialized Views**: Pre-computed aggregations
+- **Column Storage**: Efficient compression and query performance
+- **Real-time Ingestion**: Receives data from PostgreSQL storage operations
+
+## Infrastructure Components
 
 ### Docker Services
 
-- **PostgreSQL**: Primary relational database
-- **RabbitMQ**: Message queue for async processing
-- **ClickHouse**: Analytics database
-- **Prometheus**: Metrics collection
+- **PostgreSQL**: Primary relational database with persistent volumes
+- **RabbitMQ**: Message queue with management interface
+- **ClickHouse**: Analytics database with custom configuration
+- **Prometheus**: Metrics collection and storage
 
-### Database Management
+### Monitoring & Alerting
 
-- Migrations are managed through custom Go tools in `infrastructure/postgres/tools/`
-- Multi-schema structure with numbered migration files
-- Seeds populate initial data using JSON format
-- Views provide analytical queries
-- Database initialization handled via templates
+- **Prometheus Metrics**: Comprehensive application and infrastructure metrics
+- **Discord Webhooks**: Real-time alerts for critical events and cheat detection
+- **Health Checks**: BetterUptime integration for service monitoring
+- **Performance Tracking**: Request latency, queue depths, processing rates
 
-### Monitoring
+### Development Workflow
 
-- Prometheus collects metrics from all services
-- Grafana provides dashboards for visualization
-- Custom metrics track PGCR crawling, queue processing, and system health
+#### Setup
 
-## Development Workflow
+```bash
+# Clone and setup environment
+./bootstrap.sh
+# Copy and configure environment
+cp example.env .env
+# Start infrastructure services
+make up
+```
 
-### Setup
-
-1. Run `./bootstrap.sh` to set up the environment
-2. Update `.env` with your configuration
-3. Services will be available via Docker Compose
-
-### Building
+#### Building & Running
 
 ```bash
 make bin        # Build all binaries
-make <service>  # Build a specific service
-make dev        # Build and start all services
+make <service>  # Build specific service
+make dev        # Build and start all services with hot reload (Tilt)
 ```
 
-### Running
+#### Database Management
 
 ```bash
-make up         # Start required services (postgres, rabbitmq, clickhouse)
+make migrate    # Run database migrations
+make seed       # Populate seed data
+```
+
+#### Service Management
+
+```bash
+make up         # Start core services (hermes, atlas, zeus)
 make services   # Start all services
-make logs       # View logs
+make logs       # View aggregated logs
 make down       # Stop all services
 ```
 
-### Database
+## Environment Configuration
 
-```bash
-make migrate    # Run database migrations (multi-schema structure)
-make seed       # Seed initial data (definitions, seasons, activities)
-```
+See `example.env` for all configuration options.
 
-## Environment Variables
+### Critical Variables
 
-See `example.env` for all required environment variables.
+- `BUNGIE_API_KEY`: Primary Bungie API authentication
+- `ZEUS_API_KEYS`: Comma-separated list of API keys for Zeus rotation
+- `IPV6`: Base IPv6 address for Zeus load balancing
+- Database credentials: `POSTGRES_*`, `CLICKHOUSE_*`, `RABBITMQ_*`
+- Webhook URLs: `ATLAS_WEBHOOK_URL`, `HADES_WEBHOOK_URL`
 
-Key variables:
+## Deployment Architecture
 
-- `BUNGIE_API_KEY`: Bungie API key for data access
-- Database credentials (POSTGRES*\*, RABBITMQ*\_, CLICKHOUSE\_\_)
-- Monitoring credentials (PROMETHEUS*\*, GRAFANA*\*)
+### Service Types
 
-## Future Improvements
+#### Long-Running Services (Docker Compose)
 
-The architecture is designed to support future enhancements:
+- **Atlas**: PGCR crawler
+- **Zeus**: API proxy
+- **Hermes**: Queue manager
 
-1. Enhanced monitoring and alerting
-2. Additional service integrations
-3. Performance optimizations
-4. Extended queue worker capabilities
+#### Scheduled Tasks (Cron)
 
-## Domain Package Organization (`lib/domains/`)
+- **Hera**: Daily/weekly player updates
+- **Hades**: Missed PGCR recovery
+- **Nemesis**: Cheat detection maintenance
+- **Athena**: Manifest updates
 
-The `lib/domains/` directory contains domain logic organized by entity type. Each domain package encapsulates all operations, data access, and business logic related to a specific entity.
+#### On-Demand Tools
 
-### Domain Package Purposes
+- **tools/**: Various maintenance and data correction utilities
 
-#### **`player/`** - Player Domain
+### Performance Characteristics
 
-**Purpose**: Manages player data, profiles, and statistics.
+#### Throughput
 
-**Responsibilities**:
+- **Atlas**: Processes ~1000-5000 PGCRs per minute
+- **Queue Workers**: Self-scaling based on load
+- **API Rate Limits**: Managed through Zeus proxy with multiple IPs/keys
 
-- Fetch player profiles from Bungie API
-- Store and update player information in database
-- Track player activity history
-- Query player statistics and metadata
+#### Scalability
 
-**Key Functions**:
-
-- `Crawl()` - Fetch player data from Bungie API
-- `GetPlayer()` - Retrieve player by membership ID
-- `CreateOrUpdatePlayer()` - Insert or update player record
-- `UpdateHistoryLastCrawled()` - Update activity history timestamp
-- `GetPlayersNeedingHistoryUpdate()` - Find players needing refresh
-- `GetPlayerCharacters()` - Get all characters for a player
-- `UpdateActivityHistory()` - Fetch and store activity history
-
-#### **`pgcr/`** - PGCR Domain
-
-**Purpose**: Manages Post-Game Carnage Reports (raid completion data).
-
-**Responsibilities**:
-
-- Fetch PGCRs from Bungie API via Zeus proxy
-- Process raw PGCR data into structured format
-- Store PGCR instances in PostgreSQL
-- Store raw JSON in database
-- Determine if instance is "fresh" or checkpoint
-- Handle PGCR processing workflow
-
-**Key Functions**:
-
-- `FetchAndProcessPGCR()` - Fetch and parse PGCR from API
-- `ProcessDestinyReport()` - Convert Bungie API response to internal format
-- `StorePGCR()` - Store processed PGCR to database
-- `StoreJSON()` - Store compressed raw JSON
-- `RetrieveJSON()` - Retrieve raw JSON by instance ID
-- `ProcessBlocked()` - Handle blocked PGCRs
-- `CheckExists()` - Check if PGCR exists in database
-- `CheckCheat()` - Trigger cheat detection on PGCR
-- `StoreClickhouse()` - Queue PGCR for ClickHouse
-- `CalculateDateCompleted()` - Calculate completion timestamp
-- `CalculateDurationSeconds()` - Calculate activity duration
-- `WriteMissedLog()` - Log missed PGCR IDs
-
-#### **`cheat_detection/`** - Cheat Detection Domain
-
-**Purpose**: Detects and flags cheating behavior in raid completions.
-
-**Responsibilities**:
-
-- Analyze instance data for cheating patterns
-- Apply heuristic algorithms to detect impossible/low-probability runs
-- Flag instances and players with cheat probability scores
-- Update player cheat levels
-- Generate webhooks for flagged content
-- Manage blacklisted players and instances
-
-**Key Functions**:
-
-- `CheckForCheats()` - Main entry point for cheat detection
-- `getInstance()` - Fetch full instance data with players/characters/weapons
-- `flagInstance()` - Flag an instance as cheated
-- `flagPlayerInstance()` - Flag a player within an instance
-- `GetAllInstanceFlagsByPlayer()` - Get all flags for a player
-- `GetRecentlyPlayedBlacklistedPlayers()` - Get recently active blacklisted players
-- `BlacklistRecentInstances()` - Auto-blacklist instances for blacklisted players
-- `BlacklistFlaggedInstances()` - Upgrade high-probability flagged instances to blacklist
-- `GetCheaterAccountChance()` - Calculate account-level cheat probability
-- `UpdatePlayerCheatLevel()` - Update player cheat level based on flags
-- `GetMinimumCheatLevel()` - Determine minimum cheat level from flags
-- `SendFlaggedInstanceWebhook()` - Send Discord webhook for flagged instance
-- `SendFlaggedPlayerWebhooks()` - Send Discord webhook for flagged players
-
-**Heuristics** (in `methods.go` and `profile_heuristics.go`):
-
-- Lowman detection (too few players)
-- Speedrun time analysis
-- Total kills analysis
-- Time dilation detection
-- Player-specific heuristics (kills per second, weapon diversity, etc.)
-
-#### **`character/`** - Character Domain
-
-**Purpose**: Manages character data for players.
-
-**Responsibilities**:
-
-- Fill missing character information
-- Fetch character details from Bungie API
-
-**Key Functions**:
-
-- `Fill()` - Fetch and store character data
-
-#### **`clan/`** - Clan Domain
-
-**Purpose**: Manages clan (group) data.
-
-**Responsibilities**:
-
-- Fetch clan information from Bungie API
-- Parse clan details
-- Store clan data
-
-**Key Functions**:
-
-- `Crawl()` - Fetch clan data from API
-- `ParseClanDetails()` - Parse clan banner/name/motto
-
-#### **`stats/`** - Statistics Domain
-
-**Purpose**: Calculates statistical aggregations.
-
-**Responsibilities**:
-
-- Update player sum-of-best times
-- Aggregate raid completion statistics
-
-**Key Functions**:
-
-- `UpdatePlayerSumOfBest()` - Calculate and update sum of best clear times
-
-#### **`instance/`** - Instance Domain
-
-**Purpose**: Manages raid instance data and storage.
-
-Contains types and operations for raid instances:
-
-- `Instance` - Processed raid instance
-- `InstancePlayer` - Player within an instance
-- `InstanceCharacter` - Character within an instance
-- `InstanceCharacterWeapon` - Weapon used by character
-- Storage and retrieval operations for instances
-
-### Package Boundary Rules
-
-#### **`lib/database/postgres/`** - Database Infrastructure Only
-
-**Should contain**:
-
-- Database connection singleton (`singleton.go`)
-- Connection initialization (`init()` functions)
-- Database monitoring utilities (`watch.go`)
-- **ONLY low-level database utilities**
-
-**Should NOT contain**:
-
-- Domain-specific query logic
-- Business rules
-- Entity operations
-- Transaction management for specific domains
-
-#### **`lib/domains/*/`** - Domain Logic Only
-
-**Should contain**:
-
-- All queries specific to that domain
-- Business logic for that domain
-- Entity operations
-- Domain-specific types
-
-**Should NOT contain**:
-
-- Database connection setup
-- Generic utilities (use `lib/utils/`)
-- Cross-domain logic (create shared package or import between domains as needed)
+- **Horizontal**: Multiple Zeus instances for higher API throughput
+- **Vertical**: Worker count scaling based on queue depth
+- **Database**: PostgreSQL primary with ClickHouse for analytics
 
 ## Contributing
 
-1. Follow the architecture principles
-2. Keep infrastructure and app code separate
-3. Keep database utilities separate from domain logic
-4. Each domain should be self-contained
-5. Document new services and workers
-6. Update this document with significant changes
+1. Follow the architectural principles and service boundaries
+2. Keep infrastructure configuration separate from application code
+3. Use domain-driven design for new services
+4. Implement proper error handling and monitoring
+5. Update documentation for significant architectural changes
+
+## Future Improvements
+
+1. **Enhanced Monitoring**: Real-time dashboards and advanced alerting
+2. **API Rate Optimization**: Intelligent request batching and caching
+3. **Horizontal Scaling**: Kubernetes deployment for better resource utilization
+4. **Data Pipeline Optimization**: Streaming analytics and real-time processing
+5. **Advanced Cheat Detection**: Machine learning integration for pattern recognition

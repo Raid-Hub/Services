@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/domains/cheat_detection"
+	"raidhub/lib/services/cheat_detection"
 	"sync"
 	"time"
 )

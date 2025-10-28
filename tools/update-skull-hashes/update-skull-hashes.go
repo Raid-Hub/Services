@@ -3,19 +3,14 @@ package updateskull
 import (
 	"encoding/json"
 	"log"
-	"raidhub/packages/bungie"
-	"raidhub/packages/pgcr"
-	"raidhub/packages/postgres"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/web/bungie"
 
 	"github.com/lib/pq"
 )
 
 func UpdateSkullHashes() {
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatal("Error connecting to postgres:", err)
-	}
-	defer db.Close()
+	db := postgres.DB
 
 	rows, err := db.Query(`
 		SELECT pgcr.data FROM instance 
@@ -35,18 +30,13 @@ func UpdateSkullHashes() {
 	count := 0
 	total := 225000.0
 	for rows.Next() {
-		var compressedData []byte
-		if err := rows.Scan(&compressedData); err != nil {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
 			log.Fatalln("Error scanning instance_id:", err)
 		}
 
-		data, err := pgcr.GzipDecompress(compressedData)
-		if err != nil {
-			log.Fatalln("Error decompressing JSON data:", err)
-		}
-
 		var pgcr bungie.DestinyPostGameCarnageReport
-		err = json.Unmarshal(data, &pgcr)
+		err := json.Unmarshal(data, &pgcr)
 		if err != nil {
 			log.Fatalln("Error unmarshalling pgcr data:", err)
 		}

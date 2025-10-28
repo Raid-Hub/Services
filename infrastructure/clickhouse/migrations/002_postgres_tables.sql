@@ -57,3 +57,4 @@ CREATE TABLE IF NOT EXISTS player
     sum_of_best Nullable(Int32)
 )
 ENGINE = PostgreSQL(postgres_creds, 'definitions', 'player');
+

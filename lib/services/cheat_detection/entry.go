@@ -1,9 +1,11 @@
 package cheat_detection
 
 import (
-	"log"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils"
 )
+
+var CheatCheckLogger = utils.NewLogger("CHEAT_CHECK_SERVICE")
 
 const (
 	CheatCheckVersion = "beta-2.1.13"
@@ -18,7 +20,7 @@ const (
 func CheckForCheats(instanceId int64) (*Instance, ResultTuple, []ResultTuple, bool, error) {
 	instance, err := getInstance(instanceId)
 	if err != nil {
-		log.Printf("Error getting instance %d: %s", instanceId, err)
+		CheatCheckLogger.Error("Error getting instance", "instanceId", instanceId, "error", err)
 		return nil, ResultTuple{}, nil, false, err
 	}
 

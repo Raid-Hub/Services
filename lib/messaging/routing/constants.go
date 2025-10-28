@@ -3,14 +3,16 @@ package routing
 // Queue routing constants for all async processing
 const (
 	// Player data processing queues
-	PlayerCrawl     = "player_crawl"
-	ActivityHistory = "activity_history"
-	CharacterFill   = "character_fill"
-	ClanCrawl       = "clan"
+	PlayerCrawl   = "player_crawl"
+	ActivityCrawl = "activity_history_crawl"
+	CharacterFill = "character_fill"
+	ClanCrawl     = "clan_crawl"
 
 	// PGCR processing queues
-	PGCRBlocked    = "pgcr_blocked"
-	PGCRExists     = "pgcr_exists"
-	PGCRStore      = "pgcr_store"
-	PGCRCheatCheck = "pgcr_cheat_check"
+	PGCRRetry = "pgcr_blocked_retry"
+	PGCRCrawl = "pgcr_crawl"
+
+	// Instance data processing queues
+	InstanceStore      = "instance_store"
+	InstanceCheatCheck = "instance_cheat_check"
 )

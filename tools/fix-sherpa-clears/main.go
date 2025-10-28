@@ -18,11 +18,7 @@ import (
 
 func FixSherpaClears() {
 	scriptStart := time.Now()
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Error connecting to the database: %s", err)
-	}
-	defer db.Close()
+	db := postgres.DB
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -42,9 +38,9 @@ func FixSherpaClears() {
 	log.Println("Creating index on instance_player.completed...")
 	monitorCtx, endMonitor := context.WithCancel(ctx)
 	defer endMonitor()
-	postgres.MonitorIndexCreationProgress(monitorCtx, db, "instance_player", "idx_instance_player_completed", 10*time.Second)
+	postgres.MonitorIndexCreationProgress(monitorCtx, "instance_player", "idx_instance_player_completed", 10*time.Second)
 
-	_, err = db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_instance_player_completed ON instance_player (completed) INCLUDE (membership_id, instance_id) WHERE completed`)
+	_, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_instance_player_completed ON instance_player (completed) INCLUDE (membership_id, instance_id) WHERE completed`)
 	if err != nil {
 		log.Fatalf("Error creating index on instance_player.completed: %s", err)
 	}

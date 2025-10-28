@@ -7,10 +7,8 @@ import (
 	"os"
 
 	activityhistory "raidhub/tools/activity-history-update"
-	bob "raidhub/tools/bob"
 	fixsherpa "raidhub/tools/fix-sherpa-clears"
 	flagrestricted "raidhub/tools/flag-restricted-pgcrs"
-	pan "raidhub/tools/pan"
 	processpgcr "raidhub/tools/process-single-pgcr"
 	updateskull "raidhub/tools/update-skull-hashes"
 
@@ -23,8 +21,6 @@ var commands = map[string]func(){
 	"process-single-pgcr":     processpgcr.ProcessSinglePGCR,
 	"activity-history-update": activityhistory.ActivityHistoryUpdate,
 	"fix-sherpa-clears":       fixsherpa.FixSherpaClears,
-	"pan":                     pan.Main,
-	"bob":                     bob.Main,
 }
 
 func main() {

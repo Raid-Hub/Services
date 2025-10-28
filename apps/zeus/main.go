@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -21,6 +20,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"raidhub/lib/env"
+	"raidhub/lib/utils"
 )
 
 var (
@@ -51,17 +51,28 @@ type transport struct {
 var proxyTransport = &transport{}
 
 func main() {
+	logger := utils.NewLogger("Zeus")
+
 	flag.Parse()
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		logger.ErrorF("Error loading .env file: %v", err)
+		return
 	}
 
 	securityKey = env.BungieAPIKey
 	if securityKey == "" {
-		log.Fatal("must pass BUNGIE_API_KEY")
+		logger.Error("must pass BUNGIE_API_KEY")
+		return
 	}
 
 	proxyTransport.apiKeys = strings.Split(env.ZeusAPIKeys, ",")
+
+	if env.IPV6 == "" {
+		logger.Warn("IPV6 environment variable not set. Zeus requires IPv6 to function.")
+		logger.Info("To use Zeus in production, set IPV6 in your .env file with a valid IPv6 address.")
+		logger.Info("Skipping zeus startup for local development...")
+		return
+	}
 
 	addr := netip.MustParseAddr(env.IPV6)
 	for i := 0; i < *ipv6n; i++ {
@@ -112,8 +123,11 @@ func main() {
 
 		rp.ServeHTTP(w, r)
 	})
-	log.Printf("Ready on port %d", *port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), mainHandler))
+	logger.InfoF("Ready on port %d", *port)
+
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), mainHandler); err != nil {
+		logger.ErrorF("Server failed: %v", err)
+	}
 }
 
 func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {

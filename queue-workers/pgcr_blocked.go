@@ -1,13 +1,12 @@
 package queueworkers
 
 import (
-	"log"
 	"math/rand"
-	"raidhub/lib/domains/instance_storage"
-	"raidhub/lib/domains/pgcr"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/services/pgcr_processing"
 	"strconv"
 	"sync"
 	"time"
@@ -26,7 +25,7 @@ var (
 // PgcrBlockedTopic creates a new PGCR blocked topic
 func PgcrBlockedTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.PGCRBlocked,
+		QueueName:             routing.PGCRRetry,
 		MinWorkers:            10,
 		MaxWorkers:            500,
 		DesiredWorkers:        50,
@@ -46,11 +45,11 @@ func PgcrBlockedTopic() processing.Topic {
 func processPgcrBlocked(worker *processing.Worker, message amqp.Delivery) error {
 	instanceId, err := strconv.ParseInt(string(message.Body), 10, 64)
 	if err != nil {
-		worker.Error("Failed to parse instance ID", "error", err)
+		worker.ErrorF("Failed to parse instance ID: %v", err)
 		return err
 	}
 
-	worker.Info("Processing blocked PGCR", "instanceId", instanceId)
+	worker.InfoF("Processing blocked PGCR instanceId=%d", instanceId)
 
 	randomVariation := retryDelayTime / 3
 	i := 0
@@ -58,45 +57,45 @@ func processPgcrBlocked(worker *processing.Worker, message amqp.Delivery) error 
 
 	for {
 		// Try to fetch and process the PGCR
-		result, activity, raw, err := pgcr.FetchAndProcessPGCR(instanceId)
-		if err != nil && result != pgcr.NotFound {
-			log.Println(err)
+		result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
+		if err != nil && result != pgcr_processing.NotFound {
+			worker.ErrorF("Error fetching PGCR instanceId=%d: %v", instanceId, err)
 		}
 
 		// Handle the result
-		if result == pgcr.NonRaid {
+		if result == pgcr_processing.NonRaid {
 			// Successfully confirmed it's not a raid - mark as processed
 			markPgcrSuccess(instanceId)
-			worker.Info("Confirmed non-raid", "instanceId", instanceId)
+			worker.InfoF("Confirmed non-raid instanceId=%d", instanceId)
 			return nil
-		} else if result == pgcr.Success {
+		} else if result == pgcr_processing.Success {
 			// Successfully fetched and processed - floodgates are open!
 			markPgcrSuccess(instanceId)
-			worker.Info("Blocked PGCR successfully processed - floodgates opened!", "instanceId", instanceId)
+			worker.InfoF("Blocked PGCR successfully processed - floodgates opened! instanceId=%d", instanceId)
 
 			// Publish to storage queue
 			storeMessage := messages.NewPGCRStoreMessage(activity, raw)
-			if publishErr := routing.Publisher.PublishJSONMessage(routing.PGCRStore, storeMessage); publishErr != nil {
-				worker.Error("Failed to publish PGCR for storage", "instanceId", instanceId, "error", publishErr)
+			if publishErr := routing.Publisher.PublishJSONMessage(routing.InstanceStore, storeMessage); publishErr != nil {
+				worker.ErrorF("Failed to publish PGCR for storage instanceId=%d: %v", instanceId, publishErr)
 				return publishErr
 			}
 			return nil
-		} else if result == pgcr.InsufficientPrivileges {
+		} else if result == pgcr_processing.InsufficientPrivileges {
 			// Still blocked - check if floodgates have opened
 			if !isUnblocked() {
 				// Floodgates still closed, wait and retry
-				worker.Info("Still blocked, waiting for floodgates", "instanceId", instanceId, "attempt", i+1)
+				worker.InfoF("Still blocked, waiting for floodgates instanceId=%d attempt=%d", instanceId, i+1)
 				time.Sleep(60 * time.Second)
 				continue
 			} else {
 				// Floodgates are open but this one is still blocked
-				worker.Info("Still blocked despite open floodgates", "instanceId", instanceId, "attempt", errCount)
+				worker.InfoF("Still blocked despite open floodgates instanceId=%d attempt=%d", instanceId, errCount)
 				errCount++
 			}
-		} else if result == pgcr.NotFound {
-			worker.Info("PGCR not found", "instanceId", instanceId)
+		} else if result == pgcr_processing.NotFound {
+			worker.InfoF("PGCR not found instanceId=%d", instanceId)
 			return nil // Give up
-		} else if result == pgcr.SystemDisabled {
+		} else if result == pgcr_processing.SystemDisabled {
 			time.Sleep(45 * time.Second)
 			continue
 		} else {
@@ -106,7 +105,7 @@ func processPgcrBlocked(worker *processing.Worker, message amqp.Delivery) error 
 
 		// If we've failed too many times, give up
 		if errCount > 3 {
-			worker.Warn("Giving up on blocked PGCR after multiple failed attempts", "instanceId", instanceId)
+			worker.WarnF("Giving up on blocked PGCR after multiple failed attempts instanceId=%d", instanceId)
 			instance_storage.WriteMissedLog(instanceId)
 			return nil
 		}

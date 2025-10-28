@@ -4,14 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
-	"raidhub/packages/bungie"
-	"raidhub/packages/pgcr"
-	"raidhub/packages/postgres"
-	"raidhub/packages/rabbit"
+	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/services/pgcr_processing"
 	"strconv"
-	"time"
 )
 
 func ProcessSinglePGCR() {
@@ -28,74 +23,28 @@ func ProcessSinglePGCR() {
 
 	log.Printf("Processing PGCR with instance ID: %d", instanceId)
 
-	// 2. Fetch the PGCR from Bungie
-	apiKey := os.Getenv("BUNGIE_API_KEY")
-	if apiKey == "" {
-		log.Fatal("BUNGIE_API_KEY environment variable not set")
-	}
-
-	baseURL := os.Getenv("BUNGIE_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://www.bungie.net"
-	}
-
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
-
-	decoder, statusCode, cleanup, err := bungie.GetPGCR(client, baseURL, instanceId, apiKey)
+	// 2. Fetch and process the PGCR
+	result, processedActivity, rawPGCR, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
 	if err != nil {
-		log.Fatalf("Failed to fetch PGCR: %v", err)
-	}
-	defer cleanup()
-
-	if statusCode != 200 {
-		log.Fatalf("Bungie API returned non-200 status code: %d", statusCode)
+		log.Fatalf("Failed to fetch and process PGCR: %v", err)
 	}
 
-	// Decode the response
-	var response bungie.DestinyPostGameCarnageReportResponse
-	if err := decoder.Decode(&response); err != nil {
-		log.Fatalf("Failed to decode PGCR response: %v", err)
+	if result != pgcr_processing.Success {
+		log.Fatalf("PGCR fetch failed with result: %v", result)
 	}
 
-	if response.ErrorCode != 1 {
-		log.Fatalf("Bungie API returned error: %s (code: %d)", response.ErrorStatus, response.ErrorCode)
+	if processedActivity == nil {
+		log.Fatal("Processed activity is nil")
 	}
 
-	log.Printf("Successfully fetched PGCR from Bungie")
-
-	// 3. Process the PGCR
-	// Connect to database
-	db, err := postgres.Connect()
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
-
-	// Connect to RabbitMQ
-	conn, err := rabbit.Init()
-	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
-	}
-	defer rabbit.Cleanup()
-
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to create channel: %v", err)
-	}
-	defer ch.Close()
-
-	// Process the PGCR
-	processedActivity, err := pgcr.ProcessDestinyReport(&response.Response)
-	if err != nil {
-		log.Fatalf("Failed to process PGCR: %v", err)
+	if rawPGCR == nil {
+		log.Fatal("Raw PGCR is nil")
 	}
 
-	log.Printf("Successfully processed PGCR for activity hash: %d", processedActivity.Hash)
+	log.Printf("Successfully fetched and processed PGCR")
 
-	// Store the PGCR
-	lag, isNew, err := pgcr.StorePGCR(processedActivity, &response.Response, db, ch)
+	// 3. Store the PGCR
+	lag, isNew, err := instance_storage.StorePGCR(processedActivity, rawPGCR)
 	if err != nil {
 		log.Fatalf("Failed to store PGCR: %v", err)
 	}
@@ -107,7 +56,7 @@ func ProcessSinglePGCR() {
 	}
 
 	fmt.Printf("\n=== PGCR Processing Complete ===\n")
-	fmt.Printf("Instance ID: %d\n", instanceId)
+	fmt.Printf("Instance ID: %d\n", processedActivity.InstanceId)
 	fmt.Printf("Activity Hash: %d\n", processedActivity.Hash)
 	fmt.Printf("Date Started: %s\n", processedActivity.DateStarted)
 	fmt.Printf("Duration: %d seconds\n", processedActivity.DurationSeconds)
@@ -115,5 +64,7 @@ func ProcessSinglePGCR() {
 	fmt.Printf("Fresh: %t\n", *processedActivity.Fresh)
 	fmt.Printf("Flawless: %t\n", *processedActivity.Flawless)
 	fmt.Printf("Completed: %t\n", processedActivity.Completed)
-	fmt.Printf("Processing Lag: %v\n", lag)
+	if lag != nil {
+		fmt.Printf("Processing Lag: %v\n", *lag)
+	}
 }

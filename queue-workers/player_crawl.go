@@ -1,9 +1,9 @@
 package queueworkers
 
 import (
-	"raidhub/lib/domains/player"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/player"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"

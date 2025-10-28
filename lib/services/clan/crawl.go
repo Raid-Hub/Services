@@ -5,11 +5,7 @@ import (
 	"raidhub/lib/web/bungie"
 )
 
-var ClanLogger utils.Logger
-
-func init() {
-	ClanLogger = utils.NewLogger("clan")
-}
+var ClanLogger = utils.NewLogger("CLAN_SERVICE")
 
 // Crawl fetches and processes clan data
 func Crawl(groupId int64) error {
