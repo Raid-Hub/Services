@@ -23,11 +23,11 @@ This document defines how RaidHub Services applications are categorized by their
 **Apps**:
 
 - `hera` - Top player crawl (runs daily)
-- `hades` - Missed log processor (runs every 6 hours)
+- `hades` - Missed log processor (runs every 15 minutes)
 - `nemesis` - Player account maintenance (runs daily)
 - `athena` - Manifest downloader (runs daily)
 
-**Configure in**: `infrastructure/cron/crontab/`
+**Configure in**: `infrastructure/cron/prod.crontab`
 
 ### 3. Manual Tools
 

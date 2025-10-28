@@ -46,7 +46,7 @@ RaidHub-Services/
 │   ├── web/                     # External API clients
 │   │   ├── bungie/              # Bungie.net API client
 │   │   ├── discord/             # Discord webhook client
-│   │   └── gm_report/           # Game Master reporting
+│   │   └── gm_report/           # Grandmaster reporting
 │   ├── monitoring/              # Prometheus metrics
 │   ├── utils/                   # Common utilities
 │   └── env/                     # Environment configuration

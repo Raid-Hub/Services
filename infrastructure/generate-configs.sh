@@ -57,7 +57,7 @@ replace_template() {
     local temp_file=$(mktemp)
     
     # First, handle conditional sections
-    if [ -n "${PROMETHEUS_REMOTE_WRITE_URL}" ] && [ -n "${PROMETHEUS_USERNAME}" ] && [ -n "${PROMETHEUS_PASSWORD}" ]; then
+    if [ -n "${PROMETHEUS_REMOTE_WRITE_URL}" ] && [ -n "${PROMETHEUS_REMOTE_WRITE_USERNAME}" ] && [ -n "${PROMETHEUS_REMOTE_WRITE_PASSWORD}" ]; then
         # Include the remote_write section - remove the template tags
         awk '
             /{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{\/PROMETHEUS_REMOTE_WRITE_URL}}/ {
@@ -88,8 +88,8 @@ replace_template() {
         -e "s|{{POSTGRES_HOST}}|${POSTGRES_HOST:-localhost}|g" \
         -e "s|{{POSTGRES_PORT}}|${POSTGRES_PORT:-5432}|g" \
         -e "s|{{PROMETHEUS_REMOTE_WRITE_URL}}|${PROMETHEUS_REMOTE_WRITE_URL}|g" \
-        -e "s|{{PROMETHEUS_USERNAME}}|${PROMETHEUS_USERNAME}|g" \
-        -e "s|{{PROMETHEUS_PASSWORD}}|${PROMETHEUS_PASSWORD}|g" \
+        -e "s|{{PROMETHEUS_REMOTE_WRITE_USERNAME}}|${PROMETHEUS_REMOTE_WRITE_USERNAME}|g" \
+        -e "s|{{PROMETHEUS_REMOTE_WRITE_PASSWORD}}|${PROMETHEUS_REMOTE_WRITE_PASSWORD}|g" \
         "$temp_file" > "$output_file"
     
     rm -f "$temp_file"

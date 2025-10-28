@@ -10,6 +10,6 @@ scrape_configs:
 remote_write:
   - url: {{PROMETHEUS_REMOTE_WRITE_URL}}
     basic_auth:
-      username: "{{PROMETHEUS_USERNAME}}"
-      password: "{{PROMETHEUS_PASSWORD}}"
+      username: "{{PROMETHEUS_REMOTE_WRITE_USERNAME}}"
+      password: "{{PROMETHEUS_REMOTE_WRITE_PASSWORD}}"
 {{/PROMETHEUS_REMOTE_WRITE_URL}}

@@ -12,9 +12,14 @@ RaidHub Services follows a microservices architecture with clear separation betw
 - **Queue Workers** (`queue-workers/`): Background processing workers for async tasks
 - **Tools** (`tools/`): Utility scripts and one-off tools
 - **Infrastructure** (`infrastructure/`): Database schemas, migrations, cron jobs, and service configs
-- **Shared** (`shared/`): Shared libraries for database connections, messaging, monitoring
+- **Libraries** (`lib/`): Shared libraries for database connections, messaging, monitoring
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+## Documentation
+
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - Detailed architecture documentation
+- **[Application Categorization](docs/APP_CATEGORIZATION.md)** - How apps are organized by execution model
+- **[Naming Conventions](docs/NAMING_CONVENTIONS.md)** - Naming patterns for services and tools
+- **[Logger Setup](docs/LOGGER_SETUP.md)** - How to set up logging in domain services
 
 ## Quick Start
 
@@ -34,7 +39,6 @@ The easiest way to get started with hot reload and service orchestration:
    ```bash
    # macOS
    brew install tilt-dev/tap/tilt
-
    # Or follow instructions at https://docs.tilt.dev/install.html
    ```
 
@@ -48,7 +52,7 @@ The easiest way to get started with hot reload and service orchestration:
 
 4. **Start development environment:**
    ```bash
-   make tilt-dev
+   make dev
    ```
 
 This will:
@@ -79,55 +83,85 @@ Or manually:
 3. **Start services:**
 
    ```bash
-   make services-infra
+   make up
    ```
 
 4. **Build binaries:**
    ```bash
-   make bin
+   make apps
    ```
 
 ## Makefile Commands
 
-### Development (Recommended)
+### Development
 
 ```bash
-make tilt-dev      # Start development environment with Tilt (hot reload)
-make tilt-down     # Stop Tilt development environment
-make tilt-logs     # View Tilt logs
-make tilt-migrate  # Run database migration via Tilt
-make tilt-build    # Build all services via Tilt
-make tilt-clean    # Clean build artifacts via Tilt
-```
-
-### Legacy Development
-
-```bash
-make dev-legacy    # Start services with Docker Compose (no hot reload)
-make build         # Build all binaries
-make <name>        # Build a specific service/worker
+make dev          # Start development environment with Tilt (hot reload)
+make apps         # Build all application binaries
+make tools        # Build all tool binaries
+make build        # Build apps (alias for 'make apps')
 ```
 
 ### Docker Services
 
 ```bash
-make services      # Start all services
-make services-infra # Start infrastructure services only
-make up            # Start required services (postgres, rabbitmq, clickhouse)
-make down          # Stop all services
-make logs          # View logs
-make restart       # Restart services
-make ps            # View running services
+make up           # Start infrastructure services (postgres, rabbitmq, clickhouse, prometheus)
+make down         # Stop all services
+make restart      # Restart services
+make stop         # Stop services
+make ps           # View running services
 ```
 
-### Individual Services
+### Database Management
 
 ```bash
-make postgres      # Start PostgreSQL only
-make rabbit        # Start RabbitMQ only
-make clickhouse    # Start ClickHouse only
-make prometheus    # Start Prometheus only
+make migrate      # Run all database migrations (postgres + clickhouse)
+make migrate-postgres     # Run PostgreSQL migrations only
+make migrate-clickhouse   # Run ClickHouse migrations only
+make seed         # Populate seed data
 ```
+
+### Configuration
+
+```bash
+make config       # Generate service configurations and database roles
+make cron         # Install cron jobs from infrastructure/cron/prod.crontab
+```
+
+## Application Services
+
+### Long-Running Services
+
+These services run continuously and are managed via Docker Compose:
+
+- **`hermes`** - Queue worker manager with self-scaling topics
+- **`atlas`** - Intelligent PGCR crawler with adaptive scaling
+- **`zeus`** - Bungie API reverse proxy with IPv6 load balancing
+
+Start with: `make up` (starts infrastructure) + run binaries individually or via Tilt
+
+### Scheduled Services (Cron Jobs)
+
+These applications run on a schedule via system crontab:
+
+- **`hera`** - Top player crawler for leaderboard maintenance
+- **`hades`** - Missed PGCR recovery processor
+- **`nemesis`** - Cheat detection and player account maintenance
+- **`athena`** - Destiny 2 manifest downloader
+
+Configure in: `infrastructure/cron/prod.crontab`
+
+### Manual Tools
+
+Utilities executed manually as needed:
+
+- **`activity-history-update`** - Updates player activity history
+- **`fix-sherpa-clears`** - Fixes sherpa and first clear data
+- **`flag-restricted-pgcrs`** - Flags restricted PGCRs
+- **`process-single-pgcr`** - Processes a single PGCR
+- **`update-skull-hashes`** - Updates skull hashes
+
+Execute via: `./bin/tools <command>`
 
 ## Running Services
 
@@ -136,7 +170,7 @@ make prometheus    # Start Prometheus only
 **With Tilt (hot reload, service orchestration):**
 
 ```bash
-make tilt-dev    # Start all services with hot reload
+make dev    # Start all services with hot reload
 ```
 
 Access services:
@@ -146,40 +180,50 @@ Access services:
 - **Atlas**: http://localhost:8080/metrics (PGCR crawler)
 - **Zeus**: http://localhost:7777 (Bungie API proxy)
 
-### Legacy Mode
+### Production Mode
 
-**Long-running services** (start with `make up`):
-
-```bash
-make up          # Start hermes, atlas, zeus
-make hermes      # Queue worker manager
-make atlas       # PGCR crawler
-make zeus        # Bungie API proxy
-```
-
-**Cron jobs** (run via crontab):
-
-- `hera` - Top player crawl (daily at 6 AM)
-- `hades` - Missed log processor (every 6 hours)
-- `nemesis` - Player account maintenance (daily at 3 AM)
-- `athena` - Manifest downloader (daily at 2 AM)
-
-**Tools** (run as regular commands, located in `tools/` directory):
+**Infrastructure services:**
 
 ```bash
-make tools                              # Build all tools
-./bin/tools activity-history-update     # Update player activity history
-./bin/tools fix-sherpa-clears          # Fix sherpa/first-clear data
-./bin/tools flag-restricted-pgcrs      # Flag restricted PGCRs
-./bin/tools process-single-pgcr        # Process a single PGCR
-./bin/tools update-skull-hashes        # Update skull hashes
+make up    # Start postgres, rabbitmq, clickhouse, prometheus
 ```
 
-See `apps/README.md` and `docs/APP_CATEGORIZATION.md` for details on application categorization. See `docs/NAMING_CONVENTIONS.md` for naming conventions.
+**Application binaries:**
+
+```bash
+# Build all binaries first
+make apps
+
+# Run long-running services
+./bin/hermes     # Queue worker manager
+./bin/atlas      # PGCR crawler
+./bin/zeus       # Bungie API proxy
+```
+
+**Scheduled services** (via cron):
+
+```bash
+# Install cron jobs
+make cron
+
+# Or run manually
+./bin/hera       # Top player crawl
+./bin/hades      # Missed log processor
+./bin/nemesis    # Cheat detection maintenance
+./bin/athena     # Manifest downloader
+```
+
+**Manual tools:**
+
+```bash
+./bin/tools activity-history-update
+./bin/tools fix-sherpa-clears
+./bin/tools flag-restricted-pgcrs
+./bin/tools process-single-pgcr
+./bin/tools update-skull-hashes
+```
 
 ## Available Services
-
-Once running, these services are available:
 
 ### Infrastructure Services
 
@@ -190,8 +234,8 @@ Once running, these services are available:
 
 ### Application Services
 
-- **Hermes**: `localhost:8083` (Queue worker manager)
-- **Atlas**: `localhost:8080` (PGCR crawler)
+- **Hermes**: `localhost:8083/metrics` (Queue worker manager)
+- **Atlas**: `localhost:8080/metrics` (PGCR crawler)
 - **Zeus**: `localhost:7777` (Bungie API proxy)
 
 ### Development Tools
@@ -205,9 +249,9 @@ RaidHub-Services/
 ├── apps/              # Main application services
 ├── queue-workers/     # Background processing workers
 ├── tools/             # Utility scripts
+├── lib/               # Shared libraries and business logic
 ├── infrastructure/    # Infrastructure config (schemas, migrations, cron, etc.)
-├── shared/            # Shared libraries
-├── docker/            # Docker configurations
+├── docs/              # Documentation
 ├── bin/               # Built binaries
 ├── volumes/           # Docker volumes
 └── logs/              # Application logs
@@ -220,7 +264,7 @@ RaidHub-Services/
 Run database migrations and seeding:
 
 ```bash
-make migrate  # Run database migrations (multi-schema structure)
+make migrate  # Run all migrations (postgres + clickhouse)
 make seed     # Seed initial data (definitions, seasons, activities)
 ```
 
@@ -231,13 +275,17 @@ make seed     # Seed initial data (definitions, seasons, activities)
 - **Seeds**: `infrastructure/postgres/seeds/` (JSON-based seed data)
 - **ClickHouse Views**: `infrastructure/clickhouse/views/`
 
-## Environment Variables
+## Environment Configuration
 
 Key environment variables (see `example.env` for full list):
 
 ```bash
 # Bungie API
 BUNGIE_API_KEY=your_api_key
+ZEUS_API_KEYS=key1,key2,key3  # Comma-separated for Zeus rotation
+
+# IPv6 (required for Zeus)
+IPV6=2001:db8::1  # Base IPv6 address for load balancing
 
 # PostgreSQL
 POSTGRES_USER=username
@@ -248,15 +296,22 @@ POSTGRES_PORT=5432
 RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 
+# ClickHouse
+CLICKHOUSE_USER=username
+CLICKHOUSE_PASSWORD=password
+
+# Webhooks
+ATLAS_WEBHOOK_URL=discord_webhook_url
+HADES_WEBHOOK_URL=discord_webhook_url
 ```
 
 ## Development
 
 ### Adding a New Service
 
-1. Create service directory in `apps/` or `queue-workers/`
+1. Create service directory in `apps/`
 2. Add `main.go` with your service logic
-3. Build with `make <service-name>`
+3. Build with `make apps`
 4. Run from `bin/<service-name>`
 
 ### Adding a New Database Migration
@@ -266,33 +321,54 @@ RABBITMQ_PASSWORD=guest
 3. Use multi-schema structure (create schemas if needed)
 4. Run with `make migrate`
 
-## Documentation
+### Adding a New Tool
 
-- [Architecture Overview](docs/ARCHITECTURE.md) - Detailed architecture documentation
+1. Create tool directory in `tools/`
+2. Add your tool logic (will be built as subcommand)
+3. Build with `make tools`
+4. Run with `./bin/tools <your-tool-name>`
+
+## Queue Worker System
+
+The system uses RabbitMQ with self-scaling topic managers:
+
+- **`player_crawl`** - Player profile data processing
+- **`activity_history_crawl`** - Player activity history updates
+- **`character_fill`** - Missing character data completion
+- **`clan_crawl`** - Clan information processing
+- **`pgcr_blocked_retry`** - Retry mechanism for blocked PGCRs
+- **`instance_store`** - Primary PGCR data storage
+- **`instance_cheat_check`** - Post-storage cheat detection
+
+Workers automatically scale based on queue depth and processing metrics.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8083, 7777, 9090, 3000 are available
+1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8083, 7777, 9090, 15672 are available
 2. **API Key Missing**: Set `BUNGIE_API_KEY` in `.env`
-3. **Docker Issues**: Ensure Docker is running and has sufficient resources
-4. **Go Build Errors**: Check Go version and module dependencies
-5. **Tilt Issues**: Ensure Tilt is installed and Docker is running
+3. **Zeus Requires IPv6**: Set `IPV6` in `.env` for production use
+4. **Docker Issues**: Ensure Docker is running and has sufficient resources
+5. **Go Build Errors**: Check Go version and module dependencies
+6. **Tilt Issues**: Ensure Tilt is installed and Docker is running
 
 ### Debugging
 
 - Use Tilt UI (http://localhost:10350) to view service status and logs
-- Check health check resources for infrastructure issues
-- Monitor service dependencies in Tilt UI
-- Use `tilt logs <service>` for detailed error messages
+- Check individual service logs via `docker-compose logs <service>`
+- Monitor queue depths in RabbitMQ Management UI (http://localhost:15672)
+- Check Prometheus metrics (http://localhost:9090) for performance issues
 
 ## Contributing
 
-1. Follow the architecture principles in `docs/ARCHITECTURE.md`
-2. Keep infrastructure and app code separate
-3. Document new services and workers
-4. Update documentation with significant changes
+1. Follow the architecture principles in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+2. Use appropriate naming conventions from [docs/NAMING_CONVENTIONS.md](docs/NAMING_CONVENTIONS.md)
+3. Follow application categorization in [docs/APP_CATEGORIZATION.md](docs/APP_CATEGORIZATION.md)
+4. Set up proper logging using [docs/LOGGER_SETUP.md](docs/LOGGER_SETUP.md)
+5. Keep infrastructure and application code separate
+6. Document new services and workers
+7. Update documentation with significant changes
 
 ## License
 
