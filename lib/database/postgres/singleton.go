@@ -3,35 +3,34 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
-	"log"
-	"time"
-
 	"raidhub/lib/env"
+	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/singleton"
 
 	_ "github.com/lib/pq"
 )
 
-var DB *sql.DB
+var (
+	DB       *sql.DB
+	logger   = logging.NewLogger("POSTGRES")
+	initDone <-chan struct{}
+)
 
 func init() {
-	// Retry connection with backoff
-	maxRetries := 10
-	var err error
-	for i := 0; i < maxRetries; i++ {
-		DB, err = connect()
-		if err == nil {
-			log.Printf("PostgreSQL connected")
-			return
+	initDone = singleton.InitAsync("POSTGRES", 10, func() error {
+		searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
+		connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable search_path=%s",
+			env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			return err
 		}
-		time.Sleep(time.Duration(i+1) * time.Second)
-	}
-	panic(fmt.Sprintf("Failed to connect to PostgreSQL after %d retries: %v", maxRetries, err))
+		DB = db
+		return nil
+	})
 }
 
-func connect() (*sql.DB, error) {
-	// Set search_path to include all schemas in priority order
-	searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
-	connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable search_path=%s",
-		env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
-	return sql.Open("postgres", connStr)
+// Wait blocks until PostgreSQL initialization is complete
+func Wait() {
+	<-initDone
 }

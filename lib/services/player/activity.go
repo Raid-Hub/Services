@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"sync"
 
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
 
@@ -12,27 +13,40 @@ func UpdateActivityHistory(membershipIdStr string) error {
 	// Parse membership ID
 	membershipId, err := strconv.ParseInt(membershipIdStr, 10, 64)
 	if err != nil {
-		PlayerLogger.Error("Error parsing membership ID", "membershipIdStr", membershipIdStr, "error", err)
+		logger.Warn("MEMBERSHIP_ID_PARSE_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipIdStr,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 
-	PlayerLogger.Info("Updating activity history", "membershipId", membershipId)
+	logger.Info("ACTIVITY_HISTORY_UPDATE_STARTED", map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+	})
 
 	// Get player
 	p, err := GetPlayer(membershipId)
 	if err != nil {
-		PlayerLogger.Error("Error getting player", "membershipId", membershipId, "error", err)
+		logger.Error("PLAYER_GET_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 	if p == nil {
-		PlayerLogger.Warn("Player not found", "membershipId", membershipId)
+		logger.Warn("PLAYER_NOT_FOUND", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+		})
 		return nil
 	}
 
 	// Get all characters for this player
 	characters, err := GetPlayerCharacters(membershipId)
 	if err != nil {
-		PlayerLogger.Error("Error getting characters", "membershipId", membershipId, "error", err)
+		logger.Warn("CHARACTERS_GET_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 
@@ -47,7 +61,11 @@ func UpdateActivityHistory(membershipIdStr string) error {
 			// Fetch activity history for this character (membershipType 2 = Xbox, mode 4 = All)
 			err := bungie.Client.GetActivityHistoryInChannel(2, membershipId, characterId, 5, instanceIds)
 			if err != nil {
-				PlayerLogger.Error("Error fetching activity history", "membershipId", membershipId, "characterId", characterId, "error", err)
+				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", map[string]any{
+					logging.MEMBERSHIP_ID: membershipId,
+					"character_id":        characterId,
+					logging.ERROR:         err.Error(),
+				})
 			}
 		}(char.CharacterID)
 	}
@@ -63,16 +81,26 @@ func UpdateActivityHistory(membershipIdStr string) error {
 	for range instanceIds {
 		activityCount++
 	}
-	PlayerLogger.Info("Fetched activities", "membershipId", membershipId, "count", activityCount)
+	logger.Info("ACTIVITIES_FETCHED", map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+		logging.COUNT:         activityCount,
+	})
 
 	// Update the last crawled timestamp
 	err = UpdateHistoryLastCrawled(membershipId)
 	if err != nil {
-		PlayerLogger.Error("Error updating history last crawled", "membershipId", membershipId, "error", err)
+		logger.Warn("HISTORY_LAST_CRAWLED_UPDATE_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 
-	PlayerLogger.Info("Successfully updated activity history", "membershipId", membershipId, "activities", activityCount)
+	logger.Info("ACTIVITY_HISTORY_UPDATE_COMPLETE", map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+		logging.ACTIVITIES:    activityCount,
+		logging.STATUS:        "success",
+	})
 
 	return nil
 }

@@ -12,7 +12,7 @@ CREATE TABLE "clan"."clan" (
     "motto" TEXT NOT NULL,
     "call_sign" TEXT NOT NULL,
     "clan_banner_data" JSONB NOT NULL,
-    "updated_at" TIMESTAMP(3) WITHOUT TIME ZONE NOT NULL
+    "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW()
 );
 
 -- Clan members

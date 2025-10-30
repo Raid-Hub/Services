@@ -3,14 +3,19 @@ package pgcr_processing
 import (
 	"errors"
 	"fmt"
-	"log"
+	"net/http"
 	"raidhub/lib/dto"
 	"raidhub/lib/monitoring"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
 )
 
+var logger = logging.NewLogger("PGCR_PROCESSING_SERVICE")
+
 type PGCRResult int
+
+const RAID_ACTIVITY_MODE = 4
 
 const (
 	Success                PGCRResult = 1
@@ -19,65 +24,74 @@ const (
 	SystemDisabled         PGCRResult = 4
 	InsufficientPrivileges PGCRResult = 5
 	BadFormat              PGCRResult = 6
-	InternalError          PGCRResult = 7
-	DecodingError          PGCRResult = 8
-	ExternalError          PGCRResult = 9
-	RateLimited            PGCRResult = 10
+	// InternalError          PGCRResult = 7  DEPRECATED
+	// DecodingError          PGCRResult = 8  DEPRECATED
+	ExternalError PGCRResult = 9
+	RateLimited   PGCRResult = 10
 )
 
 func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.DestinyPostGameCarnageReport, error) {
 	start := time.Now()
-	resp, httpStatusCode, err := bungie.PGCRClient.GetPGCR(instanceID)
-
-	if err != nil {
-		if httpStatusCode == 403 {
-			return RateLimited, nil, nil, err
-		} else {
-			return ExternalError, nil, nil, err
-		}
+	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
+	if resp.BungieErrorCode > 0 {
+		monitoring.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 	}
-
-	monitoring.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 
 	if !resp.Success {
-		// Handle error responses
-		if httpStatusCode == 404 || resp.BungieErrorCode == 1653 {
-			return NotFound, nil, nil, resp.FormatError("not found")
-		} else if resp.BungieErrorCode == 5 {
-			return SystemDisabled, nil, nil, resp.FormatError("system disabled")
-		} else if resp.BungieErrorCode == 12 {
-			return InsufficientPrivileges, nil, nil, resp.FormatError("blocked")
-		} else if httpStatusCode == 403 {
-			return RateLimited, nil, nil, resp.FormatError("rate limited")
-		} else {
-			return ExternalError, nil, nil, resp.FormatError("unknown error")
+		switch resp.BungieErrorCode {
+		case bungie.SystemDisabled:
+			return SystemDisabled, nil, nil, err
+		case bungie.InsufficientPrivileges:
+			return InsufficientPrivileges, nil, nil, err
+		case bungie.PGCRNotFound:
+			return NotFound, nil, nil, err
+		case bungie.NetworkError:
+			return ExternalError, nil, nil, err
+		default:
+			switch resp.HttpStatusCode {
+			case http.StatusForbidden:
+				return RateLimited, nil, nil, err
+			default:
+				logger.Error("UNEXPECTED_PGCR_ENDPOINT_ERROR", map[string]any{
+					logging.ERROR:       err.Error(),
+					logging.STATUS_CODE: resp.HttpStatusCode,
+					logging.INSTANCE_ID: instanceID,
+				})
+				return ExternalError, nil, nil, err
+			}
 		}
 	}
 
-	if resp.Data.ActivityDetails.Mode != 4 {
+	// Check if this is a raid activity
+	if resp.Data.ActivityDetails.Mode != RAID_ACTIVITY_MODE {
 		return NonRaid, nil, resp.Data, nil
 	}
 
-	pgcr, err := ProcessDestinyReport(resp.Data)
+	pgcr, isExpectedError, err := parsePGCRToInstance(resp.Data)
 
 	if err != nil {
-		log.Println(err)
-		return BadFormat, nil, nil, err
+		if !isExpectedError {
+			logger.Error("PGCR_PARSING_ERROR", map[string]any{
+				logging.ERROR:       err.Error(),
+				logging.INSTANCE_ID: instanceID,
+			})
+		}
+		return BadFormat, nil, nil, fmt.Errorf("pgcr parsing error: %w", err)
 	}
 
 	return Success, pgcr, resp.Data, nil
 }
 
-func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*dto.Instance, error) {
+func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Instance, bool, error) {
 	startDate, err := time.Parse(time.RFC3339, report.Period)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	expectedEntryCount := getStat(report.Entries[0].Values, "playerCount")
 	actualEntryCount := len(report.Entries)
 	if expectedEntryCount >= 0 && actualEntryCount != expectedEntryCount {
-		return nil, fmt.Errorf("malformed pgcr: invalid entry length: %d != %d", actualEntryCount, expectedEntryCount)
+		return nil, true, fmt.Errorf("malformed pgcr: invalid entry length: %d != %d", actualEntryCount, expectedEntryCount)
 	}
 
 	noOnePlayed := true
@@ -88,7 +102,7 @@ func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*dto.Ins
 		}
 	}
 	if noOnePlayed {
-		return nil, errors.New("malformed pgcr: no one had any duration_seconds")
+		return nil, false, errors.New("malformed pgcr: no one had any duration_seconds")
 	}
 
 	completionReason := getStat(report.Entries[0].Values, "completionReason")
@@ -229,7 +243,7 @@ func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*dto.Ins
 
 	fresh, err := isFresh(report, deathless)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	result.Fresh = fresh
 
@@ -239,7 +253,7 @@ func ProcessDestinyReport(report *bungie.DestinyPostGameCarnageReport) (*dto.Ins
 		result.Flawless = new(bool) // false
 	}
 
-	return &result, nil
+	return &result, false, nil
 }
 
 func getStat(values map[string]bungie.DestinyHistoricalStatsValue, key string) int {
@@ -310,7 +324,7 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 
 	start, err := time.Parse(time.RFC3339, pgcr.Period)
 	if err != nil {
-		log.Printf("Error parsing 'period' for %d: %s", pgcr.ActivityDetails.InstanceId, err)
+		logger.Warn("Error parsing 'period'", map[string]any{logging.INSTANCE_ID: pgcr.ActivityDetails.InstanceId, logging.ERROR: err.Error()})
 		return nil, err
 	}
 

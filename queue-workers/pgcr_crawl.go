@@ -4,6 +4,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/instance"
+	"raidhub/lib/utils/logging"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,7 +32,7 @@ func processPgcrCrawl(worker *processing.Worker, message amqp.Delivery) error {
 	instanceIdStr := string(message.Body)
 	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
 	if err != nil {
-		worker.Error("Failed to parse instance ID", "error", err)
+		worker.Error("Failed to parse instance ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 
@@ -39,14 +40,14 @@ func processPgcrCrawl(worker *processing.Worker, message amqp.Delivery) error {
 	exists, err := instance.CheckExists(instanceId)
 	if err == nil {
 		if exists {
-			worker.Info("Instance exists in database", "instanceId", instanceId)
+			worker.Info("INSTANCE_EXISTS_IN_DATABASE", map[string]any{logging.INSTANCE_ID: instanceId})
 		} else {
-			worker.Info("Instance does not exist in database", "instanceId", instanceId)
+			worker.Info("INSTANCE_DOES_NOT_EXIST_IN_DATABASE", map[string]any{logging.INSTANCE_ID: instanceId})
 		}
 	}
 
 	if err != nil {
-		worker.Error("Failed to check PGCR existence", "error", err)
+		worker.Error("FAILED_TO_CHECK_PGCR_EXISTENCE", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

@@ -1,9 +1,9 @@
 package cheat_detection
 
 import (
-	"log"
 	"math"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"raidhub/lib/web/gm_report"
 )
@@ -83,7 +83,10 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 		WHERE membership_id = $1
 	`, membershipId).Scan(&data.AgeInDays, &data.Clears, &data.MembershipType, &data.IconPath, &data.BungieName, &data.CurrentCheatLevel, &data.IsPrivate)
 	if err != nil {
-		log.Fatalf("Error getting player info for %d: %s", membershipId, err)
+		logger.Warn(PLAYER_INFO_ERROR, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return -1, 0, data
 	}
 
@@ -98,17 +101,27 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 			AND membership_id = $1
 	`, membershipId).Scan(&data.FlawlessRatio, &data.LowmanRatio, &data.SoloRatio)
 	if err != nil {
-		log.Fatalf("Error getting ratios for player %d: %s", membershipId, err)
+		logger.Warn(PLAYER_INFO_ERROR, map[string]any{
+			"membership_id":   membershipId,
+			logging.OPERATION: "get_ratios",
+			logging.ERROR:     err.Error(),
+		})
 		return -1, 0, data
 	}
 
-	result, _, err := bungie.Client.GetProfile(data.MembershipType, membershipId, []int{100})
+	result, err := bungie.Client.GetProfile(data.MembershipType, membershipId, []int{100})
 	if err != nil {
-		log.Printf("Error getting profile for player %d: %s", membershipId, err)
+		logger.Warn(PLAYER_PROFILE_ERROR, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return -1, 0, data
 	}
-	if result == nil || !result.Success || result.Data == nil {
-		log.Printf("No profile data returned for player %d", membershipId)
+	if !result.Success || result.Data == nil {
+		logger.Info(PLAYER_NO_DATA, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			"reason":              "no_profile_data",
+		})
 		return -1, 0, data
 	}
 	res := result.Data
@@ -238,7 +251,13 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 	minCheatLevel := GetMinimumCheatLevel(flag, cheaterAccountChance)
 
 	if minCheatLevel > data.CurrentCheatLevel {
-		log.Printf("Upgrading cheat level from %d to %d for player %d %s last seen %s", data.CurrentCheatLevel, minCheatLevel, flag.MembershipId, data.BungieName, data.Profile.DateLastPlayed.UTC().Format("15:04:05"))
+		logger.Info(CHEAT_LEVEL_UPDATED, map[string]any{
+			logging.MEMBERSHIP_ID:  flag.MembershipId,
+			logging.BUNGIE_NAME:    data.BungieName,
+			logging.PREVIOUS_LEVEL: data.CurrentCheatLevel,
+			logging.NEW_LEVEL:      minCheatLevel,
+			logging.LAST_PLAYED:    data.Profile.DateLastPlayed.UTC().Format("15:04:05"),
+		})
 		// Update the player's cheat level in the database
 		_, err := postgres.DB.Exec(`
 			UPDATE player
@@ -247,7 +266,10 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 		`, minCheatLevel, flag.MembershipId)
 
 		if err != nil {
-			log.Fatalf("Error updating cheat level for player %d: %s", flag.MembershipId, err)
+			logger.Warn(CHEAT_LEVEL_UPDATE_ERROR, map[string]any{
+				logging.MEMBERSHIP_ID: flag.MembershipId,
+				logging.ERROR:         err.Error(),
+			})
 		}
 
 		if minCheatLevel == 4 {
@@ -276,7 +298,11 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 			})
 
 			if err != nil {
-				log.Printf("Error sending GM Report webhook for player %d: %s", flag.MembershipId, err)
+				logger.Warn(WEBHOOK_ERROR, map[string]any{
+					"membership_id":   flag.MembershipId,
+					logging.OPERATION: "gm_report_webhook",
+					logging.ERROR:     err.Error(),
+				})
 			}
 		}
 	}

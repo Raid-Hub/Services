@@ -13,7 +13,7 @@ var (
 
 func init() {
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 15 * time.Second,
 	}
 	Client = &BungieClient{
 		httpClient: httpClient,

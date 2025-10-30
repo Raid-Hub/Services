@@ -6,6 +6,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/character"
+	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -31,15 +32,15 @@ func CharacterFillTopic() processing.Topic {
 func processCharacterFill(worker *processing.Worker, message amqp.Delivery) error {
 	var request messages.CharacterFillMessage
 	if err := json.Unmarshal(message.Body, &request); err != nil {
-		worker.Error("Failed to unmarshal character fill request", "error", err)
+		worker.Error("Failed to unmarshal character fill request", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 
 	// Call character fill logic
-	err := character.Fill(request.MembershipId, request.CharacterId)
+	err := character.Fill(request.MembershipId, request.CharacterId, request.InstanceId)
 
 	if err != nil {
-		worker.Error("Failed to fill character", "error", err)
+		worker.Error("Failed to fill character", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

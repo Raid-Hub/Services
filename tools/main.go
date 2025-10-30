@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	activityhistory "raidhub/tools/activity-history-update"
@@ -11,8 +10,6 @@ import (
 	flagrestricted "raidhub/tools/flag-restricted-pgcrs"
 	processpgcr "raidhub/tools/process-single-pgcr"
 	updateskull "raidhub/tools/update-skull-hashes"
-
-	"github.com/joho/godotenv"
 )
 
 var commands = map[string]func(){
@@ -37,12 +34,6 @@ func main() {
 		fmt.Printf("Unknown command: %s\n", cmd)
 		printUsage(commands)
 		os.Exit(1)
-	}
-
-	// load .env
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
 	}
 
 	fn()

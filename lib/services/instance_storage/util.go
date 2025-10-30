@@ -1,6 +1,7 @@
 package instance_storage
 
 import (
+	"database/sql"
 	"fmt"
 	"raidhub/lib/database/postgres"
 	"sync"
@@ -37,6 +38,9 @@ func getActivityInfo(hash uint32) (int, string, string, error) {
 			WHERE hash = $1`,
 		hash).Scan(&cacheEntry.activityId, &cacheEntry.activityName, &cacheEntry.versionName)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, "", "", fmt.Errorf("activity not found for hash %d: %w", hash, err)
+		}
 		return 0, "", "", fmt.Errorf("error finding activity_id for hash %d: %w", hash, err)
 	}
 

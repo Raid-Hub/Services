@@ -1,38 +1,115 @@
 package character
 
 import (
-	"raidhub/lib/utils"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
 
-var CharacterLogger utils.Logger
-
-func init() {
-	CharacterLogger = utils.NewLogger("INSTANCE_CHARACTER_SERVICE")
-}
+var logger = logging.NewLogger("CHARACTER_SERVICE")
+var CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND"
 
 // Fill fetches and fills missing character data
-func Fill(membershipId int64, characterId int64) error {
-	CharacterLogger.Info("Filling character data", "membershipId", membershipId, "characterId", characterId)
+func Fill(membershipId int64, characterId int64, instanceId int64) error {
+	logger.Info("CHARACTER_FILL_STARTED", map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+		logging.CHARACTER_ID:  characterId,
+		logging.INSTANCE_ID:   instanceId,
+	})
+
+	// Get membership type - try common membership types to find the correct one
+	// Try to resolve membership type from DB first
+	var known int
+	var membershipType int
+	_ = postgres.DB.QueryRow("SELECT membership_type FROM player WHERE membership_id = $1", membershipId).Scan(&known)
+	if known == 0 {
+		// Resolve membership type using shared helper (tries known then all viable types)
+		resolvedType, _, err := bungie.ResolveMembershipType(membershipId, nil)
+		if err != nil || resolvedType == 0 {
+			// fail here
+			logger.Error("COULD_NOT_DETERMINE_MEMBERSHIP_TYPE", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.CHARACTER_ID:  characterId,
+				logging.ERROR:         err.Error(),
+			})
+			return err
+		}
+		membershipType = resolvedType
+	} else {
+		membershipType = known
+	}
 
 	// Get character from Bungie API
-	result, _, err := bungie.Client.GetCharacter(2, membershipId, characterId)
+	result, err := bungie.Client.GetCharacter(membershipType, membershipId, characterId)
 	if err != nil {
-		CharacterLogger.Error("Error fetching character", "membershipId", membershipId, "characterId", characterId, "error", err)
+		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
+			logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.CHARACTER_ID:  characterId,
+				logging.REASON:        "character_not_found",
+			})
+			return nil
+		}
+		logger.Error("CHARACTER_FETCH_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.CHARACTER_ID:  characterId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
-	if result == nil || !result.Success || result.Data == nil {
-		CharacterLogger.Warn("Character not found or no data", "membershipId", membershipId, "characterId", characterId)
+	if !result.Success || result.Data == nil {
+		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
+			logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.CHARACTER_ID:  characterId,
+				logging.REASON:        "character_not_found_bungie_error",
+			})
+			return nil
+		}
+		logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.CHARACTER_ID:  characterId,
+			logging.REASON:        "no_api_data",
+		})
 		return nil
 	}
 	character := result.Data
 
 	if character == nil || character.Character.Data == nil {
-		CharacterLogger.Warn("Character not found or no data", "membershipId", membershipId, "characterId", characterId)
+		logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.CHARACTER_ID:  characterId,
+			logging.REASON:        "no_character_data",
+		})
 		return nil
 	}
 
-	CharacterLogger.Info("Successfully fetched character", "characterId", characterId)
+	charData := character.Character.Data
+
+	// Update instance_character table with missing data
+	_, err = postgres.DB.Exec(`
+		UPDATE instance_character
+		SET class_hash = COALESCE(class_hash, $1),
+		    emblem_hash = COALESCE(emblem_hash, $2)
+		WHERE instance_id = $3
+		  AND membership_id = $4
+		  AND character_id = $5
+	`, charData.ClassHash, charData.EmblemHash, instanceId, membershipId, characterId)
+	if err != nil {
+		logger.Error("CHARACTER_UPDATE_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.CHARACTER_ID:  characterId,
+			logging.INSTANCE_ID:   instanceId,
+			logging.ERROR:         err.Error(),
+		})
+		return err
+	}
+
+	logger.Debug("CHARACTER_FILL_COMPLETE", map[string]any{
+		logging.CHARACTER_ID: characterId,
+		logging.INSTANCE_ID:  instanceId,
+		logging.STATUS:       "success",
+	})
 
 	return nil
 }

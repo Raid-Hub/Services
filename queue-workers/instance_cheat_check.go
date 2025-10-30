@@ -4,6 +4,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/cheat_detection"
+	"raidhub/lib/utils/logging"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,14 +32,14 @@ func processInstanceCheatCheck(worker *processing.Worker, message amqp.Delivery)
 	instanceIdStr := string(message.Body)
 	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
 	if err != nil {
-		worker.ErrorF("Failed to parse instance ID: %v", err)
+		worker.Error("Failed to parse instance ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 
 	// Call PGCR cheat check logic
 	err = cheat_detection.CheckCheat(instanceId)
 	if err != nil {
-		worker.ErrorF("Failed to check for cheat instanceId=%d: %v", instanceId, err)
+		worker.Error("Failed to check for cheat", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
 		return err
 	}
 

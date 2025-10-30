@@ -4,13 +4,29 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"raidhub/lib/utils/logging"
 	"time"
 
 	"raidhub/lib/database/postgres"
 
 	"github.com/google/uuid"
 )
+
+// Cheat detection logging constants
+const (
+	CHEAT_CHECK_ERROR        = "CHEAT_CHECK_ERROR"
+	CHEAT_DETECTED           = "CHEAT_DETECTED"
+	PLAYER_INFO_ERROR        = "PLAYER_INFO_ERROR"
+	PLAYER_PROFILE_ERROR     = "PLAYER_PROFILE_ERROR"
+	PLAYER_NO_DATA           = "PLAYER_NO_DATA"
+	CHEAT_LEVEL_UPDATED      = "CHEAT_LEVEL_UPDATED"
+	CHEAT_LEVEL_UPDATE_ERROR = "CHEAT_LEVEL_UPDATE_ERROR"
+	WEBHOOK_ERROR            = "WEBHOOK_ERROR"
+	RATE_LIMITER_ERROR       = "RATE_LIMITER_ERROR"
+	PLAYER_BLACKLISTED       = "PLAYER_BLACKLISTED"
+)
+
+var logger = logging.NewLogger("CHEAT_DETECTION_SERVICE")
 
 func getInstance(instanceId int64) (*Instance, error) {
 	row := postgres.DB.QueryRow(`SELECT 
@@ -179,7 +195,11 @@ func GetAllInstanceFlagsByPlayer(out chan PlayerInstanceFlagStats, versionLike s
 	`, versionLike)
 
 	if err != nil {
-		log.Fatalf("Error querying the database: %s", err)
+		logger.Warn(CHEAT_CHECK_ERROR, map[string]any{
+			logging.OPERATION: "database_query",
+			logging.ERROR:     err.Error(),
+		})
+		panic(err)
 	}
 
 	return rows

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"raidhub/lib/services/instance"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/discord"
 
 	"slices"
@@ -31,7 +31,14 @@ var (
 	workerLatestId   int64
 	workerForce      bool
 	workerMaxRetries int
+
+	logger        = logging.NewLogger("HADES")
+	hadesAlerting *discord.DiscordAlerting
 )
+
+func init() {
+	hadesAlerting = discord.NewDiscordAlerting(env.HadesWebhookURL, logger)
+}
 
 func main() {
 	flag.Parse()
@@ -68,7 +75,7 @@ func main() {
 					panic(err)
 				}
 				missedLogFile.Close()
-				log.Println("No missed PGCRs to process")
+				logger.Info("NO_MISSED_PGCRS_TO_PROCESS", map[string]any{})
 				return
 			}
 			// After moving missedLogPath to processingLogPath, we don't create a new missedLogPath yet
@@ -85,7 +92,7 @@ func main() {
 	}
 	defer logFile.Close()
 
-	log.Printf("Reading missed PGCRs from: %s", processingLogPath)
+	logger.Info("READING_MISSED_PGCRS", map[string]any{logging.PATH: processingLogPath})
 
 	// Create a map to store unique numbers
 	uniqueNumbers := make(map[int64]bool)
@@ -111,24 +118,25 @@ func main() {
 	}
 
 	if *gap && (maxN-minN > 200_000) {
-		log.Fatalf("Gap too large, max: %d, min: %d", maxN, minN)
+		logger.Error("GAP_TOO_LARGE", map[string]any{logging.MAX: maxN, logging.MIN: minN})
 	}
 
 	if *gap && minN > 0 && maxN > 0 {
-		log.Printf("Found %d unique numbers in the file, min: %d, max: %d", len(uniqueNumbers), minN, maxN)
+		logger.Debug("FOUND_UNIQUE_NUMBERS_IN_FILE", map[string]any{logging.COUNT: len(uniqueNumbers), logging.MIN: minN, logging.MAX: maxN})
 		for i := minN - 1000; i <= maxN+1000; i++ {
 			uniqueNumbers[i] = true
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		logger.Warn("DATABASE_QUERY_ERROR", map[string]any{logging.ERROR: err.Error()})
+		panic(err)
 	}
 
 	// postgres.DB is initialized in init()
 	stmnt, err := postgres.DB.Prepare("SELECT instance_id FROM instance INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
 	if err != nil {
-		log.Fatalf("Error preparing statement: %s", err)
+		logger.Error("ERROR_PREPARING_STATEMENT", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer stmnt.Close()
 
@@ -147,9 +155,9 @@ func main() {
 	}
 
 	if *gap {
-		log.Printf("Processing %d PGCRs in the gap", len(numbers))
+		logger.Info("PROCESSING_PGCRS_IN_GAP", map[string]any{logging.COUNT: len(numbers)})
 	} else {
-		log.Printf("Found %d missing PGCRs", len(numbers))
+		logger.Info("FOUND_MISSING_PGCRS", map[string]any{logging.COUNT: len(numbers)})
 	}
 	// Sort the numbers
 	slices.Sort(numbers)
@@ -184,7 +192,7 @@ func main() {
 		workerCount := *numWorkers
 
 		// Start workers
-		log.Printf("Workers starting at %d", firstId)
+		logger.Info("WORKERS_STARTING", map[string]any{logging.FIRST_ID: firstId})
 		wg.Add(workerCount)
 		for i := 0; i < workerCount; i++ {
 			go worker(ch, successes, failures, &wg)
@@ -225,7 +233,7 @@ func main() {
 		if err := os.Remove(processingLogPath); err != nil {
 			panic(err)
 		}
-		log.Println("Temporary file deleted successfully")
+		logger.Debug("TEMPORARY_FILE_DELETED_SUCCESSFULLY", map[string]any{})
 	}
 
 	// Create new empty missedLogPath only if it doesn't exist
@@ -250,7 +258,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 
 	for instanceID := range ch {
 		if !workerForce && instanceID > workerLatestId {
-			log.Printf("PGCR %d is newer than latestId, skipping", instanceID)
+			logger.Debug("PGCR_NEWER_THAN_LATEST_SKIPPING", map[string]any{logging.INSTANCE_ID: instanceID})
 			instance_storage.WriteMissedLog(instanceID)
 			failures <- instanceID
 			continue
@@ -267,33 +275,40 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 			} else if result == pgcr_processing.Success {
 				_, committed, err := instance_storage.StorePGCR(activity, raw)
 				if err != nil {
-					log.Printf("Failed to store PGCR: %v", err)
+					attempt := errors + 1
+					if attempt > workerMaxRetries {
+						logger.Error(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: instanceID,
+							logging.ERROR:   err.Error(),
+							logging.ATTEMPT: attempt})
+					} else {
+						logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error(), logging.ATTEMPT: attempt, logging.RETRIES: workerMaxRetries})
+					}
 					time.Sleep(3 * time.Second)
 					errors++
 					continue
 				} else if committed {
-					log.Printf("Found raid %d", instanceID)
+					logger.Info(instance_storage.STORED_NEW_INSTANCE, map[string]any{logging.INSTANCE_ID: instanceID})
 					successes <- instanceID
 					processed = true
 				} else {
-					log.Printf("Non-raid activity %d", instanceID)
+					logger.Debug("NON_RAID_ACTIVITY", map[string]any{logging.INSTANCE_ID: instanceID})
 					processed = true
 					// Not a raid, successfully processed and ignored
 				}
-			} else if result == pgcr_processing.ExternalError || result == pgcr_processing.InternalError || result == pgcr_processing.DecodingError || result == pgcr_processing.RateLimited {
-				log.Printf("Error fetching instanceId %d: %s", instanceID, err)
+			} else if result == pgcr_processing.ExternalError || result == pgcr_processing.RateLimited {
+				logger.Warn("ERROR_FETCHING_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error()})
 				time.Sleep(5 * time.Second)
 				errors++
 				// continue loop to retry
 			} else {
-				log.Printf("Could not resolve instance id %d: %s", instanceID, err)
+				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error()})
 				instance_storage.WriteMissedLog(instanceID)
 				failures <- instanceID
 				processed = true
 			}
 		}
 		if errors >= workerMaxRetries {
-			log.Printf("Failed to fetch instanceId %d %d+ times, skipping", instanceID, workerMaxRetries)
+			logger.Warn("FAILED_TO_FETCH_INSTANCE_ID_MULTIPLE_TIMES_SKIPPING", map[string]any{logging.INSTANCE_ID: instanceID, logging.RETRIES: workerMaxRetries})
 			instance_storage.WriteMissedLog(instanceID)
 			failures <- instanceID
 		}
@@ -317,9 +332,6 @@ type Gap struct {
 }
 
 func postResults(count int, failed int, found int, minFailed int64, maxFailed int64, gaps []Gap) {
-	// Discord webhook URL
-	webhookURL := env.HadesWebhookURL
-
 	// Message to be sent
 	message := fmt.Sprintf("Info: Processed %d missing PGCR(s). Failed on %d. Added %d to the dataset.", count, failed, found)
 
@@ -345,34 +357,30 @@ func postResults(count int, failed int, found int, minFailed int64, maxFailed in
 		}
 	}
 
-	webhook := discord.Webhook{
-		Embeds: []discord.Embed{{
-			Title: "Processed missing PGCRs",
-			Color: 3447003, // Blue
-			Fields: []discord.Field{{
-				Name:  "Processed",
-				Value: fmt.Sprintf("%d", count),
-			}, {
-				Name:  "Failed On",
-				Value: fmt.Sprintf("%d", failed),
-			}, {
-				Name:  "Added to Dataset",
-				Value: fmt.Sprintf("%d", found),
-			}, {
-				Name:  "Still Missing",
-				Value: gapsStrWebhook,
-			}},
-			Timestamp: time.Now().Format(time.RFC3339),
-			Footer:    discord.CommonFooter,
-		}},
-	}
-	discord.SendWebhook(webhookURL, &webhook)
-	log.Println(message)
+	fields := []discord.Field{{
+		Name:  "Processed",
+		Value: fmt.Sprintf("%d", count),
+	}, {
+		Name:  "Failed On",
+		Value: fmt.Sprintf("%d", failed),
+	}, {
+		Name:  "Added to Dataset",
+		Value: fmt.Sprintf("%d", found),
+	}, {
+		Name:  "Still Missing",
+		Value: gapsStrWebhook,
+	}}
+
+	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{"message": message})
 	if len(gaps) > 0 {
-		log.Printf("Gaps found in the missed log:\n%s", gapsString)
+		logger.Info("GAPS_FOUND_IN_MISSED_LOG", map[string]any{logging.GAPS: gapsString})
 	}
 	if failed > 0 {
-		log.Printf("Min failed on: %d, Max failed on: %d, range: %d", minFailed, maxFailed, maxFailed-minFailed+1)
+		logger.Info("FAILED_RANGE_SUMMARY", map[string]any{
+			logging.MIN_FAILED: minFailed,
+			logging.MAX_FAILED: maxFailed,
+			logging.RANGE:      maxFailed - minFailed + 1,
+		})
 	}
 }
 

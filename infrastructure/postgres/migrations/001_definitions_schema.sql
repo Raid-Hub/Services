@@ -12,10 +12,10 @@ CREATE TABLE "definitions"."activity_definition" (
     "is_sunset" BOOLEAN NOT NULL DEFAULT false,
     "is_raid" BOOLEAN NOT NULL DEFAULT true,
     "path" TEXT NOT NULL,
-    "release_date" TIMESTAMP(0) WITH TIME ZONE NOT NULL,
-    "day_one_end" TIMESTAMP(0) WITH TIME ZONE GENERATED ALWAYS AS ("release_date" AT TIME ZONE 'UTC' + INTERVAL '1 day') STORED,
-    "contest_end" TIMESTAMP(0) WITH TIME ZONE,
-    "week_one_end" TIMESTAMP(0) WITH TIME ZONE,
+    "release_date" TIMESTAMPTZ(0) NOT NULL,
+    "day_one_end" TIMESTAMPTZ(0) GENERATED ALWAYS AS ("release_date" AT TIME ZONE 'UTC' + INTERVAL '1 day') STORED,
+    "contest_end" TIMESTAMPTZ(0),
+    "week_one_end" TIMESTAMPTZ(0),
     "milestone_hash" BIGINT,
     "splash_path" TEXT NOT NULL
 );
@@ -36,7 +36,7 @@ CREATE TABLE "definitions"."activity_version" (
     "activity_id" INTEGER NOT NULL,
     "version_id" INTEGER NOT NULL,
     "is_world_first" BOOLEAN NOT NULL DEFAULT false,
-    "release_date_override" TIMESTAMP(0),
+    "release_date_override" TIMESTAMPTZ(0),
     CONSTRAINT "activity_version_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "definitions"."activity_definition"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "activity_version_version_id_fkey" FOREIGN KEY ("version_id") REFERENCES "definitions"."version_definition"("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -49,12 +49,12 @@ CREATE TABLE "definitions"."season" (
     "short_name" TEXT NOT NULL,
     "long_name" TEXT NOT NULL,
     "dlc" TEXT NOT NULL,
-    "start_date" TIMESTAMP(0) WITH TIME ZONE NOT NULL
+    "start_date" TIMESTAMPTZ(0) NOT NULL
 );
 CREATE INDEX "season_idx_date" ON "definitions"."season"(start_date DESC);
 
 -- Season function
-CREATE OR REPLACE FUNCTION "definitions".get_season(start_date_utc TIMESTAMP WITH TIME ZONE)
+CREATE OR REPLACE FUNCTION "definitions".get_season(start_date_utc TIMESTAMPTZ)
 RETURNS INTEGER AS $$
 DECLARE
     season_id INTEGER;
@@ -206,6 +206,6 @@ CREATE TABLE "definitions"."activity_feat_definition" (
     "icon" TEXT NOT NULL,
     "description_short" TEXT NOT NULL,
     "modifier_power_contribution" INT NOT NULL,
-    "created_at" TIMESTAMP(0) NOT NULL DEFAULT NOW()
+    "created_at" TIMESTAMPTZ(0) NOT NULL DEFAULT NOW()
 );
 

@@ -4,6 +4,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/clan"
+	"raidhub/lib/utils/logging"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,7 +32,7 @@ func processClanCrawl(worker *processing.Worker, message amqp.Delivery) error {
 	groupIdStr := string(message.Body)
 	groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
 	if err != nil {
-		worker.Error("Failed to parse group ID", "error", err)
+		worker.Error("Failed to parse group ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 
@@ -39,7 +40,7 @@ func processClanCrawl(worker *processing.Worker, message amqp.Delivery) error {
 	err = clan.Crawl(groupId)
 
 	if err != nil {
-		worker.Error("Failed to crawl clan", "error", err)
+		worker.Error("Failed to crawl clan", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

@@ -37,7 +37,7 @@ local_resource(
 
 local_resource(
     "atlas",
-    serve_cmd="go run ./apps/atlas/",
+    serve_cmd="go run ./apps/atlas/ --dev",
     resource_deps=["postgres", "rabbitmq", "clickhouse"],
     auto_init=False,
     labels=["core"],
@@ -45,7 +45,7 @@ local_resource(
 
 local_resource(
     "zeus",
-    serve_cmd="go run ./apps/zeus/",
+    serve_cmd="go run ./apps/zeus/ --dev",
     auto_init=False,
     labels=["core"],
 )

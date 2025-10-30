@@ -7,12 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"strings"
 	"sync"
@@ -25,24 +25,26 @@ import (
 var (
 	out      = flag.String("dir", "./", "where to store the sqlite")
 	force    = flag.Bool("f", false, "force the defs to be updated")
-	verbose  = flag.Bool("verbose", false, "log more")
 	fromDisk = flag.Bool("disk", false, "read from disk, not bnet")
+
+	logger = logging.NewLogger("ATHENA")
 )
 
 func main() {
 	flag.Parse()
+
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		logger.Fatal("Error loading .env file", map[string]any{logging.ERROR: err.Error()})
 	}
 
 	var sqlitePath string
 	if !*fromDisk {
-		result, _, err := bungie.Client.GetDestinyManifest()
+		result, err := bungie.Client.GetDestinyManifest()
 		if err != nil {
-			log.Fatal("get manifest: ", err)
+			logger.Warn("get manifest", map[string]any{logging.ERROR: err.Error()})
 		}
-		if result == nil || !result.Success || result.Data == nil {
-			log.Fatal("manifest fetch failed")
+		if !result.Success || result.Data == nil {
+			logger.Warn("manifest fetch failed", map[string]any{})
 		}
 		manifest := result.Data
 
@@ -51,11 +53,11 @@ func main() {
 		sqlitePath = dbFileName + ".sqlite3" // name for the cached file
 
 		if _, err := os.Stat(sqlitePath); os.IsNotExist(err) {
-			log.Printf("Loading new manifest definitions: %s", manifest.Version)
+			logger.Info("Loading new manifest definitions", map[string]any{logging.VERSION: manifest.Version})
 		} else if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error checking manifest file", map[string]any{logging.ERROR: err.Error()})
 		} else {
-			log.Printf("No new manifest definitions")
+			logger.Info("No new manifest definitions", map[string]any{})
 			if !*force {
 				return
 			}
@@ -65,49 +67,43 @@ func main() {
 		zipFileName := dbFileName + ".zip"
 		resp, err := http.Get(fmt.Sprintf("%s?c=%d", dbURL, rand.Int()))
 		if resp.StatusCode != 200 {
-			log.Fatal(fmt.Errorf("invalid status code: %d", resp.StatusCode))
+			logger.Warn("Invalid status code", map[string]any{logging.STATUS_CODE: resp.StatusCode})
 		}
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error downloading manifest", map[string]any{logging.ERROR: err.Error()})
 		}
-		if *verbose {
-			log.Println("Downloaded files")
-		}
+		logger.Debug("Downloaded files", map[string]any{})
 		defer resp.Body.Close()
 
 		// Create the file to save the ZIP
 		zipFile, err := os.Create(zipFileName)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error creating zip file", map[string]any{
+				logging.ERROR: err.Error(),
+			})
 		}
-		if *verbose {
-			log.Println("Created zip file")
-		}
+		logger.Debug("Created zip file", map[string]any{})
 		defer func() {
 			zipFile.Close()
 			err = os.Remove(zipFileName)
 			if err != nil {
-				log.Fatal(err)
+				logger.Warn("Error removing zip file", map[string]any{logging.ERROR: err.Error()})
 			}
-			if *verbose {
-				log.Println("Removed zip file")
-			}
+			logger.Debug("Removed zip file", map[string]any{})
 		}()
 
 		// Write the downloaded content to the ZIP file
 		_, err = io.Copy(zipFile, resp.Body)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error copying response body", map[string]any{logging.ERROR: err.Error()})
 		}
 
 		// Extract the ZIP file
 		zipReader, err := zip.OpenReader(zipFileName)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error opening zip file", map[string]any{logging.ERROR: err.Error()})
 		}
-		if *verbose {
-			log.Println("Opened zip file")
-		}
+		logger.Debug("Opened zip file", map[string]any{})
 		defer zipReader.Close()
 
 		// Extract each file from the ZIP archive
@@ -117,7 +113,7 @@ func main() {
 				// Create directories
 				err = os.MkdirAll(filePath, os.ModePerm)
 				if err != nil {
-					log.Fatal(err)
+					logger.Warn("Error creating directory", map[string]any{logging.ERROR: err.Error()})
 				}
 				continue
 			}
@@ -125,36 +121,36 @@ func main() {
 			// Create the file
 			extractedFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
 			if err != nil {
-				log.Fatal(err)
+				logger.Warn("Error opening extracted file", map[string]any{logging.ERROR: err.Error()})
 			}
 			defer extractedFile.Close()
 
 			// Extract the file
 			zipFile, err := file.Open()
 			if err != nil {
-				log.Fatal(err)
+				logger.Warn("Error opening zip file entry", map[string]any{logging.ERROR: err.Error()})
 			}
 			defer zipFile.Close()
 
 			_, err = io.Copy(extractedFile, zipFile)
 			if err != nil {
-				log.Fatal(err)
+				logger.Warn("Error extracting file", map[string]any{logging.ERROR: err.Error()})
 			}
 		}
-		if *verbose {
-			log.Println("Extracted zip file")
-		}
+		logger.Debug("Extracted zip file", map[string]any{})
 
-		log.Println("Downloaded sqlite3 successfully")
+		logger.Info("Manifest downloaded", map[string]any{
+			logging.FORMAT: "sqlite3",
+			logging.STATUS: "success",
+			logging.SOURCE: "bungie_api",
+		})
 
 		// Rename the SQLite database file to have a recognizable extension
 		err = os.Rename(dbFileName, sqlitePath)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error renaming sqlite file", map[string]any{logging.ERROR: err.Error()})
 		}
-		if *verbose {
-			log.Println("Remame sqlite3 file")
-		}
+		logger.Debug("Renamed sqlite3 file", map[string]any{})
 	} else {
 		var newestModTime time.Time
 
@@ -176,27 +172,23 @@ func main() {
 		})
 
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error walking directory", map[string]any{logging.ERROR: err.Error()})
 		}
 
 		if sqlitePath == "" {
-			log.Fatalf("directory %s is empty", *out)
+			logger.Warn("Directory is empty", map[string]any{logging.DIRECTORY: *out})
 		}
 	}
 
 	definitions, err := sql.Open("sqlite3", sqlitePath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error opening sqlite database", map[string]any{logging.ERROR: err.Error()})
 	}
-	if *verbose {
-		log.Println("Connected to sqlite3")
-	}
+	logger.Debug("Connected to sqlite3", map[string]any{})
 	defer definitions.Close()
 
 	// postgres.DB is initialized in init()
-	if *verbose {
-		log.Println("Connected to postgres")
-	}
+	logger.Debug("Connected to postgres", map[string]any{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -226,16 +218,14 @@ func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, 
 		FROM DestinyInventoryItemDefinition 
 		WHERE json_extract(json, '$.itemType') = 3`)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error querying weapon definitions", map[string]any{logging.ERROR: err.Error()})
 	}
-	if *verbose {
-		log.Println("Scanning definitions")
-	}
+	logger.Debug("Scanning definitions", map[string]any{})
 	defer rows.Close()
 
 	tx, err := postgres.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error beginning transaction", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer tx.Rollback()
 
@@ -243,22 +233,18 @@ func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, 
 		(hash, name, icon_path, element, ammo_type, slot, weapon_type, rarity) 
 		VALUES ($1::bigint, $2, $3, get_element($4), get_ammo_type($5), get_slot($6), get_weapon_type($7), $8)`)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error preparing statement", map[string]any{logging.ERROR: err.Error()})
 	}
-	if *verbose {
-		log.Println("Prepared postgres statement")
-	}
+	logger.Debug("Prepared postgres statement", map[string]any{})
 	defer stmt.Close()
 
-	log.Println("Statement prepared")
+	logger.Info("Database prepared", map[string]any{logging.OPERATION: "weapon_definition_upsert"})
 
 	_, err = tx.ExecContext(ctx, "TRUNCATE TABLE weapon_definition")
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error truncating weapons table", map[string]any{logging.ERROR: err.Error()})
 	}
-	if *verbose {
-		log.Println("Truncated weapons table")
-	}
+	logger.Debug("Truncated weapons table", map[string]any{})
 
 	// Iterate over the rows and process the data
 	for rows.Next() {
@@ -271,25 +257,23 @@ func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, 
 		var weaponType string
 		var rarity string
 		if err := rows.Scan(&hash, &name, &icon, &element, &ammoType, &slot, &weaponType, &rarity); err != nil {
-			log.Fatal(err)
+			logger.Warn("Error scanning weapon row", map[string]any{logging.ERROR: err.Error()})
 		}
 
 		_, err := stmt.ExecContext(ctx, hash, name, icon, element, ammoType, slot, weaponType, rarity)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error inserting weapon", map[string]any{logging.ERROR: err.Error()})
 		}
 
-		if *verbose {
-			log.Printf("Inserted %d: %s", hash, name)
-		}
+		logger.Debug("Inserted weapon", map[string]any{logging.HASH: hash, logging.NAME: name})
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error committing transaction", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	log.Println("Saved weapon definitions")
+	logger.Info("Definitions saved", map[string]any{logging.TABLE: "weapon_definition", logging.STATUS: "complete"})
 }
 
 type FeatData struct {
@@ -308,14 +292,14 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 	// first, get all raid hashes
 	raidHashRows, err := postgres.DB.QueryContext(ctx, `SELECT hash FROM activity_version`)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error querying activity versions", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer raidHashRows.Close()
 	var raidHashes []any
 	for raidHashRows.Next() {
 		var hash uint32
 		if err := raidHashRows.Scan(&hash); err != nil {
-			log.Fatal(err)
+			logger.Warn("Error scanning raid hash", map[string]any{logging.ERROR: err.Error()})
 		}
 		raidHashes = append(raidHashes, hash)
 	}
@@ -350,7 +334,7 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 
 	rows, err := definitions.QueryContext(ctx, query, raidHashes...)
 	if err != nil {
-		log.Fatal(err)
+		logger.Warn("Error querying feat definitions", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer rows.Close()
 
@@ -359,12 +343,10 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 	for rows.Next() {
 		// for now, just log the hash
 		if err := rows.Scan(&feat.Hash, &feat.SkullIdentifierHash, &feat.Name, &feat.Icon, &feat.Description, &feat.DescriptionShort, &feat.ModifierPowerContribution); err != nil {
-			log.Fatal(err)
+			logger.Warn("Error scanning feat row", map[string]any{logging.ERROR: err.Error()})
 		}
 
-		if *verbose {
-			log.Printf("Found selectable skull: %s", feat.Name)
-		}
+		logger.Debug("Found selectable skull", map[string]any{logging.NAME: feat.Name})
 
 		// Insert the feat into the database
 		_, err := postgres.DB.ExecContext(ctx, `INSERT INTO activity_feat_definition 
@@ -378,7 +360,7 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 			modifier_power_contribution = EXCLUDED.modifier_power_contribution`,
 			feat.Hash, feat.SkullIdentifierHash, feat.Name, feat.Icon, feat.Description, feat.DescriptionShort, feat.ModifierPowerContribution)
 		if err != nil {
-			log.Fatal(err)
+			logger.Warn("Error inserting feat definition", map[string]any{logging.ERROR: err.Error()})
 		}
 	}
 }

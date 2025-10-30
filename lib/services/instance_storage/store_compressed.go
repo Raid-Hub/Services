@@ -3,7 +3,7 @@ package instance_storage
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
 
@@ -35,7 +35,7 @@ func StoreRawJSON(tx *sql.Tx, report *bungie.DestinyPostGameCarnageReport) (bool
 	}
 
 	if rowsAdded == 0 {
-		log.Printf("Duplicate raw PGCR: %d", report.ActivityDetails.InstanceId)
+		logger.Debug(DUPLICATE_RAW_PGCR, map[string]any{logging.INSTANCE_ID: report.ActivityDetails.InstanceId})
 		return false, nil
 	}
 

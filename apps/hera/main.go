@@ -5,15 +5,26 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"log"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/clan"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+// Hera logging constants
+const (
+	SERVICE_STARTED       = "SERVICE_STARTED"
+	PLAYERS_SELECTED      = "PLAYERS_SELECTED"
+	PROCESSING_COMPLETE   = "PROCESSING_COMPLETE"
+	DB_OPERATION_ERROR    = "DB_OPERATION_ERROR"
+	LEADERBOARD_REFRESHED = "LEADERBOARD_REFRESHED"
+	PLAYER_GROUPS_FAILED  = "PLAYER_GROUPS_FAILED"
 )
 
 type PlayerTransport struct {
@@ -24,13 +35,20 @@ type PlayerTransport struct {
 var (
 	topPlayers = flag.Int("top", 1500, "number of top players to get")
 	reqs       = flag.Int("reqs", 14, "number of requests to make to bungie concurrently")
+	logger     = logging.NewLogger("HERA")
 )
 
 func main() {
 	flag.Parse()
 
-	log.Println("Starting...")
-	log.Printf("Selecting the top %d players from each leaderboard...", *topPlayers)
+	logger.Info(SERVICE_STARTED, map[string]any{
+		logging.SERVICE: "hera",
+		"purpose":       "leaderboard_maintenance",
+	})
+	logger.Info(PLAYERS_SELECTED, map[string]any{
+		"top_players_count": *topPlayers,
+		logging.OPERATION:   "select_leaderboard_players",
+	})
 
 	// postgres.DB and rabbit.Conn are initialized in init()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -38,7 +56,7 @@ func main() {
 
 	ch, err := rabbit.Conn.Channel()
 	if err != nil {
-		log.Fatalf("Error creating a channel: %s", err)
+		logger.Fatal("Error creating a channel", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer ch.Close()
 
@@ -65,10 +83,10 @@ func main() {
 	WHERE membership_type <> 0 AND membership_type <> 4`, *topPlayers)
 
 	if err != nil {
-		log.Fatalf("Error querying the database: %s", err)
+		logger.Fatal("Error querying the database", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	log.Println("Selected all top players.")
+	logger.Info("Selected all top players.", map[string]any{})
 
 	// Get all groups for each player
 	playerCountPointer := new(int32)
@@ -84,14 +102,14 @@ func main() {
 			for player := range queue {
 				attempts := 0
 				for attempts < 4 {
-					result, _, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
+					result, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
 					if err != nil {
 						// retry
 						attempts++
 						time.Sleep(time.Second * time.Duration(attempts*2))
 						continue
 					}
-					if result == nil || !result.Success || result.Data == nil {
+					if !result.Success || result.Data == nil {
 						break
 					}
 					res := result.Data
@@ -105,7 +123,10 @@ func main() {
 					break
 				}
 				if attempts >= 4 {
-					log.Printf("Failed to get groups for player %d after 4 attempts", player.membershipId)
+					logger.Warn(PLAYER_GROUPS_FAILED, map[string]any{
+						logging.MEMBERSHIP_ID: player.membershipId,
+						logging.ATTEMPT:       4,
+					})
 				}
 
 			}
@@ -113,7 +134,7 @@ func main() {
 	}
 	defer rows.Close()
 
-	log.Println("Grabbing groups for each player...")
+	logger.Info("Grabbing groups for each player...", map[string]any{})
 	for rows.Next() {
 		player := PlayerTransport{}
 		rows.Scan(&player.membershipId, &player.membershipType)
@@ -129,39 +150,39 @@ func main() {
 		return true
 	})
 
-	log.Printf("Found %d clans from %d players.", count, *playerCountPointer)
+	logger.Info("Found clans from players", map[string]any{logging.COUNT: count, logging.PLAYERS: *playerCountPointer})
 
 	groupChannel := make(chan bungie.GroupV2)
 
 	tx, err := postgres.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Fatalf("Error beginning transaction: %s", err)
+		logger.Warn("Error beginning transaction", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer tx.Rollback()
-	log.Println("Beginning transaction...")
+	logger.Info("Beginning transaction...", map[string]any{})
 
 	_, err = tx.ExecContext(ctx, `TRUNCATE TABLE clan_members`)
 	if err != nil {
-		log.Fatalf("Error truncating the clan_members table: %s", err)
+		logger.Warn("Error truncating the clan_members table", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	log.Println("Truncated the clan_members table.")
+	logger.Info("Truncated the clan_members table.", map[string]any{})
 
 	upsertClan, err := tx.PrepareContext(ctx, `INSERT INTO clan (group_id, name, motto, call_sign, clan_banner_data, updated_at) VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (group_id)
 		DO UPDATE SET name = $2, motto = $3, call_sign = $4, clan_banner_data = $5, updated_at = $6`)
 	if err != nil {
-		log.Fatalf("Error preparing the upsert clan statement: %s", err)
+		logger.Warn("Error preparing the upsert clan statement", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer upsertClan.Close()
 
 	insertMember, err := tx.PrepareContext(ctx, `INSERT INTO clan_members (group_id, membership_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`)
 	if err != nil {
-		log.Fatalf("Error preparing the insert member statement: %s", err)
+		logger.Warn("Error preparing the insert member statement", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer insertMember.Close()
 
-	log.Println("Prepared statements for upserting clans and inserting members.")
+	logger.Info("Prepared statements for upserting clans and inserting members.", map[string]any{})
 
 	memberFailurePointer := new(int32)
 	clanMemberCountPointer := new(int32)
@@ -173,12 +194,12 @@ func main() {
 			for group := range groupChannel {
 				clanBannerData, clanName, callSign, motto, err := clan.ParseClanDetails(&group)
 				if err != nil {
-					log.Fatalf("Error parsing clan details: %s", err)
+					logger.Warn("Error parsing clan details", map[string]any{logging.ERROR: err.Error()})
 				}
 
 				_, err = upsertClan.ExecContext(ctx, group.GroupId, clanName, motto, callSign, clanBannerData, time.Now().UTC())
 				if err != nil {
-					log.Fatalf("Error upserting clan %d: %s", group.GroupId, err)
+					logger.Warn("Error upserting clan", map[string]any{logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
 				}
 
 				for page := 1; ; page++ {
@@ -186,15 +207,15 @@ func main() {
 					var results *bungie.SearchResultOfGroupMember
 					attempts := 0
 					for attempts < 4 {
-						result, errorCode, err := bungie.Client.GetMembersOfGroup(group.GroupId, page)
-						if errorCode == 686 { // Group not found
+						result, err := bungie.Client.GetMembersOfGroup(group.GroupId, page)
+						if result.BungieErrorCode == bungie.GroupNotFound {
 							break
 						} else if err != nil {
-							log.Printf("Error getting members of group %d: %s", group.GroupId, err)
+							logger.Info("Error getting members of group", map[string]any{logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
 							attempts++
 							continue
 						}
-						if result == nil || !result.Success || result.Data == nil {
+						if !result.Success || result.Data == nil {
 							break
 						}
 						results = result.Data
@@ -206,17 +227,17 @@ func main() {
 							if err != nil {
 								atomic.AddInt32(memberFailurePointer, 1)
 								if err == sql.ErrNoRows {
-									routing.Publisher.PublishTextMessage(routing.PlayerCrawl, fmt.Sprintf("%d", member.DestinyUserInfo.MembershipId))
+									publishing.PublishTextMessage(ctx, routing.PlayerCrawl, fmt.Sprintf("%d", member.DestinyUserInfo.MembershipId))
 									// if member.LastOnlineStatusChange != 0 {
-									// 	log.Printf("Player %d, last seen %s, is not in the database, sending to player_crawl", member.DestinyUserInfo.MembershipId, time.Unix(member.LastOnlineStatusChange, 0))
+									// 	logger.InfoF("Player %d, last seen %s, is not in the database, sending to player_crawl", member.DestinyUserInfo.MembershipId, time.Unix(member.LastOnlineStatusChange, 0))
 									// }
 								} else {
-									log.Fatalf("Error checking if player %d exists: %s", member.DestinyUserInfo.MembershipId, err)
+									logger.Warn("Error checking if player exists", map[string]any{logging.MEMBERSHIP_ID: member.DestinyUserInfo.MembershipId, logging.ERROR: err.Error()})
 								}
 							} else {
 								_, err := insertMember.ExecContext(ctx, group.GroupId, member.DestinyUserInfo.MembershipId)
 								if err != nil {
-									log.Fatalf("Error inserting member %d into clan %d: %s", member.DestinyUserInfo.MembershipId, group.GroupId, err)
+									logger.Warn("Error inserting member into clan", map[string]any{logging.MEMBERSHIP_ID: member.DestinyUserInfo.MembershipId, logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
 
 								}
 							}
@@ -234,7 +255,7 @@ func main() {
 	}
 
 	// Begin processing the clans
-	log.Println("Processing clans...")
+	logger.Info("Processing clans...", map[string]any{})
 	groupSet.Range(func(_, group any) bool {
 		groupChannel <- group.(bungie.GroupV2)
 		return true
@@ -243,16 +264,20 @@ func main() {
 	wg.Wait()
 
 	if err := tx.Commit(); err != nil {
-		log.Fatalf("Error committing transaction: %s", err)
+		logger.Warn("Error committing transaction", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	log.Printf("Inserted %d/%d clan members, failed on %d", *clanMemberCountPointer-*memberFailurePointer, *clanMemberCountPointer, *memberFailurePointer)
+	logger.Info("Inserted clan members", map[string]any{
+		logging.SUCCESSFUL: *clanMemberCountPointer - *memberFailurePointer,
+		logging.TOTAL:      *clanMemberCountPointer,
+		logging.FAILED:     *memberFailurePointer,
+	})
 
-	log.Println("Refreshing leaderboards...")
+	logger.Info("Refreshing leaderboards...", map[string]any{})
 	_, err = postgres.DB.ExecContext(ctx, `REFRESH MATERIALIZED VIEW clan_leaderboard WITH DATA`)
 	if err != nil {
-		log.Fatalf("Error refreshing the clan_leaderboard materialized view: %s", err)
+		logger.Warn("Error refreshing the clan_leaderboard materialized view", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	log.Println("Done.")
+	logger.Info("Done.", map[string]any{})
 }

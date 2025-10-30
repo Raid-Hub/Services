@@ -1,6 +1,9 @@
 package bungie
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type BungieResponse[T any] struct {
 	ErrorCode       int    `json:"ErrorCode"`
@@ -15,6 +18,10 @@ type BungieError struct {
 	Message         string `json:"Message"`
 	ErrorStatus     string `json:"ErrorStatus"`
 	ThrottleSeconds int    `json:"ThrottleSeconds"`
+}
+
+func (b *BungieError) Error() string {
+	return fmt.Sprintf("%s [%d]: %s", b.ErrorStatus, b.ErrorCode, b.Message)
 }
 
 type DestinyUserInfo struct {

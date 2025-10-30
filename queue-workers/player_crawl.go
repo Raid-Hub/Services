@@ -4,6 +4,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
+	"raidhub/lib/utils/logging"
 	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,20 +32,26 @@ func processPlayerCrawl(worker *processing.Worker, message amqp.Delivery) error 
 	membershipIdStr := string(message.Body)
 	membershipId, err := strconv.ParseInt(membershipIdStr, 10, 64)
 	if err != nil {
-		worker.Error("Failed to parse membership ID", "error", err)
+		worker.Warn("MEMBERSHIP_ID_PARSE_ERROR", map[string]any{
+			logging.ERROR: err.Error(),
+		})
 		return err
 	}
-
-	worker.Info("Processing player request", "membershipId", membershipId)
 
 	// Call player crawl logic
 	err = player.Crawl(worker.Config.Context, membershipId)
 
 	if err != nil {
-		worker.Error("Failed to crawl player", "error", err)
+		worker.Warn("PLAYER_CRAWL_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 
-	worker.Info("Successfully crawled player")
+	worker.Debug("PLAYER_CRAWL_COMPLETE", map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+		logging.STATUS:        "success",
+	})
 	return nil
 }

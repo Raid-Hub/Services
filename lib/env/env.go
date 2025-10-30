@@ -20,7 +20,6 @@ var (
 	RabbitMQPort     string
 
 	// ClickHouse
-	ClickHouseHost     string
 	ClickHouseUser     string
 	ClickHousePassword string
 	ClickHouseDB       string
@@ -45,6 +44,13 @@ var (
 	// Other
 	IsContestWeekend      bool
 	MissedPGCRLogFilePath string
+
+	// Prometheus API (for querying metrics, not the exporter)
+	PrometheusPort string
+
+	// Metrics export ports (for Prometheus scraping)
+	AtlasMetricsPort  string
+	HermesMetricsPort string
 )
 
 var envIssues []string
@@ -65,7 +71,6 @@ func init() {
 	RabbitMQPort = requireEnv("RABBITMQ_PORT")
 
 	// ClickHouse
-	ClickHouseHost = getEnv("CLICKHOUSE_HOST") // Optional, defaults to localhost
 	ClickHouseUser = requireEnv("CLICKHOUSE_USER")
 	ClickHousePassword = requireEnv("CLICKHOUSE_PASSWORD")
 	ClickHouseDB = requireEnv("CLICKHOUSE_DB")
@@ -90,6 +95,13 @@ func init() {
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
 	MissedPGCRLogFilePath = requireEnv("MISSED_PGCR_LOG_FILE_PATH")
+
+	// Prometheus API (required)
+	PrometheusPort = requireEnv("PROMETHEUS_PORT")
+
+	// Metrics export ports (for Prometheus scraping)
+	AtlasMetricsPort = requireEnv("ATLAS_METRICS_PORT")
+	HermesMetricsPort = requireEnv("HERMES_METRICS_PORT")
 
 	if len(envIssues) > 0 {
 		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))

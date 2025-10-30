@@ -5,15 +5,35 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"raidhub/lib/env"
 )
 
 var logFilePath string
 
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to get user home directory: %s", err))
+		}
+		if path == "~" {
+			return homeDir
+		}
+		// Handle ~/path and ~/path formats
+		if len(path) > 1 && path[1] == '/' {
+			return filepath.Join(homeDir, path[2:])
+		}
+		// Handle ~user format (if needed in future)
+		return filepath.Join(homeDir, path[1:])
+	}
+	return path
+}
+
 func init() {
-	// Get log file path from environment variable
-	logFilePath = env.MissedPGCRLogFilePath
+	// Get log file path from environment variable (supports ~ expansion if needed)
+	logFilePath = expandPath(env.MissedPGCRLogFilePath)
 	// Ensure parent directories exist
 	logDir := filepath.Dir(logFilePath)
 	if err := os.MkdirAll(logDir, 0755); err != nil {

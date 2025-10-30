@@ -4,8 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"raidhub/lib/utils/logging"
 	"time"
+)
+
+// PostgreSQL query watch constants
+const (
+	QUERY_WATCH_STARTED = "QUERY_WATCH_STARTED"
+	QUERY_WATCH_ERROR   = "QUERY_WATCH_ERROR"
+	QUERY_PROGRESS      = "QUERY_PROGRESS"
+	QUERY_COMPLETED     = "QUERY_COMPLETED"
 )
 
 // progressData is generic struct for progress info we log.
@@ -30,7 +38,11 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("%s monitoring stopped after %s", label, time.Since(start))
+				logger.Info(QUERY_COMPLETED, map[string]any{
+					logging.OPERATION: label,
+					logging.DURATION:  time.Since(start).String(),
+					"status":          "stopped",
+				})
 				return
 			case <-ticker.C:
 				row := DB.QueryRowContext(ctx, query, args...)
@@ -41,7 +53,10 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 					continue
 				}
 				if err != nil {
-					log.Printf("%s monitoring error: %v", label, err)
+					logger.Warn(QUERY_WATCH_ERROR, map[string]any{
+						logging.OPERATION: label,
+						logging.ERROR:     err.Error(),
+					})
 					return
 				}
 
@@ -49,18 +64,40 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 				switch {
 				case progress.TuplesDone != progress.TuplesTotal:
 					percent = float64(progress.TuplesDone) / float64(progress.TuplesTotal) * 100
-					log.Printf("%s: phase=%s, progress=%.1f%% (%d/%d tuples processed)",
-						label, progress.Phase, percent, progress.TuplesDone, progress.TuplesTotal)
+					logger.Info(QUERY_PROGRESS, map[string]any{
+						logging.OPERATION:        label,
+						logging.PHASE:            progress.Phase,
+						logging.PROGRESS_PERCENT: percent,
+						"tuples_done":            progress.TuplesDone,
+						"tuples_total":           progress.TuplesTotal,
+						"unit":                   "tuples",
+					})
 				case progress.BlocksDone != progress.BlocksTotal:
 					percent = float64(progress.BlocksDone) / float64(progress.BlocksTotal) * 100
-					log.Printf("%s: phase=%s, progress=%.1f%% (%d/%d blocks scanned)",
-						label, progress.Phase, percent, progress.BlocksDone, progress.BlocksTotal)
+					logger.Info(QUERY_PROGRESS, map[string]any{
+						logging.OPERATION:        label,
+						logging.PHASE:            progress.Phase,
+						logging.PROGRESS_PERCENT: percent,
+						"blocks_done":            progress.BlocksDone,
+						"blocks_total":           progress.BlocksTotal,
+						"unit":                   "blocks",
+					})
 				case progress.PartitionsDone != progress.PartitionsTotal:
 					percent = float64(progress.PartitionsDone) / float64(progress.PartitionsTotal) * 100
-					log.Printf("%s: phase=%s, progress=%.1f%% (%d/%d partitions processed)",
-						label, progress.Phase, percent, progress.PartitionsDone, progress.PartitionsTotal)
+					logger.Info(QUERY_PROGRESS, map[string]any{
+						logging.OPERATION:        label,
+						logging.PHASE:            progress.Phase,
+						logging.PROGRESS_PERCENT: percent,
+						logging.PARTITIONS_DONE:  progress.PartitionsDone,
+						logging.PARTITIONS_TOTAL: progress.PartitionsTotal,
+						logging.UNIT:             "partitions",
+					})
 				default:
-					log.Printf("%s: phase=%s (progress not measured)", label, progress.Phase)
+					logger.Info(QUERY_PROGRESS, map[string]any{
+						logging.OPERATION:         label,
+						"phase":                   progress.Phase,
+						logging.PROGRESS_MEASURED: false,
+					})
 				}
 			}
 		}

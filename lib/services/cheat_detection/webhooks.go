@@ -3,9 +3,9 @@ package cheat_detection
 import (
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"raidhub/lib/env"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"raidhub/lib/web/discord"
 	"strings"
@@ -90,7 +90,10 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		log.Fatalf("Failed to wait for rate limiter: %v", err)
+		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+			logging.OPERATION: "webhook_rate_limit",
+			logging.ERROR:     err.Error(),
+		})
 	}
 
 	discord.SendWebhook(getCheatCheckWebhookUrl(), &webhook)
@@ -134,7 +137,10 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 	}
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		log.Fatalf("Failed to wait for rate limiter: %v", err)
+		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+			logging.OPERATION: "webhook_rate_limit",
+			logging.ERROR:     err.Error(),
+		})
 	}
 
 	discord.SendWebhook(getCheatCheckWebhookUrl(), &webhook)
@@ -145,7 +151,10 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 	ctx := context.Background()
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		log.Fatalf("Failed to wait for rate limiter: %v", err)
+		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+			logging.OPERATION: "webhook_rate_limit",
+			logging.ERROR:     err.Error(),
+		})
 	}
 
 	url := fmt.Sprintf("https://raidhub.io/profile/%d", flag.MembershipId)
@@ -191,15 +200,15 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 		}},
 	}
 
-	log.Printf("Blacklisted player %d: %s with clears %d, age %.0f days, chance %.3f, flags [%s], class-A flags %d",
-		flag.MembershipId,
-		bungieName,
-		clears,
-		ageInDays,
-		cheaterAccountChance,
-		strings.Join(GetCheaterAccountFlagsStrings(flags), ", "),
-		flag.FlagsA,
-	)
+	logger.Info(PLAYER_BLACKLISTED, map[string]any{
+		logging.MEMBERSHIP_ID: flag.MembershipId,
+		logging.BUNGIE_NAME:   bungieName,
+		logging.CLEARS:        clears,
+		logging.AGE_DAYS:      ageInDays,
+		logging.CHEAT_CHANCE:  cheaterAccountChance,
+		logging.FLAGS:         strings.Join(GetCheaterAccountFlagsStrings(flags), ", "),
+		logging.CLASS_A_FLAGS: flag.FlagsA,
+	})
 
 	discord.SendWebhook(getNemesisWebhookUrl(), &webhook)
 }

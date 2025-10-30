@@ -4,6 +4,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
+	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -33,7 +34,10 @@ func processActivityHistory(worker *processing.Worker, message amqp.Delivery) er
 	err := player.UpdateActivityHistory(membershipIdStr)
 
 	if err != nil {
-		worker.Error("Failed to process activity history", "error", err)
+		worker.Error("ACTIVITY_HISTORY_PROCESSING_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipIdStr,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 

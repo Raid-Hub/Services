@@ -2,8 +2,11 @@ package instance
 
 import (
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils/logging"
 	"time"
 )
+
+var logger = logging.NewLogger("INSTANCE_SERVICE")
 
 func CheckExists(instanceId int64) (bool, error) {
 	var exists bool
@@ -11,7 +14,10 @@ func CheckExists(instanceId int64) (bool, error) {
 		SELECT EXISTS(SELECT 1 FROM instance WHERE instance_id = $1)
 	`, instanceId).Scan(&exists)
 	if err != nil {
-		InstanceLogger.Error("Error checking instance existence", "instanceId", instanceId, "error", err)
+		logger.Error("INSTANCE_EXISTS_CHECK_ERROR", map[string]any{
+			logging.INSTANCE_ID: instanceId,
+			logging.ERROR:       err.Error(),
+		})
 		return false, err
 	}
 
@@ -23,7 +29,9 @@ func GetLatestInstanceId(buffer int64) (int64, error) {
 	var latestID int64
 	err := postgres.DB.QueryRow(`SELECT instance_id FROM instance WHERE instance_id < 100000000000 ORDER BY instance_id DESC LIMIT 1`).Scan(&latestID)
 	if err != nil {
-		InstanceLogger.Error("Error getting latest instance id", "error", err)
+		logger.Warn("LATEST_INSTANCE_ID_ERROR", map[string]any{
+			logging.ERROR: err.Error(),
+		})
 		return 0, err
 	} else {
 		return latestID - buffer, nil
@@ -36,7 +44,9 @@ func GetLatestInstance() (int64, time.Time, error) {
 	var dateCompleted time.Time
 	err := postgres.DB.QueryRow(`SELECT instance_id, date_completed FROM instance WHERE instance_id < 100000000000 ORDER BY instance_id DESC LIMIT 1`).Scan(&latestID, &dateCompleted)
 	if err != nil {
-		InstanceLogger.Error("Error getting latest instance", "error", err)
+		logger.Warn("LATEST_INSTANCE_ERROR", map[string]any{
+			logging.ERROR: err.Error(),
+		})
 		return 0, time.Time{}, err
 	} else {
 		return latestID, dateCompleted, nil

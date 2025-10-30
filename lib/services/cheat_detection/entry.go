@@ -2,10 +2,10 @@ package cheat_detection
 
 import (
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
 )
 
-var CheatCheckLogger = utils.NewLogger("CHEAT_CHECK_SERVICE")
+// Logger is declared in database_layer.go
 
 const (
 	CheatCheckVersion = "beta-2.1.13"
@@ -20,7 +20,11 @@ const (
 func CheckForCheats(instanceId int64) (*Instance, ResultTuple, []ResultTuple, bool, error) {
 	instance, err := getInstance(instanceId)
 	if err != nil {
-		CheatCheckLogger.Error("Error getting instance", "instanceId", instanceId, "error", err)
+		logger.Warn(CHEAT_CHECK_ERROR, map[string]any{
+			logging.INSTANCE_ID: instanceId,
+			logging.OPERATION:   "get_instance",
+			logging.ERROR:       err.Error(),
+		})
 		return nil, ResultTuple{}, nil, false, err
 	}
 

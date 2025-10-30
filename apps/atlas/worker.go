@@ -1,23 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 
 	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
+	"raidhub/lib/web/discord"
 )
 
-func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
+// Run starts the worker processing loop
+func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 	defer wg.Done()
-
-	logger := utils.NewLogger("Atlas::Worker")
 
 	randomVariation := retryDelayTime / 3
 
@@ -28,10 +30,9 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 		i := 0
 
 		for {
-			reqStartTime := time.Now()
 			result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceID)
 			if err != nil && result != pgcr_processing.NotFound {
-				logger.ErrorF("PGCR processing error: %v", err)
+				w.LogPGCRError(err, instanceID, i+1)
 			}
 
 			statusStr := fmt.Sprintf("%d", result)
@@ -43,7 +44,9 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 			if result == pgcr_processing.NonRaid {
 				startDate, err := time.Parse(time.RFC3339, raw.Period)
 				if err != nil {
-					logger.ErrorF("Failed to parse time: %v", err)
+					w.Error("Failed to parse time", map[string]any{
+						logging.ERROR: err.Error(),
+					})
 					continue
 				}
 				endDate := pgcr_processing.CalculateDateCompleted(startDate, raw.Entries[0])
@@ -56,20 +59,26 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 			} else if result == pgcr_processing.Success {
 				// Publish to queue for async storage
 				storeMessage := messages.NewPGCRStoreMessage(activity, raw)
-				err := routing.Publisher.PublishJSONMessage(routing.InstanceStore, storeMessage)
+				err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
 				if err != nil {
 					errCount++
-					logger.ErrorF("Failed to publish PGCR store message: %v", err)
+					w.Warn("FAILED_TO_PUBLISH_INSTANCE_STORE_MESSAGE", map[string]any{
+						logging.ERROR: err.Error(),
+					})
 					time.Sleep(5 * time.Second)
 				} else {
 					endTime := time.Now()
-					workerTime := endTime.Sub(startTime).Milliseconds()
+					workerTime := endTime.Sub(startTime)
 					lag := time.Since(activity.DateCompleted)
 					if lag >= 0 {
 						monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
-						reqTime := endTime.Sub(reqStartTime)
-						logger.InfoF("Added PGCR instanceId=%d attempts=%d workerTime=%dms reqTime=%dms lag=%.0fs", instanceID, i, workerTime, reqTime.Milliseconds(), lag.Seconds())
 					}
+					w.Info("PUBLISHED_INSTANCE", map[string]any{
+						logging.INSTANCE_ID: instanceID,
+						logging.ATTEMPT:     i + 1,
+						"duration":          fmt.Sprintf("%dms", workerTime.Milliseconds()),
+						"lag":               discord.FormatDuration(lag.Seconds()),
+					})
 					break
 				}
 			} else if result == pgcr_processing.NotFound {
@@ -79,18 +88,12 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 				time.Sleep(45 * time.Second)
 				continue
 			} else if result == pgcr_processing.InsufficientPrivileges {
-				routing.Publisher.PublishJSONMessage(routing.PGCRRetry, fmt.Sprintf("%d", instanceID))
+				publishing.PublishJSONMessage(context.Background(), routing.PGCRRetry, fmt.Sprintf("%d", instanceID))
 				break
-			} else if result == pgcr_processing.InternalError || result == pgcr_processing.DecodingError {
-				errCount++
-				time.Sleep(time.Duration(5*errCount*errCount) * time.Second)
-			} else if result == pgcr_processing.RateLimited {
-				errCount++
-				time.Sleep(time.Duration(30) * time.Second)
 			} else if result == pgcr_processing.BadFormat || result == pgcr_processing.ExternalError {
 				instance_storage.WriteMissedLog(instanceID)
 				if errCount > 0 {
-					offloadChannel <- instanceID
+					w.offloadChannel <- instanceID
 					break
 				} else {
 					errCount++
@@ -100,7 +103,7 @@ func Worker(wg *sync.WaitGroup, ch chan int64, offloadChannel chan int64) {
 			// If we have not found the instance id after some time
 			if notFoundCount > 3 || errCount > 2 {
 				instance_storage.WriteMissedLog(instanceID)
-				offloadChannel <- instanceID
+				w.offloadChannel <- instanceID
 				break
 			}
 

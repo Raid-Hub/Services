@@ -1,7 +1,6 @@
 package migrations
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,7 +40,7 @@ func ReadMigrationFile(directory, filename string) (string, error) {
 
 // RunMigrations is a generic migration runner that handles the common logic
 func RunMigrations(config MigrationConfig) error {
-	log.Printf("Found %d migration files in %s", len(config.MigrationFiles), config.Directory)
+	MigrationsLogger.InfoF("Found %d migration files in %s", len(config.MigrationFiles), config.Directory)
 
 	// Query applied migrations
 	appliedMigrations, err := config.GetAppliedMigrations()
@@ -53,11 +52,11 @@ func RunMigrations(config MigrationConfig) error {
 	appliedCount := 0
 	for _, filename := range config.MigrationFiles {
 		if appliedMigrations[filename] {
-			log.Printf("✓ %s (already applied)", filename)
+			MigrationsLogger.InfoF("✓ %s (already applied)", filename)
 			continue
 		}
 
-		log.Printf("→ Applying migration: %s", filename)
+		MigrationsLogger.InfoF("→ Applying migration: %s", filename)
 
 		migrationSQL, err := ReadMigrationFile(config.Directory, filename)
 		if err != nil {
@@ -69,14 +68,14 @@ func RunMigrations(config MigrationConfig) error {
 			return err
 		}
 
-		log.Printf("✓ Applied %s", filename)
+		MigrationsLogger.InfoF("✓ Applied %s", filename)
 		appliedCount++
 	}
 
 	if appliedCount == 0 {
-		log.Println("\n✓ Database is up to date")
+		MigrationsLogger.Info("\n✓ Database is up to date")
 	} else {
-		log.Printf("\n✓ Applied %d new migration(s)", appliedCount)
+		MigrationsLogger.InfoF("\n✓ Applied %d new migration(s)", appliedCount)
 	}
 
 	return nil

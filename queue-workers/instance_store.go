@@ -6,6 +6,7 @@ import (
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -31,23 +32,32 @@ func InstanceStoreTopic() processing.Topic {
 func processInstanceStore(worker *processing.Worker, message amqp.Delivery) error {
 	var msg messages.PGCRStoreMessage
 	if err := json.Unmarshal(message.Body, &msg); err != nil {
-		worker.ErrorF("Failed to unmarshal PGCR store message: %v", err)
+		worker.Error("FAILED_TO_UNMARSHAL_PGCR_STORE_MESSAGE", map[string]any{
+			logging.ERROR: err.Error(),
+		})
 		return err
 	}
 
-	worker.InfoF("Processing PGCR store instanceId=%d", msg.Activity.InstanceId)
+	worker.Debug("PROCESSING_INSTANCE_STORE", map[string]any{logging.INSTANCE_ID: msg.Activity.InstanceId})
 
 	// Store the PGCR using the orchestrator
 	lag, isNew, err := instance_storage.StorePGCR(&msg.Activity, &msg.Raw)
 	if err != nil {
-		worker.ErrorF("Failed to store PGCR instanceId=%d: %v", msg.Activity.InstanceId, err)
-		return err
+		worker.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: msg.Activity.InstanceId, logging.ERROR: err.Error()})
+		// Write to missed log for storage failures - if successful, ACK the message since it's tracked
+		instance_storage.WriteMissedLog(msg.Activity.InstanceId)
+		return nil
 	}
 
 	if isNew {
-		worker.InfoF("Successfully stored new PGCR instanceId=%d lag=%v", msg.Activity.InstanceId, lag)
+		worker.Info(instance_storage.STORED_NEW_INSTANCE, map[string]any{
+			logging.INSTANCE_ID: msg.Activity.InstanceId,
+			logging.LAG:         lag,
+		})
 	} else {
-		worker.InfoF("Duplicate PGCR instanceId=%d", msg.Activity.InstanceId)
+		worker.Debug(instance_storage.DUPLICATE_INSTANCE, map[string]any{
+			logging.INSTANCE_ID: msg.Activity.InstanceId,
+		})
 	}
 
 	return nil

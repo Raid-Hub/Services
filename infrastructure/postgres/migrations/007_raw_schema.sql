@@ -16,5 +16,5 @@ CREATE SCHEMA IF NOT EXISTS "raw";
 CREATE TABLE "raw"."pgcr" (
     "instance_id" BIGINT NOT NULL PRIMARY KEY,
     "data" BYTEA NOT NULL,
-    "date_crawled" TIMESTAMP DEFAULT NOW()
+    "date_crawled" TIMESTAMPTZ DEFAULT NOW()
 );

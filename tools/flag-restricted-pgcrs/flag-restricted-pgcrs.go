@@ -1,18 +1,20 @@
 package flagrestricted
 
 import (
-	"log"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/services/cheat_detection"
 	"raidhub/lib/services/pgcr_processing"
+	"raidhub/lib/utils"
 )
 
 const cheatCheckVersion = ""
 
+var flagRestrictedLogger = utils.NewLogger("FLAG_RESTRICTED_TOOL")
+
 func FlagRestrictedPGCRs() {
 	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
 	if err != nil {
-		log.Fatal("Error querying instance table:", err)
+		flagRestrictedLogger.ErrorF("Error querying instance table:", err)
 	}
 	defer rows.Close()
 
@@ -22,7 +24,7 @@ func FlagRestrictedPGCRs() {
 		ON CONFLICT DO NOTHING`,
 	)
 	if err != nil {
-		log.Fatal("Error preparing insert statement:", err)
+		flagRestrictedLogger.ErrorF("Error preparing insert statement:", err)
 	}
 	defer stmnt.Close()
 
@@ -31,7 +33,7 @@ func FlagRestrictedPGCRs() {
         ON CONFLICT (instance_id)
 		DO UPDATE SET report_source = 'Manual', cheat_check_version = $2, reason = $3, created_at = NOW()`)
 	if err != nil {
-		log.Fatal("Error preparing blacklist insert statement:", err)
+		flagRestrictedLogger.ErrorF("Error preparing blacklist insert statement:", err)
 	}
 	defer stmnt2.Close()
 
@@ -41,7 +43,7 @@ func FlagRestrictedPGCRs() {
 	for rows.Next() {
 		var instanceId int64
 		if err := rows.Scan(&instanceId); err != nil {
-			log.Fatalln("Error scanning instance_id:", err)
+			flagRestrictedLogger.ErrorFln("Error scanning instance_id:", err)
 		}
 
 		result, _, _, _ := pgcr_processing.FetchAndProcessPGCR(instanceId)
@@ -49,11 +51,11 @@ func FlagRestrictedPGCRs() {
 
 		switch result {
 		case pgcr_processing.InsufficientPrivileges:
-			log.Printf("Instance %d is restricted", instanceId)
+			flagRestrictedLogger.InfoF("Instance %d is restricted", instanceId)
 		case pgcr_processing.Success:
-			log.Printf("Instance %d is not restricted", instanceId)
+			flagRestrictedLogger.InfoF("Instance %d is not restricted", instanceId)
 		default:
-			log.Printf("Instance %d returned unexpected result: %d", instanceId, result)
+			flagRestrictedLogger.InfoF("Instance %d returned unexpected result: %d", instanceId, result)
 			result, _, _, _ = pgcr_processing.FetchAndProcessPGCR(instanceId)
 		}
 
@@ -61,18 +63,18 @@ func FlagRestrictedPGCRs() {
 			badApples++
 			_, err = stmnt.Exec(instanceId, cheatCheckVersion, cheat_detection.RestrictedPGCR|cheat_detection.DesertPerpetual, 1.0)
 			if err != nil {
-				log.Printf("Error flagging instance %d: %s", instanceId, err)
+				flagRestrictedLogger.InfoF("Error flagging instance %d: %s", instanceId, err)
 			} else {
-				log.Printf("Flagged instance %d as restricted", instanceId)
+				flagRestrictedLogger.InfoF("Flagged instance %d as restricted", instanceId)
 			}
 			_, err = stmnt2.Exec(instanceId, cheatCheckVersion, "Restricted PGCR")
 			if err != nil {
-				log.Printf("Error blacklisting instance %d: %s", instanceId, err)
+				flagRestrictedLogger.InfoF("Error blacklisting instance %d: %s", instanceId, err)
 			} else {
-				log.Printf("Blacklisted instance %d as restricted PGCR", instanceId)
+				flagRestrictedLogger.InfoF("Blacklisted instance %d as restricted PGCR", instanceId)
 			}
 		}
 	}
 
-	log.Printf("Total instances checked: %d, Restricted instances flagged: %d", total, badApples)
+	flagRestrictedLogger.InfoF("Total instances checked: %d, Restricted instances flagged: %d", total, badApples)
 }

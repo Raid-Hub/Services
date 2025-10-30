@@ -2,58 +2,87 @@ package player
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
 
 // Crawl fetches and processes player data
 func Crawl(ctx context.Context, membershipId int64) error {
-	PlayerLogger.Info("Starting player crawl", "membershipId", membershipId)
-
 	// Get player from database
 	p, err := GetPlayer(membershipId)
 	if err != nil {
-		PlayerLogger.Error("Error getting player", "membershipId", membershipId, "error", err)
+		logger.Warn("PLAYER_GET_ERROR", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
 		return err
 	}
 
 	// If player doesn't exist or needs update, fetch from Bungie API
 	if p == nil || needsUpdate(*p) {
-		// Fetch profile from Bungie API (membership type 2 is Xbox)
-		// Component 100 is for basic profile info
-		result, _, err := bungie.Client.GetProfile(2, membershipId, []int{100})
+		var result bungie.BungieHttpResult[bungie.DestinyProfileResponse]
+
+		var knownType *int
+		if p != nil && p.MembershipType != nil {
+			knownType = p.MembershipType
+		}
+		_, result, err = bungie.ResolveMembershipType(membershipId, knownType)
+
 		if err != nil {
-			PlayerLogger.Error("Error fetching profile from Bungie", "membershipId", membershipId, "error", err)
+			logger.Warn("BUNGIE_PROFILE_FETCH_ERROR", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.ERROR:         err.Error(),
+			})
 			return err
 		}
-		if result == nil || !result.Success || result.Data == nil {
-			PlayerLogger.Error("No profile data returned from Bungie", "membershipId", membershipId)
-			return err
+		if !result.Success || result.Data == nil {
+			logger.Warn("NO_PROFILE_DATA", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.REASON:        "bungie_api_empty_response",
+			})
+			if result.BungieErrorCode != bungie.Success {
+				return fmt.Errorf("bungie error: %s [%d]", result.BungieErrorStatus, result.BungieErrorCode)
+			}
+			return fmt.Errorf("bungie api returned unsuccessful response")
 		}
 		profile := result.Data
 
 		// Extract user info from profile
 		if profile.Profile.Data == nil {
-			PlayerLogger.Warn("No profile data returned", "membershipId", membershipId)
+			logger.Warn("NO_PROFILE_DATA", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.REASON:        "empty_profile_data",
+			})
 			return nil
 		}
 
 		userInfo := profile.Profile.Data.UserInfo
+		now := time.Now()
 
-		// Create or update player,
+		// Create or update player
 		newPlayer := &Player{
-			MembershipId: userInfo.MembershipId,
-			DisplayName:  userInfo.DisplayName,
+			MembershipId:                userInfo.MembershipId,
+			MembershipType:              &userInfo.MembershipType,
+			DisplayName:                 userInfo.DisplayName,
+			IconPath:                    userInfo.IconPath,
+			BungieGlobalDisplayName:     userInfo.BungieGlobalDisplayName,
+			BungieGlobalDisplayNameCode: bungie.FixBungieGlobalDisplayNameCode(userInfo.BungieGlobalDisplayNameCode),
+			LastSeen:                    now,
+			FirstSeen:                   now, // SQL will preserve existing first_seen via LEAST() for updates
 		}
 
 		if err := CreateOrUpdatePlayer(newPlayer); err != nil {
-			PlayerLogger.Error("Error creating/updating player", "membershipId", membershipId, "error", err)
+			logger.Warn("PLAYER_UPSERT_ERROR", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.ERROR:         err.Error(),
+			})
 			return err
 		}
 	}
 
-	PlayerLogger.Info("Successfully crawled player", "membershipId", membershipId)
 	return nil
 }
 

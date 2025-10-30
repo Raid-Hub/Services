@@ -1,24 +1,38 @@
 package clan
 
 import (
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
 
-var ClanLogger = utils.NewLogger("CLAN_SERVICE")
+// Clan service logging constants
+const (
+	CLAN_CRAWL_ERROR = "CLAN_CRAWL_ERROR"
+)
+
+var logger = logging.NewLogger("CLAN_SERVICE")
 
 // Crawl fetches and processes clan data
 func Crawl(groupId int64) error {
-	ClanLogger.Info("Crawling clan", "groupId", groupId)
+	logger.Info("CLAN_CRAWLING", map[string]any{
+		logging.GROUP_ID: groupId,
+	})
 
 	// Get clan from Bungie API
-	_, _, err := bungie.Client.GetGroup(groupId)
+	_, err := bungie.Client.GetGroup(groupId)
 	if err != nil {
-		ClanLogger.Error("Error fetching clan", "groupId", groupId, "error", err)
+		logger.Warn(CLAN_CRAWL_ERROR, map[string]any{
+			logging.GROUP_ID:  groupId,
+			logging.OPERATION: "fetch_clan",
+			logging.ERROR:     err.Error(),
+		})
 		return err
 	}
 
-	ClanLogger.Info("Successfully fetched clan", "groupId", groupId)
+	logger.Info("CLAN_FETCHED", map[string]any{
+		logging.GROUP_ID: groupId,
+		logging.STATUS:   "success",
+	})
 
 	// Note: Clan storage typically includes members and requires additional API calls
 	// This worker exists for basic clan information storage

@@ -1,11 +1,19 @@
 package migrations
 
 import (
-	"log"
 	"os"
 	"path/filepath"
+	"raidhub/lib/utils/logging"
 	"sort"
 )
+
+// Migrations logging constants
+const (
+	MIGRATIONS_UP_TO_DATE = "MIGRATIONS_UP_TO_DATE"
+	MIGRATIONS_FILES_READ = "MIGRATIONS_FILES_READ"
+)
+
+var logger = logging.NewLogger("MIGRATIONS")
 
 // GetMigrationFiles reads all SQL files from a directory and returns them sorted
 func GetMigrationFiles(directory string) ([]string, error) {
@@ -41,7 +49,10 @@ func ReadMigrationFile(directory, filename string) (string, error) {
 
 // RunMigrations is a generic migration runner that handles the common logic
 func RunMigrations(config MigrationConfig) error {
-	log.Printf("Found %d migration files in %s", len(config.MigrationFiles), config.Directory)
+	logger.Info(MIGRATIONS_FILES_READ, map[string]any{
+		logging.COUNT:     len(config.MigrationFiles),
+		logging.DIRECTORY: config.Directory,
+	})
 
 	// Query applied migrations
 	appliedMigrations, err := config.GetAppliedMigrations()
@@ -53,11 +64,17 @@ func RunMigrations(config MigrationConfig) error {
 	appliedCount := 0
 	for _, filename := range config.MigrationFiles {
 		if appliedMigrations[filename] {
-			log.Printf("✓ %s (already applied)", filename)
+			logger.Info("MIGRATION_SKIPPED", map[string]any{
+				logging.FILENAME: filename,
+				logging.REASON:   "already_applied",
+			})
 			continue
 		}
 
-		log.Printf("→ Applying migration: %s", filename)
+		logger.Info("MIGRATION_APPLYING", map[string]any{
+			logging.FILENAME: filename,
+			logging.STATUS:   "starting",
+		})
 
 		migrationSQL, err := ReadMigrationFile(config.Directory, filename)
 		if err != nil {
@@ -69,14 +86,20 @@ func RunMigrations(config MigrationConfig) error {
 			return err
 		}
 
-		log.Printf("✓ Applied %s", filename)
+		logger.Info("MIGRATION_APPLIED", map[string]any{
+			logging.FILENAME: filename,
+			logging.STATUS:   "completed",
+		})
 		appliedCount++
 	}
 
 	if appliedCount == 0 {
-		log.Println("\n✓ Database is up to date")
+		logger.Info(MIGRATIONS_UP_TO_DATE, nil)
 	} else {
-		log.Printf("\n✓ Applied %d new migration(s)", appliedCount)
+		logger.Info("MIGRATIONS_COMPLETED", map[string]any{
+			logging.COUNT:  appliedCount,
+			logging.STATUS: "completed",
+		})
 	}
 
 	return nil

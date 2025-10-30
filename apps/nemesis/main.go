@@ -2,12 +2,23 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/services/cheat_detection"
+	"raidhub/lib/utils/logging"
 	"sync"
 	"time"
 )
+
+// Nemesis logging constants
+const (
+	SERVICE_STARTED              = "SERVICE_STARTED"
+	PROCESSING_COMPLETE          = "PROCESSING_COMPLETE"
+	BLACKLIST_UPDATE_ERROR       = "BLACKLIST_UPDATE_ERROR"
+	BLACKLIST_UPDATED            = "BLACKLIST_UPDATED"
+	PLAYER_INSTANCES_BLACKLISTED = "PLAYER_INSTANCES_BLACKLISTED"
+)
+
+var logger = logging.NewLogger("NEMESIS")
 
 const (
 	numBungieWorkers     = 15
@@ -22,7 +33,11 @@ type LevelsDTO struct {
 }
 
 func main() {
-	log.Println("Starting...")
+	logger.Info(SERVICE_STARTED, map[string]any{
+		logging.SERVICE: "nemesis",
+		"workers":       []string{"cheat_detection", "account_maintenance"},
+		logging.VERSION: versionPrefix,
+	})
 
 	// postgres.DB is initialized in init()
 
@@ -64,7 +79,9 @@ func main() {
 			&flag.FlagsC,
 			&flag.FlagsD,
 		); err != nil {
-			log.Fatalf("Error scanning row: %s", err)
+			logger.Warn("ROW_SCAN_ERROR", map[string]any{
+				logging.ERROR: err.Error(),
+			})
 		}
 		flags <- flag
 	}
@@ -72,9 +89,12 @@ func main() {
 	wg.Wait()
 
 	// calculate average of each flag type, total flags, and flag count
-	log.Printf("Cheat Level Stats:\n")
+	logger.Info("CHEAT_LEVEL_STATS", nil)
 	for i, levelStats := range stats {
-		log.Printf("Cheat Level %d: %d players\n", i, len(levelStats))
+		logger.Info("CHEAT_LEVEL_COUNT", map[string]any{
+			"level":        i,
+			"player_count": len(levelStats),
+		})
 		if len(levelStats) == 0 {
 			continue
 		}
@@ -95,11 +115,19 @@ func main() {
 		avgTotalFlags := float64(totalFlags) / float64(len(levelStats))
 		avgCheaterProbability := totalCheaterProbability / float64(len(levelStats))
 
-		log.Printf("  Average Flags A: %.2f, B: %.2f, C: %.2f, D: %.2f, Total: %.2f, Cheater Account Probability: %.2f",
-			avgFlagsA, avgFlagsB, avgFlagsC, avgFlagsD, avgTotalFlags, avgCheaterProbability)
+		logger.Info("AVERAGE_FLAGS", map[string]any{
+			"flags_a":           avgFlagsA,
+			"flags_b":           avgFlagsB,
+			"flags_c":           avgFlagsC,
+			"flags_d":           avgFlagsD,
+			"total_flags":       avgTotalFlags,
+			"cheat_probability": avgCheaterProbability,
+		})
 	}
 
-	log.Println("Finished processing all flags.")
+	logger.Info(PROCESSING_COMPLETE, map[string]any{
+		logging.OPERATION: "all_flags",
+	})
 
 	// step 2: re-cheat check all level 3+ player instances. can remove this step later.
 	instanceIds := make(chan int64)
@@ -110,7 +138,10 @@ func main() {
 			for instanceId := range instanceIds {
 				_, _, _, _, err := cheat_detection.CheckForCheats(instanceId)
 				if err != nil {
-					log.Fatalf("Failed to process cheat_check for instance %d: %s", instanceId, err)
+					logger.Warn("CHEAT_CHECK_FAILED", map[string]any{
+						logging.INSTANCE_ID: instanceId,
+						logging.ERROR:       err.Error(),
+					})
 				}
 			}
 		}()
@@ -121,51 +152,86 @@ func main() {
 		JOIN player USING (membership_id)
 		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'`)
 	if err != nil {
-		log.Fatalf("Error querying blacklisted instance ids: %s", err)
+		logger.Warn("BLACKLIST_QUERY_ERROR", map[string]any{
+			logging.OPERATION: "query_blacklisted_instances",
+			logging.ERROR:     err.Error(),
+		})
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var instanceId int64
 		if err := rows.Scan(&instanceId); err != nil {
-			log.Fatalf("Error scanning instance ID: %s", err)
+			logger.Warn("INSTANCE_ID_SCAN_ERROR", map[string]any{
+				logging.ERROR: err.Error(),
+			})
 		}
 		instanceIds <- instanceId
 	}
 	close(instanceIds)
 	wg.Wait()
 
-	log.Println("Finished re-checking blacklisted player instances.")
+	logger.Info(PROCESSING_COMPLETE, map[string]any{
+		logging.OPERATION: "re-check_blacklisted_instances",
+		logging.STATUS:    "complete",
+	})
 
 	// step 3: upgrade high flagged instances to blacklisted
 	countBlacklisted, err := cheat_detection.BlacklistFlaggedInstances()
 	if err != nil {
-		log.Fatalf("Error blacklisting flagged instances: %s", err)
+		logger.Warn(BLACKLIST_UPDATE_ERROR, map[string]any{
+			logging.OPERATION: "blacklist_flagged_instances",
+			logging.ERROR:     err.Error(),
+		})
 	}
-	log.Printf("Blacklisted %d flagged instances", countBlacklisted)
+	logger.Info(BLACKLIST_UPDATED, map[string]any{
+		"type":        "flagged_instances",
+		logging.COUNT: countBlacklisted,
+	})
 
 	// step 4: select players with cheat level 4 and mark their instances as blacklisted
 	now := time.Now()
 	players, err := cheat_detection.GetRecentlyPlayedBlacklistedPlayers(now.Add(-14 * 24 * time.Hour))
 	if err != nil {
-		log.Fatalf("Error getting recently played blacklisted players: %s", err)
+		logger.Warn("PLAYER_QUERY_ERROR", map[string]any{
+			logging.OPERATION: "get_recently_played_blacklisted",
+			logging.ERROR:     err.Error(),
+		})
 	}
 
-	log.Printf("Found %d blacklisted players who have played recently", len(players))
+	logger.Info("BLACKLISTED_PLAYERS_FOUND", map[string]any{
+		logging.COUNT: len(players),
+		"criteria":    "recently_played",
+	})
 	var totalBlacklistedCount int64
 	var totalElligibleCount int64
 	for _, player := range players {
 		count, elligible, err := cheat_detection.BlacklistRecentInstances(player)
 		if err != nil {
-			log.Fatalf("Error blacklisting instances for player %d: %s", player.MembershipId, err)
+			logger.Warn(BLACKLIST_UPDATE_ERROR, map[string]any{
+				"membership_id":   player.MembershipId,
+				logging.OPERATION: "blacklist_player_instances",
+				logging.ERROR:     err.Error(),
+			})
 		}
 		totalBlacklistedCount += count
 		totalElligibleCount += elligible
 		if count > 0 {
-			log.Printf("Blacklisted %d recent instances for player %d", count, player.MembershipId)
+			logger.Info(PLAYER_INSTANCES_BLACKLISTED, map[string]any{
+				"membership_id": player.MembershipId,
+				logging.COUNT:   count,
+				"type":          "recent_instances",
+			})
 		}
 	}
-	log.Printf("Updated blacklist for %d instances across all players", totalBlacklistedCount)
+	logger.Info("BLACKLIST_SUMMARY", map[string]any{
+		"total_blacklisted": totalBlacklistedCount,
+		"total_eligible":    totalElligibleCount,
+		"scope":             "all_players",
+	})
 
-	log.Println("Done.")
+	logger.Info(PROCESSING_COMPLETE, map[string]any{
+		logging.SERVICE: "nemesis",
+		logging.STATUS:  "complete",
+	})
 }

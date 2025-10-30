@@ -2,12 +2,14 @@ package updateskull
 
 import (
 	"encoding/json"
-	"log"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils"
 	"raidhub/lib/web/bungie"
 
 	"github.com/lib/pq"
 )
+
+var updateSkullLogger = utils.NewLogger("UPDATE_SKULL_TOOL")
 
 func UpdateSkullHashes() {
 	db := postgres.DB
@@ -17,13 +19,13 @@ func UpdateSkullHashes() {
 		JOIN pgcr USING (instance_id)
 		WHERE hash = 1044919065 AND instance_id < 16377060020`)
 	if err != nil {
-		log.Fatal("Error querying instance table:", err)
+		updateSkullLogger.ErrorF("Error querying instance table:", err)
 	}
 	defer rows.Close()
 
 	stmt, err := db.Prepare(`UPDATE instance SET skull_hashes = $1 WHERE instance_id = $2`)
 	if err != nil {
-		log.Fatal("Error preparing update statement:", err)
+		updateSkullLogger.ErrorF("Error preparing update statement:", err)
 	}
 	defer stmt.Close()
 
@@ -32,13 +34,13 @@ func UpdateSkullHashes() {
 	for rows.Next() {
 		var data []byte
 		if err := rows.Scan(&data); err != nil {
-			log.Fatalln("Error scanning instance_id:", err)
+			updateSkullLogger.ErrorFln("Error scanning instance_id:", err)
 		}
 
 		var pgcr bungie.DestinyPostGameCarnageReport
 		err := json.Unmarshal(data, &pgcr)
 		if err != nil {
-			log.Fatalln("Error unmarshalling pgcr data:", err)
+			updateSkullLogger.ErrorFln("Error unmarshalling pgcr data:", err)
 		}
 
 		if pgcr.SelectedSkullHashes != nil {
@@ -53,14 +55,14 @@ func UpdateSkullHashes() {
 
 			_, err := stmt.Exec(pq.Array(skullHashes), pgcr.ActivityDetails.InstanceId)
 			if err != nil {
-				log.Fatalf("Error updating instance %d with skull hashes: %v", pgcr.ActivityDetails.InstanceId, err)
+				updateSkullLogger.ErrorFf("Error updating instance %d with skull hashes: %v", pgcr.ActivityDetails.InstanceId, err)
 			}
 		}
 
 		count++
 		if count%1000 == 0 {
 			ratio := float64(count) / total
-			log.Printf("Processed %.2f%% of instances", ratio*100)
+			updateSkullLogger.InfoF("Processed %.2f%% of instances", ratio*100)
 		}
 	}
 }

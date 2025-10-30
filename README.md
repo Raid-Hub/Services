@@ -19,7 +19,7 @@ RaidHub Services follows a microservices architecture with clear separation betw
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - Detailed architecture documentation
 - **[Application Categorization](docs/APP_CATEGORIZATION.md)** - How apps are organized by execution model
 - **[Naming Conventions](docs/NAMING_CONVENTIONS.md)** - Naming patterns for services and tools
-- **[Logger Setup](docs/LOGGER_SETUP.md)** - How to set up logging in domain services
+- **[Logging Standards](docs/LOGGING.md)** - Comprehensive logging guidelines and standards
 
 ## Quick Start
 
@@ -135,8 +135,8 @@ make cron         # Install cron jobs from infrastructure/cron/prod.crontab
 These services run continuously and are managed via Docker Compose:
 
 - **`hermes`** - Queue worker manager with self-scaling topics
-- **`atlas`** - Intelligent PGCR crawler with adaptive scaling
-- **`zeus`** - Bungie API reverse proxy with IPv6 load balancing
+- **`atlas`** - Intelligent PGCR crawler with adaptive scaling (see [Atlas Configuration](#atlas-configuration) for dev mode options)
+- **`zeus`** - Bungie API reverse proxy with optional IPv6 load balancing and rate limiting
 
 Start with: `make up` (starts infrastructure) + run binaries individually or via Tilt
 
@@ -196,7 +196,7 @@ make apps
 
 # Run long-running services
 ./bin/hermes     # Queue worker manager
-./bin/atlas      # PGCR crawler
+./bin/atlas      # PGCR crawler (see Atlas Configuration below)
 ./bin/zeus       # Bungie API proxy
 ```
 
@@ -282,9 +282,8 @@ Key environment variables (see `example.env` for full list):
 ```bash
 # Bungie API
 BUNGIE_API_KEY=your_api_key
-ZEUS_API_KEYS=key1,key2,key3  # Comma-separated for Zeus rotation
 
-# IPv6 (required for Zeus)
+# IPv6 (optional for Zeus - enables load balancing)
 IPV6=2001:db8::1  # Base IPv6 address for load balancing
 
 # PostgreSQL
@@ -328,6 +327,39 @@ HADES_WEBHOOK_URL=discord_webhook_url
 3. Build with `make tools`
 4. Run with `./bin/tools <your-tool-name>`
 
+## Atlas Configuration
+
+Atlas supports development mode flags for local testing:
+
+### Development Mode
+
+When running Atlas in development mode (via Tilt or manually), use the `--dev` flag:
+
+```bash
+# Enable dev mode (defaults to skip=5, max-workers=8)
+go run ./apps/atlas/ --dev
+
+# Dev mode with custom skip value
+go run ./apps/atlas/ --dev --dev-skip=10
+
+# Dev mode with custom max workers
+go run ./apps/atlas/ --dev --max-workers=4
+```
+
+### Flags
+
+- `--dev`: Enable dev mode (defaults to `--dev-skip=5` and `--max-workers=8`)
+- `--dev-skip=N`: Skip N instances between each processed instance (requires `--dev` flag, defaults to 5)
+  - `--dev-skip=5`: Process instance, then skip 5 instances before processing next (default in dev mode)
+  - `--dev-skip=1`: Process every other instance (skip 1 between each)
+  - `--dev-skip=N`: Process instance, then skip N instances before processing next
+- `--max-workers=N`: Maximum number of workers (default: 250 in production, 8 in dev mode)
+- `--workers=N`: Initial number of workers (default: 25)
+- `--buffer=N`: Start N instances behind the latest (default: 10,000)
+- `--target=N`: Start at specific instance ID (optional)
+
+**Note**: Tilt automatically runs Atlas with `--dev` flag enabled for local development, which means it will skip every 5 instances and limit workers to 8 by default.
+
 ## Queue Worker System
 
 The system uses RabbitMQ with self-scaling topic managers:
@@ -348,7 +380,7 @@ Workers automatically scale based on queue depth and processing metrics.
 
 1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8083, 7777, 9090, 15672 are available
 2. **API Key Missing**: Set `BUNGIE_API_KEY` in `.env`
-3. **Zeus Requires IPv6**: Set `IPV6` in `.env` for production use
+3. **Zeus IPv6**: Optional - Set `IPV6` in `.env` for production load balancing. Use `--dev` flag to disable round robin (use single transport) while keeping rate limiting enabled for local development.
 4. **Docker Issues**: Ensure Docker is running and has sufficient resources
 5. **Go Build Errors**: Check Go version and module dependencies
 6. **Tilt Issues**: Ensure Tilt is installed and Docker is running
@@ -365,7 +397,7 @@ Workers automatically scale based on queue depth and processing metrics.
 1. Follow the architecture principles in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 2. Use appropriate naming conventions from [docs/NAMING_CONVENTIONS.md](docs/NAMING_CONVENTIONS.md)
 3. Follow application categorization in [docs/APP_CATEGORIZATION.md](docs/APP_CATEGORIZATION.md)
-4. Set up proper logging using [docs/LOGGER_SETUP.md](docs/LOGGER_SETUP.md)
+4. Follow logging standards from [docs/LOGGING.md](docs/LOGGING.md)
 5. Keep infrastructure and application code separate
 6. Document new services and workers
 7. Update documentation with significant changes

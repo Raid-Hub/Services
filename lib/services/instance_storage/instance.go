@@ -19,22 +19,24 @@ type StoreSideEffects struct {
 }
 
 // Store stores instance data to the database within a transaction
-// Returns side effects that should be handled after commit
-func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, error) {
+// Returns (sideEffects, isNew, error) - isNew indicates if this was a new instance (not duplicate)
+func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
 	sideEffects := &StoreSideEffects{}
 
 	activityId, _, _, err := getActivityInfo(inst.Hash)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	isDuplicate, err := insertInstance(tx, inst)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if isDuplicate {
-		return nil, nil
+		return nil, false, nil
 	}
+
+	isNew := true
 
 	completedDictionary := map[int64]bool{}
 	fastestClearSoFar := map[int64]int{}
@@ -43,13 +45,13 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, error) {
 	for _, playerActivity := range inst.Players {
 		duration, err := getFastestClearDuration(tx, playerActivity.Player.MembershipId, activityId)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		fastestClearSoFar[playerActivity.Player.MembershipId] = duration
 
 		playerRaidClearCount, err := getPlayerClearCount(tx, playerActivity.Player.MembershipId, activityId)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if playerActivity.Finished {
@@ -58,7 +60,7 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, error) {
 
 		err = storePlayerData(tx, inst, playerActivity, activityId)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		if playerActivity.Player.MembershipType == nil || *playerActivity.Player.MembershipType == 0 {
@@ -67,26 +69,26 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, error) {
 
 		charRequests, err := storeCharacterData(tx, inst, playerActivity, sideEffects.CharacterFillRequests)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		characterRequests = charRequests
 	}
 
 	err = updateTimePlayedSeconds(tx, inst, activityId)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	noobsCount, sherpasHappened := determineSherpas(completedDictionary, inst.InstanceId)
 
 	err = updatePlayerStats(tx, inst, completedDictionary, activityId, noobsCount, sherpasHappened, fastestClearSoFar, &sideEffects.PlayerCrawlRequests)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	sideEffects.CharacterFillRequests = characterRequests
 
-	return sideEffects, nil
+	return sideEffects, isNew, nil
 }
 
 // insertInstance inserts instance data into the database

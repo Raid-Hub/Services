@@ -139,21 +139,23 @@ These services run continuously and are started with `make up`:
 
 #### Zeus - Bungie API Reverse Proxy
 
-**Purpose**: Provides load balancing and rate limiting for Bungie API requests across multiple IPv6 addresses and API keys.
+**Purpose**: Provides rate limiting and optional load balancing for Bungie API requests.
 
 **Key Features**:
 
-- **IPv6 Load Balancing**: Distributes requests across sequential IPv6 addresses
-- **API Key Rotation**: Cycles through multiple Bungie API keys
-- **Differentiated Rate Limiting**: Separate limits for stats.bungie.net vs www.bungie.net
+- **Optional IPv6 Load Balancing**: When `IPV6` environment variable is set, distributes requests across sequential IPv6 addresses (round robin)
+- **Differentiated Rate Limiting**: Separate limits for stats.bungie.net vs www.bungie.net (always enabled)
 - **Health Monitoring**: BetterUptime probe support
+- **Development Mode**: Use `--dev` flag to disable round robin (single transport) while keeping rate limiting enabled
 
 **Configuration**:
 
 - Default port: 7777
-- Configurable IPv6 interface and address count
+- IPv6 configuration: Optional via `IPV6` environment variable (base address)
+- Configurable IPv6 interface and address count via flags (`--interface`, `--v6_n`)
 - Stats API: 40 requests/second per IP, 90 burst
 - WWW API: 12 requests/second per IP, 25 burst
+- Development mode: `--dev` flag disables round robin but keeps rate limiting enabled (used by Tilt)
 
 #### Hermes - Queue Worker Manager
 
@@ -336,7 +338,7 @@ Services in `lib/services/` are organized by business domain with clear boundari
 #### `pgcr_processing/` - PGCR Domain
 
 - **FetchAndProcessPGCR()**: Coordinates API fetch and data transformation
-- **ProcessDestinyReport()**: Converts Bungie API format to internal structure
+- **ParsePGCRToInstance()**: Converts Bungie API format to internal structure
 - **CalculateDateCompleted()**: Determines instance completion timestamp
 - **Result Types**: Success, NotFound, NonRaid, SystemDisabled, etc.
 

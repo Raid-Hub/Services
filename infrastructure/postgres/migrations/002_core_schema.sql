@@ -37,19 +37,20 @@ CREATE TABLE "core"."player" (
                 "display_name"
         END
     ) STORED, 
-    "last_seen" TIMESTAMP(3) NOT NULL,
-    "first_seen" TIMESTAMP(3) NOT NULL,
+    "last_seen" TIMESTAMPTZ(3) NOT NULL,
+    "first_seen" TIMESTAMPTZ(3) NOT NULL,
     "clears" INTEGER NOT NULL DEFAULT 0,
     "fresh_clears" INTEGER NOT NULL DEFAULT 0,
     "sherpas" INTEGER NOT NULL DEFAULT 0,
     "total_time_played_seconds" INTEGER NOT NULL DEFAULT 0,
     "sum_of_best" INTEGER,
-    "last_crawled" TIMESTAMP(3),
+    "last_crawled" TIMESTAMPTZ(3),
     "wfr_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "cheat_level" SMALLINT NOT NULL DEFAULT 0,
     "is_private" BOOLEAN NOT NULL DEFAULT false,
-    "history_last_crawled" TIMESTAMP(3),
-    "_search_score" NUMERIC(14, 4) GENERATED ALWAYS AS (sqrt("clears" + 1) * power(2, GREATEST(0, EXTRACT(EPOCH FROM ("last_seen" - TIMESTAMP '2017-08-27')) / 20000000)) * sqrt("wfr_score" + 1)) STORED
+    "history_last_crawled" TIMESTAMPTZ(3),
+    "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
+    "_search_score" NUMERIC(14, 4) GENERATED ALWAYS AS (sqrt("clears" + 1) * power(2, GREATEST(0, EXTRACT(EPOCH FROM ("last_seen" - TIMESTAMPTZ '2017-08-27')) / 20000000)) * sqrt("wfr_score" + 1)) STORED
 );
 CREATE INDEX "primary_search_idx" ON "core"."player"(lower("bungie_name") text_pattern_ops, "_search_score" DESC);
 CREATE INDEX "secondary_search_idx" ON "core"."player"(lower("display_name") text_pattern_ops, "_search_score" DESC);
@@ -63,8 +64,8 @@ CREATE TABLE "core"."instance" (
     "completed" BOOLEAN NOT NULL,
     "fresh" BOOLEAN,
     "player_count" INTEGER NOT NULL,
-    "date_started" TIMESTAMP(0) WITH TIME ZONE NOT NULL,
-    "date_completed" TIMESTAMP(0) WITH TIME ZONE NOT NULL,
+    "date_started" TIMESTAMPTZ(0) NOT NULL,
+    "date_completed" TIMESTAMPTZ(0) NOT NULL,
     "duration" INTEGER NOT NULL,
     "platform_type" INTEGER NOT NULL,
     "season_id" INTEGER,
