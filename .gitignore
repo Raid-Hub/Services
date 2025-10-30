@@ -12,6 +12,9 @@ infrastructure/prometheus/prometheus.yml
 # Volumes
 volumes/
 
+# Binaries
+bin/
+
 # Root-level binaries (also marked as binary in .gitattributes)
 /atlas
 /hermes
