@@ -29,7 +29,7 @@ func CharacterFillTopic() processing.Topic {
 }
 
 // processCharacterFill handles character fill messages
-func processCharacterFill(worker *processing.Worker, message amqp.Delivery) error {
+func processCharacterFill(worker processing.WorkerInterface, message amqp.Delivery) error {
 	var request messages.CharacterFillMessage
 	if err := json.Unmarshal(message.Body, &request); err != nil {
 		worker.Error("Failed to unmarshal character fill request", map[string]any{logging.ERROR: err.Error()})

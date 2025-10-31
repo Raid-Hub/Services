@@ -4,7 +4,13 @@ global:
 scrape_configs:
   - job_name: "atlas"
     static_configs:
-      - targets: ["host.docker.internal:8080", "host.docker.internal:8082"]
+      - targets: ["localhost:{{ATLAS_METRICS_PORT}}"]
+  - job_name: "hermes"
+    static_configs:
+      - targets: ["localhost:{{HERMES_METRICS_PORT}}"]
+  - job_name: "zeus"
+    static_configs:
+      - targets: ["localhost:{{ZEUS_METRICS_PORT}}"]
 
 {{#PROMETHEUS_REMOTE_WRITE_URL}}
 remote_write:

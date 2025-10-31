@@ -8,14 +8,10 @@ RaidHub Services is a microservices architecture built in Go, managing data coll
 
 ```
 RaidHub-Services/
-├── apps/                        # Main application services
+├── apps/                        # Long-running application services
 │   ├── atlas/                   # Intelligent PGCR crawler with adaptive scaling
 │   ├── zeus/                    # Bungie API reverse proxy with IPv6 load balancing
-│   ├── hermes/                  # Queue worker manager with self-scaling topics
-│   ├── athena/                  # Destiny 2 manifest downloader
-│   ├── hades/                   # Missed PGCR recovery processor
-│   ├── hera/                    # Top player crawler for leaderboard maintenance
-│   └── nemesis/                 # Cheat detection and player account maintenance
+│   └── hermes/                  # Queue worker manager with self-scaling topics
 ├── queue-workers/               # Queue worker topic definitions
 │   ├── activity_history.go      # Player activity history processing
 │   ├── character_fill.go        # Character data completion
@@ -50,8 +46,13 @@ RaidHub-Services/
 │   ├── monitoring/              # Prometheus metrics
 │   ├── utils/                   # Common utilities
 │   └── env/                     # Environment configuration
-├── tools/                       # Utilities and one-off maintenance tools
+├── tools/                       # Utilities and maintenance tools (consolidated binary)
 │   ├── main.go                 # Tool dispatcher
+│   ├── process-missed-pgcrs/   # Processes missed PGCRs (used by cron)
+│   ├── manifest-downloader/    # Destiny 2 manifest downloader (used by cron)
+│   ├── leaderboard-clan-crawl/ # Clan crawler for leaderboard players (used by cron)
+│   ├── cheat-detection/        # Cheat detection and account maintenance (used by cron)
+│   ├── refresh-view/           # Materialized view refresher (used by cron)
 │   ├── activity-history-update/ # Batch activity history updates
 │   ├── fix-sherpa-clears/      # Data correction utilities
 │   ├── flag-restricted-pgcrs/  # Batch PGCR flagging
@@ -79,10 +80,10 @@ RaidHub-Services/
 
 ### 1. Microservices with Clear Boundaries
 
-- **`apps/`** - Independent, deployable application services
+- **`apps/`** - Long-running application services (hermes, atlas, zeus)
 - **`queue-workers/`** - Topic-based asynchronous processing definitions
 - **`lib/`** - Shared business logic and infrastructure libraries
-- **`tools/`** - Maintenance utilities and one-off operations
+- **`tools/`** - Maintenance utilities and scheduled tasks (consolidated into single binary)
 - **`infrastructure/`** - Pure infrastructure configuration (NO application code)
 
 ### 2. Event-Driven Architecture
@@ -143,7 +144,7 @@ These services run continuously and are started with `make up`:
 
 **Key Features**:
 
-- **Optional IPv6 Load Balancing**: When `IPV6` environment variable is set, distributes requests across sequential IPv6 addresses (round robin)
+- **Optional IPv6 Load Balancing**: When `ZEUS_IPV6` environment variable is set, distributes requests across sequential IPv6 addresses (round robin)
 - **Differentiated Rate Limiting**: Separate limits for stats.bungie.net vs www.bungie.net (always enabled)
 - **Health Monitoring**: BetterUptime probe support
 - **Development Mode**: Use `--dev` flag to disable round robin (single transport) while keeping rate limiting enabled
@@ -151,7 +152,7 @@ These services run continuously and are started with `make up`:
 **Configuration**:
 
 - Default port: 7777
-- IPv6 configuration: Optional via `IPV6` environment variable (base address)
+- IPv6 configuration: Optional via `ZEUS_IPV6` environment variable (base address)
 - Configurable IPv6 interface and address count via flags (`--interface`, `--v6_n`)
 - Stats API: 40 requests/second per IP, 90 burst
 - WWW API: 12 requests/second per IP, 25 burst
@@ -180,22 +181,9 @@ These services run continuously and are started with `make up`:
 
 ### Scheduled Services (Cron Jobs)
 
-These services run on a schedule via system crontab:
+These tools run on a schedule via system crontab but are part of the consolidated tools binary:
 
-#### Hera - Top Player Crawler
-
-**Purpose**: Keeps player data fresh by crawling top players from various leaderboards.
-
-**Key Features**:
-
-- **Leaderboard Analysis**: Processes top N players from individual and raid leaderboards
-- **Clan Discovery**: Discovers and processes clans from top players
-- **Bulk Operations**: Efficient batch processing with configurable concurrency
-- **Member Validation**: Ensures discovered players exist in the system
-
-**Usage**: `./bin/hera -top 1500 -reqs 14`
-
-#### Hades - Missed PGCR Recovery
+#### Process Missed PGCRs
 
 **Purpose**: Processes PGCRs that were missed during normal crawling operations.
 
@@ -208,10 +196,23 @@ These services run on a schedule via system crontab:
 
 **Usage**:
 
-- `./bin/hades`: Process missed PGCRs
-- `./bin/hades -gap`: Process gaps in sequences
+- `./bin/tools process-missed-pgcrs`: Process missed PGCRs
+- `./bin/tools process-missed-pgcrs --gap`: Process gaps in sequences
 
-#### Nemesis - Cheat Detection & Player Maintenance
+#### Leaderboard Clan Crawl
+
+**Purpose**: Keeps player data fresh by crawling top players from various leaderboards.
+
+**Key Features**:
+
+- **Leaderboard Analysis**: Processes top N players from individual and raid leaderboards
+- **Clan Discovery**: Discovers and processes clans from top players
+- **Bulk Operations**: Efficient batch processing with configurable concurrency
+- **Member Validation**: Ensures discovered players exist in the system
+
+**Usage**: `./bin/tools leaderboard-clan-crawl -top 1500 -reqs 14`
+
+#### Cheat Detection
 
 **Purpose**: Runs comprehensive cheat detection analysis and player account maintenance.
 
@@ -222,7 +223,9 @@ These services run on a schedule via system crontab:
 - **Blacklist Management**: Automatically blacklists flagged instances and player instances
 - **Statistical Reporting**: Provides detailed cheat detection statistics
 
-#### Athena - Manifest Downloader
+**Usage**: `./bin/tools cheat-detection`
+
+#### Manifest Downloader
 
 **Purpose**: Downloads and processes Destiny 2 manifest data for weapon and feature definitions.
 
@@ -237,6 +240,8 @@ These services run on a schedule via system crontab:
 
 - Weapon definitions (hash, name, icon, element, ammo type, slot, type, rarity)
 - Activity feat definitions (skulls/modifiers for raids)
+
+**Usage**: `./bin/tools manifest-downloader --out=<directory> [--force] [--disk]`
 
 ## Queue Worker System
 
@@ -449,7 +454,7 @@ See `example.env` for all configuration options.
 
 - `BUNGIE_API_KEY`: Primary Bungie API authentication
 - `ZEUS_API_KEYS`: Comma-separated list of API keys for Zeus rotation
-- `IPV6`: Base IPv6 address for Zeus load balancing
+- `ZEUS_IPV6`: Base IPv6 address for Zeus load balancing
 - Database credentials: `POSTGRES_*`, `CLICKHOUSE_*`, `RABBITMQ_*`
 - Webhook URLs: `ATLAS_WEBHOOK_URL`, `HADES_WEBHOOK_URL`
 
@@ -465,10 +470,11 @@ See `example.env` for all configuration options.
 
 #### Scheduled Tasks (Cron)
 
-- **Hera**: Daily/weekly player updates
-- **Hades**: Missed PGCR recovery
-- **Nemesis**: Cheat detection maintenance
-- **Athena**: Manifest updates
+- **Process Missed PGCRs**: Recovery processing every 15 minutes
+- **Leaderboard Clan Crawl**: Daily/weekly player updates
+- **Cheat Detection**: Cheat detection maintenance
+- **Manifest Downloader**: Manifest updates
+- **Refresh View**: Materialized view refreshes
 
 #### On-Demand Tools
 

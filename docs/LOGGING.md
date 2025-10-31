@@ -65,14 +65,16 @@ func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInsta
 
 - **Applications** (`apps/`): Use Greek mythology names (matching app names)
 
-  - `HADES`
-  - `NEMESIS`
-  - `HERA`
-  - `ATHENA`
+  - None currently
 
-- **Tools** (`tools/`): Use `TOOLS` or specific tool name
+- **Tools** (`tools/`): Use tool-specific names
 
-  - `TOOLS`
+  - `MISSED_PGCR`
+  - `MANIFEST_DOWNLOADER`
+  - `LEADERBOARD_CLAN_CRAWL`
+  - `CHEAT_DETECTION`
+  - `REFRESH_VIEW_TOOL`
+  - `TOOLS` (for general tool logging)
   - `FLAG_RESTRICTED_TOOL`
 
 - **Web Clients** (`lib/web/`): Use service name with `_CLIENT`

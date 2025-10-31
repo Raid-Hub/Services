@@ -7,7 +7,7 @@ import (
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
-	"raidhub/lib/monitoring"
+	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -75,7 +75,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	// 5. Monitoring
 	_, activityName, versionName, err := getActivityInfo(inst.Hash)
 	if err == nil && inst.DateCompleted.After(time.Now().Add(-5*time.Hour)) {
-		monitoring.PGCRStoreActivity.WithLabelValues(activityName, versionName, fmt.Sprintf("%v", inst.Completed)).Inc()
+		global_metrics.PGCRStoreActivity.WithLabelValues(activityName, versionName, fmt.Sprintf("%v", inst.Completed)).Inc()
 	}
 
 	// Publish side effects (only if instance was new)

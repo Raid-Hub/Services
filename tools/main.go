@@ -6,9 +6,14 @@ import (
 	"os"
 
 	activityhistory "raidhub/tools/activity-history-update"
+	cheatdetection "raidhub/tools/cheat-detection"
 	fixsherpa "raidhub/tools/fix-sherpa-clears"
 	flagrestricted "raidhub/tools/flag-restricted-pgcrs"
+	leaderboardclancrawl "raidhub/tools/leaderboard-clan-crawl"
+	manifestdownloader "raidhub/tools/manifest-downloader"
+	missedpgcr "raidhub/tools/process-missed-pgcrs"
 	processpgcr "raidhub/tools/process-single-pgcr"
+	refreshview "raidhub/tools/refresh-view"
 	updateskull "raidhub/tools/update-skull-hashes"
 )
 
@@ -18,6 +23,11 @@ var commands = map[string]func(){
 	"process-single-pgcr":     processpgcr.ProcessSinglePGCR,
 	"activity-history-update": activityhistory.ActivityHistoryUpdate,
 	"fix-sherpa-clears":       fixsherpa.FixSherpaClears,
+	"refresh-view":            refreshview.RefreshView,
+	"manifest-downloader":     manifestdownloader.DownloadManifest,
+	"leaderboard-clan-crawl":  leaderboardclancrawl.LeaderboardClanCrawl,
+	"cheat-detection":         cheatdetection.CheatDetection,
+	"process-missed-pgcrs":    missedpgcr.ProcessMissedPGCRs,
 }
 
 func main() {

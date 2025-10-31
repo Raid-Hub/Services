@@ -1,4 +1,4 @@
-package processing
+package main
 
 import (
 	"context"
@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"raidhub/lib/env"
+	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/rabbit"
-	"raidhub/lib/monitoring"
+	"raidhub/lib/monitoring/hermes_metrics"
 	"raidhub/lib/utils"
 	"raidhub/lib/utils/logging"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // scalingState tracks the state for dead zone and cooldown logic
@@ -20,24 +23,29 @@ type scalingState struct {
 	lastScaleDirection    string // "up", "down", "none"
 	consecutiveChecksUp   int
 	consecutiveChecksDown int
+	cachedQueueDepth      int       // Cached queue depth for fallback
+	cachedQueueDepthTime  time.Time // When cached depth was retrieved
 }
 
 // TopicManager manages a single topic with self-scaling worker goroutines
 type TopicManager struct {
-	topic  Topic
-	config TopicConfig
+	topic         processing.Topic
+	config        processing.TopicConfig
+	managerConfig topicManagerConfig
 
 	// All fields are private to encapsulate the manager's internal state
 	activeWorkers int
 	workers       map[int]*Worker // Map of worker ID to Worker struct
 	mutex         sync.RWMutex
-	wg            *utils.ReadOnlyWaitGroup
-	ctx           context.Context
 	logger        logging.Logger
 
 	// Scaling state for dead zone and cooldown
 	scalingState scalingState
 	scalingMutex sync.Mutex // Separate mutex for scaling state to avoid blocking worker operations
+
+	// Dedicated channel for queue depth checks (reused, thread-safe)
+	depthCheckChannel *amqp.Channel
+	depthChannelMutex sync.RWMutex
 }
 
 func (tm *TopicManager) addTopicFields(fields map[string]any) map[string]any {
@@ -73,23 +81,19 @@ func (tm *TopicManager) GetInitialWorkers() int {
 	return tm.config.DesiredWorkers
 }
 
-// TopicManagerConfig contains configuration and resources for a TopicManager
-type TopicManagerConfig struct {
-	Context context.Context          // Go context for cancellation and timeouts
-	Wg      *utils.ReadOnlyWaitGroup // Wait group for coordinating API calls
+type topicManagerConfig struct {
+	context context.Context
+	wg      *utils.ReadOnlyWaitGroup
 }
 
-func (tm *TopicManager) GetContext() TopicManagerConfig {
-	return TopicManagerConfig{
-		Context: tm.ctx,
-		Wg:      tm.wg,
-	}
+func (tm *TopicManager) Context() context.Context {
+	return tm.managerConfig.context
 }
 
 // Stop gracefully stops all workers and waits for them to finish
 func (tm *TopicManager) WaitForWorkersToFinish() {
 	// Wait until context is cancelled
-	<-tm.ctx.Done()
+	<-tm.Context().Done()
 
 	tm.mutex.Lock()
 	tm.Debug("WAITING_FOR_WORKERS_TO_FINISH", nil)
@@ -100,8 +104,8 @@ func (tm *TopicManager) WaitForWorkersToFinish() {
 	tm.mutex.Unlock()
 }
 
-// StartTopicManager starts a TopicManager with self-scaling worker goroutines
-func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) (*TopicManager, error) {
+// startTopicManager starts a TopicManager with self-scaling worker goroutines
+func startTopicManager(topic processing.Topic, managerConfig topicManagerConfig) (*TopicManager, error) {
 	// Get the topic config directly from the topic
 	topicConfig := topic.Config
 
@@ -120,16 +124,6 @@ func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) (*TopicMan
 	}
 	if topicConfig.ScaleCheckInterval == 0 {
 		topicConfig.ScaleCheckInterval = 5 * time.Minute
-	}
-
-	// Set default hysteresis (dead zone) - prevents oscillation
-	if topicConfig.ScaleUpHysteresis == 0 {
-		// Scale-down threshold is lower than scale-up threshold by default
-		topicConfig.ScaleUpHysteresis = topicConfig.ScaleUpThreshold
-	}
-	if topicConfig.ScaleDownHysteresis == 0 {
-		// Scale-down happens at a lower threshold than scale-up
-		topicConfig.ScaleDownHysteresis = topicConfig.ScaleDownThreshold
 	}
 
 	// Set default cooldown period
@@ -161,8 +155,7 @@ func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) (*TopicMan
 		activeWorkers: 0,
 		workers:       make(map[int]*Worker),
 		config:        topicConfig,
-		wg:            managerConfig.Wg,
-		ctx:           managerConfig.Context,
+		managerConfig: managerConfig,
 		logger:        logging.NewLogger(prefix),
 		scalingState: scalingState{
 			lastScaleDirection: "none",
@@ -186,7 +179,7 @@ func StartTopicManager(topic Topic, managerConfig TopicManagerConfig) (*TopicMan
 	}
 
 	// Export initial worker count metric
-	monitoring.QueueWorkerCount.WithLabelValues(topicConfig.QueueName).Set(float64(initialWorkers))
+	hermes_metrics.QueueWorkerCount.WithLabelValues(topicConfig.QueueName).Set(float64(initialWorkers))
 
 	// Start goroutine to manually cancel all workers when TopicManager context is cancelled
 	go topicManager.handleShutdown()
@@ -248,7 +241,7 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 				logging.TO:   tm.activeWorkers,
 			})
 			// Update metrics
-			monitoring.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
+			hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
 		}
 	} else if targetWorkers < currentWorkers {
 		// Scale down - remove workers
@@ -265,7 +258,7 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 				logging.TO:   tm.activeWorkers,
 			})
 			// Update metrics
-			monitoring.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
+			hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
 		}
 	}
 
@@ -321,19 +314,20 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 	workerCtx, workerCancel := context.WithCancelCause(context.Background())
 
 	// Create Worker struct for this goroutine
-	topicManagerConfig := tm.GetContext()
+
 	prefix := fmt.Sprintf("%s#%d", tm.config.QueueName, workerID)
 	worker := &Worker{
-		ID:          workerID,
-		QueueName:   tm.config.QueueName,
-		Config:      topicManagerConfig,
-		logger:      logging.NewLogger(prefix),
-		ctx:         workerCtx,
-		cancel:      workerCancel,
-		amqpChannel: ch,
-		channel:     msgs,
-		processor:   tm.topic.processor,
-		done:        make(chan struct{}),
+		ID:            workerID,
+		QueueName:     tm.config.QueueName,
+		managerConfig: tm.managerConfig,
+		Topic:         tm.topic,
+		logger:        logging.NewLogger(prefix),
+		ctx:           workerCtx,
+		cancel:        workerCancel,
+		amqpChannel:   ch,
+		channel:       msgs,
+		processor:     tm.topic.Processor,
+		done:          make(chan struct{}),
 	}
 
 	go worker.Run()
@@ -347,12 +341,34 @@ func (tm *TopicManager) monitorSelfScaling() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		queueDepth, err := tm.getQueueDepth()
+		queueDepth, err := tm.getQueueDepthWithRetry()
 		if err != nil {
 			tm.logger.Error("QUEUE_DEPTH_ERROR", map[string]any{
 				logging.ERROR: err.Error(),
 			})
-			continue
+			// Use cached queue depth as fallback if available and recent (< 2 check intervals)
+			tm.scalingMutex.Lock()
+			cachedDepth := tm.scalingState.cachedQueueDepth
+			cacheAge := time.Since(tm.scalingState.cachedQueueDepthTime)
+			maxCacheAge := tm.config.ScaleCheckInterval * 2
+			tm.scalingMutex.Unlock()
+
+			if cachedDepth > 0 && cacheAge < maxCacheAge {
+				tm.Warn("USING_CACHED_QUEUE_DEPTH", map[string]any{
+					"cached_depth": cachedDepth,
+					"cache_age":    cacheAge.String(),
+				})
+				queueDepth = cachedDepth
+			} else {
+				// No valid cached value, skip this check
+				continue
+			}
+		} else {
+			// Successfully retrieved queue depth, cache it
+			tm.scalingMutex.Lock()
+			tm.scalingState.cachedQueueDepth = queueDepth
+			tm.scalingState.cachedQueueDepthTime = time.Now()
+			tm.scalingMutex.Unlock()
 		}
 
 		tm.mutex.RLock()
@@ -360,8 +376,8 @@ func (tm *TopicManager) monitorSelfScaling() {
 		tm.mutex.RUnlock()
 
 		// Export metrics
-		monitoring.QueueDepth.WithLabelValues(tm.config.QueueName).Set(float64(queueDepth))
-		monitoring.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(currentWorkers))
+		hermes_metrics.QueueDepth.WithLabelValues(tm.config.QueueName).Set(float64(queueDepth))
+		hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(currentWorkers))
 
 		// Check if scaling should happen with dead zone and cooldown
 		shouldScale, direction, targetWorkers := tm.shouldScaleWorkers(queueDepth, currentWorkers)
@@ -377,7 +393,7 @@ func (tm *TopicManager) monitorSelfScaling() {
 		})
 
 		// Record scaling decision metric
-		monitoring.QueueScalingDecisions.WithLabelValues(tm.config.QueueName, direction).Inc()
+		hermes_metrics.QueueScalingDecisions.WithLabelValues(tm.config.QueueName, direction).Inc()
 
 		err = tm.scaleTo(targetWorkers)
 		if err != nil {
@@ -399,7 +415,6 @@ func (tm *TopicManager) monitorSelfScaling() {
 }
 
 // shouldScaleWorkers determines if scaling should happen based on dead zone, hysteresis, and cooldown
-// Returns: (shouldScale bool, direction string, targetWorkers int)
 func (tm *TopicManager) shouldScaleWorkers(queueDepth, currentWorkers int) (bool, string, int) {
 	tm.scalingMutex.Lock()
 	defer tm.scalingMutex.Unlock()
@@ -462,13 +477,86 @@ func (tm *TopicManager) shouldScaleWorkers(queueDepth, currentWorkers int) (bool
 	return false, "none", currentWorkers
 }
 
-// getQueueDepth gets the current queue depth
-func (tm *TopicManager) getQueueDepth() (int, error) {
+// getQueueDepthChannel gets or creates a dedicated channel for queue depth checks
+// This channel is ONLY used for QueueDeclare (read-only) - it never consumes messages.
+// Workers have their own separate channels for consuming.
+func (tm *TopicManager) getQueueDepthChannel() (*amqp.Channel, error) {
+	tm.depthChannelMutex.RLock()
+	if tm.depthCheckChannel != nil {
+		ch := tm.depthCheckChannel
+		tm.depthChannelMutex.RUnlock()
+		return ch, nil
+	}
+	tm.depthChannelMutex.RUnlock()
+
+	// Need to create a new channel
+	tm.depthChannelMutex.Lock()
+	defer tm.depthChannelMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if tm.depthCheckChannel != nil {
+		return tm.depthCheckChannel, nil
+	}
+
+	// Create new channel
 	ch, err := rabbit.Conn.Channel()
+	if err != nil {
+		return nil, err
+	}
+	tm.depthCheckChannel = ch
+	return ch, nil
+}
+
+// getQueueDepthWithRetry gets the current queue depth with exponential backoff retry
+// Uses a dedicated reusable channel for consistency
+func (tm *TopicManager) getQueueDepthWithRetry() (int, error) {
+	maxRetries := 3
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		queueDepth, err := tm.getQueueDepth()
+		if err == nil {
+			// Success - reset failure tracking if we had retries
+			if attempt > 0 {
+				tm.logger.Info("QUEUE_DEPTH_RETRY_SUCCESS", map[string]any{
+					"attempt": attempt + 1,
+				})
+			}
+			return queueDepth, nil
+		}
+
+		// If channel is closed, invalidate it
+		if err == amqp.ErrClosed {
+			tm.depthChannelMutex.Lock()
+			tm.depthCheckChannel = nil
+			tm.depthChannelMutex.Unlock()
+		}
+
+		// If this isn't the last attempt, wait before retrying
+		if attempt < maxRetries-1 {
+			delay := baseDelay * time.Duration(1<<uint(attempt)) // Exponential backoff: 100ms, 200ms, 400ms
+			tm.logger.Warn("QUEUE_DEPTH_RETRY", map[string]any{
+				"attempt":     attempt + 1,
+				"max_retries": maxRetries,
+				"delay_ms":    delay.Milliseconds(),
+				logging.ERROR: err.Error(),
+			})
+			time.Sleep(delay)
+		}
+	}
+
+	// All retries failed
+	return 0, fmt.Errorf("failed to get queue depth after %d attempts", maxRetries)
+}
+
+// getQueueDepth gets the current queue depth using a reusable channel
+// NOTE: QueueDeclare does NOT consume messages - it only returns queue metadata.
+// This channel is never used for consuming, only for checking queue depth.
+func (tm *TopicManager) getQueueDepth() (int, error) {
+	ch, err := tm.getQueueDepthChannel()
 	if err != nil {
 		return 0, err
 	}
-	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
 		tm.config.QueueName,
@@ -479,6 +567,12 @@ func (tm *TopicManager) getQueueDepth() (int, error) {
 		nil,   // arguments
 	)
 	if err != nil {
+		// If channel error, invalidate it
+		if err == amqp.ErrClosed {
+			tm.depthChannelMutex.Lock()
+			tm.depthCheckChannel = nil
+			tm.depthChannelMutex.Unlock()
+		}
 		return 0, err
 	}
 
@@ -487,8 +581,8 @@ func (tm *TopicManager) getQueueDepth() (int, error) {
 
 // handleShutdown watches the TopicManager context and manually cancels all workers when shutdown is requested
 func (tm *TopicManager) handleShutdown() {
-	<-tm.ctx.Done()
-	cause := context.Cause(tm.ctx)
+	<-tm.Context().Done()
+	cause := context.Cause(tm.Context())
 
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
@@ -505,4 +599,12 @@ func (tm *TopicManager) handleShutdown() {
 	for _, worker := range tm.workers {
 		worker.cancel(cause)
 	}
+
+	// Close the queue depth check channel
+	tm.depthChannelMutex.Lock()
+	if tm.depthCheckChannel != nil {
+		tm.depthCheckChannel.Close()
+		tm.depthCheckChannel = nil
+	}
+	tm.depthChannelMutex.Unlock()
 }

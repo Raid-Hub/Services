@@ -13,8 +13,7 @@ import (
 )
 
 func applyMigration(filename, migrationSQL string) error {
-	db := postgres.DB
-	tx, err := db.Begin()
+	tx, err := postgres.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %w", err)
 	}
@@ -47,8 +46,8 @@ func main() {
 	log.Println("PostgreSQL Migration Tool")
 	log.Println("=========================")
 
-	// Use the existing PostgreSQL connection from singleton
-	db := postgres.DB
+	// Wait for PostgreSQL connection to be ready
+	postgres.Wait()
 
 	// Use new unified migration directory
 	migrationDirectory := "infrastructure/postgres/migrations"
@@ -72,7 +71,7 @@ func main() {
 	// Create migration config
 	getAppliedMigrations := func() (map[string]bool, error) {
 		appliedMigrations := make(map[string]bool)
-		rows, err := db.Query("SELECT name FROM _migrations")
+		rows, err := postgres.DB.Query("SELECT name FROM _migrations")
 		if err != nil {
 			return nil, err
 		}

@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/signal"
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
 	"sync"
 	"syscall"
 	"time"
 )
 
-var fixSherpaLogger = utils.NewLogger("FIX_SHERPA_TOOL")
+var logger = logging.NewLogger("FIX_SHERPA_TOOL")
 
 // FixSherpaClears is the command function
 // This script is used to rebuild the sherpa and first clear columns in the instance_player table
@@ -30,57 +30,57 @@ func FixSherpaClears() {
 
 	go func() {
 		<-sigs
-		fixSherpaLogger.Info("Signal received, cancelling context...")
+		logger.Info("SIGNAL_RECEIVED", map[string]any{"action": "cancelling_context"})
 		cancel()
 	}()
 
 	wg := sync.WaitGroup{}
 
 	// This first section here resets the sherpas and first clear columns
-	fixSherpaLogger.Info("Creating index on instance_player.completed...")
+	logger.Info("CREATING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed"})
 	monitorCtx, endMonitor := context.WithCancel(ctx)
 	defer endMonitor()
 	postgres.MonitorIndexCreationProgress(monitorCtx, "instance_player", "idx_instance_player_completed", 10*time.Second)
 
 	_, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_instance_player_completed ON instance_player (completed) INCLUDE (membership_id, instance_id) WHERE completed`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error creating index on instance_player.completed: %s", err)
+		logger.Error("ERROR_CREATING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", logging.ERROR: err.Error()})
 	}
 	endMonitor() // Stop monitoring after index creation
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error starting transaction: %s", err)
+		logger.Error("ERROR_BEGINNING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer tx.Rollback()
 
 	// acquire lock on player and instance_player tables
-	fixSherpaLogger.Info("Acquiring lock on player and instance_player tables...")
+	logger.Info("ACQUIRING_LOCK", map[string]any{"tables": "player, instance_player, player_stats"})
 	_, err = tx.ExecContext(ctx, `LOCK TABLE player, instance_player, player_stats IN EXCLUSIVE MODE`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error acquiring lock on player and instance_player tables: %s", err)
+		logger.Error("ERROR_ACQUIRING_LOCK", map[string]any{"tables": "player, instance_player, player_stats", logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.Info("Lock acquired.")
+	logger.Info("LOCK_ACQUIRED", map[string]any{})
 
-	fixSherpaLogger.Info("Updating materialized view firsts_clears_tmp...")
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "firsts_clears_tmp"})
 	start := time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW firsts_clears_tmp WITH DATA`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error refreshing materialized view firsts_clears_tmp: %s", err)
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "firsts_clears_tmp", logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.InfoF("Materialized view firsts_clears_tmp updated in %s", time.Since(start))
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "firsts_clears_tmp", "duration": time.Since(start).String()})
 
-	fixSherpaLogger.Info("Updating materialized view noob_counts")
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "noob_counts"})
 	start = time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW noob_counts WITH DATA`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error refreshing materialized view noob_counts: %s", err)
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "noob_counts", logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.InfoF("Materialized view noob_counts updated in %s", time.Since(start))
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "noob_counts", "duration": time.Since(start).String()})
 
-	fixSherpaLogger.Info("Setting sherpas and first clear...")
+	logger.Info("UPDATING_SHERPAS_AND_FIRST_CLEAR", map[string]any{})
 	start = time.Now()
 	_, err = tx.ExecContext(ctx, `UPDATE instance_player _ap
 		SET is_first_clear = f.instance_id IS NOT NULL,
@@ -97,39 +97,39 @@ func FixSherpaClears() {
 			AND ap.membership_id = _ap.membership_id
 			AND ap.instance_id = _ap.instance_id`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error updating sherpas and first clear: %s", err)
+		logger.Error("ERROR_UPDATING_SHERPAS_AND_FIRST_CLEAR", map[string]any{logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.InfoF("Sherpas and first clear updated in %s", time.Since(start))
+	logger.Info("SHERPAS_AND_FIRST_CLEAR_UPDATED", map[string]any{"duration": time.Since(start).String()})
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fixSherpaLogger.Info("Dropping index on instance_player.completed...")
+		logger.Info("DROPPING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed"})
 		start := time.Now()
 		_, err = tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_instance_player_completed`)
 		if err != nil {
-			fixSherpaLogger.ErrorF("Error dropping index on instance_player.completed: %s", err)
+			logger.Error("ERROR_DROPPING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", logging.ERROR: err.Error()})
 		}
-		fixSherpaLogger.InfoF("Index on instance_player.completed dropped in %s", time.Since(start))
+		logger.Info("INDEX_DROPPED", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", "duration": time.Since(start).String()})
 	}()
 
 	// part 1 end, can restart from part 2 if needed
 
 	// Once the first section is done, we can update the materialized view which seeds the player_stats and global_stats tables
-	fixSherpaLogger.Info("Updating materialized view p_stats_cache...")
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "p_stats_cache"})
 	start = time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW p_stats_cache WITH DATA`)
 	if err != nil {
-		fixSherpaLogger.ErrorF("Error refreshing materialized view p_stats_cache: %s", err)
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "p_stats_cache", logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.InfoF("Materialized view p_stats_cache updated in %s", time.Since(start))
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "p_stats_cache", "duration": time.Since(start).String()})
 
 	// This update the player_stats and global_stats tables
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fixSherpaLogger.Info("Updating player_stats...")
+		logger.Info("UPDATING_PLAYER_STATS", map[string]any{})
 		start := time.Now()
 		_, err := tx.ExecContext(ctx, `UPDATE player_stats _ps
             SET 
@@ -142,15 +142,15 @@ func FixSherpaClears() {
             LEFT JOIN p_stats_cache p USING (membership_id, activity_id)
             WHERE ps.membership_id = _ps.membership_id AND ps.activity_id = _ps.activity_id`)
 		if err != nil {
-			fixSherpaLogger.ErrorF("Error updating player_stats: %s", err)
+			logger.Error("ERROR_UPDATING_PLAYER_STATS", map[string]any{logging.ERROR: err.Error()})
 		}
-		fixSherpaLogger.InfoF("player_stats updated in %s", time.Since(start))
+		logger.Info("PLAYER_STATS_UPDATED", map[string]any{"duration": time.Since(start).String()})
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fixSherpaLogger.Info("Updating global_stats...")
+		logger.Info("UPDATING_GLOBAL_STATS", map[string]any{})
 		start := time.Now()
 		_, err := tx.ExecContext(ctx, `
             WITH active_raid_count AS (
@@ -182,16 +182,16 @@ func FixSherpaClears() {
 			LEFT JOIN g_stats g USING (membership_id)
             WHERE p.membership_id = _p.membership_id`)
 		if err != nil {
-			fixSherpaLogger.ErrorF("Error updating global_stats: %s", err)
+			logger.Error("ERROR_UPDATING_GLOBAL_STATS", map[string]any{logging.ERROR: err.Error()})
 		}
-		fixSherpaLogger.InfoF("global_stats updated in %s", time.Since(start))
+		logger.Info("GLOBAL_STATS_UPDATED", map[string]any{"duration": time.Since(start).String()})
 	}()
 
 	wg.Wait()
 	if err := tx.Commit(); err != nil {
-		fixSherpaLogger.ErrorF("Error committing transaction: %s", err)
+		logger.Error("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
 	}
-	fixSherpaLogger.Info("Transaction committed successfully.")
+	logger.Info("TRANSACTION_COMMITTED", map[string]any{})
 
-	fixSherpaLogger.InfoF("Done in %s", time.Since(scriptStart))
+	logger.Info("COMPLETED", map[string]any{"duration": time.Since(scriptStart).String()})
 }

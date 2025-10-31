@@ -3,6 +3,7 @@ package logging
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // StructuredLogger is a simple logger implementation
@@ -16,12 +17,13 @@ func NewLogger(prefix string) Logger {
 }
 
 func (l *StructuredLogger) log(level string, key string, fields map[string]any) {
-	prefix := fmt.Sprintf("[%s][%s] ", level, l.prefix)
+	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05.000")
+	prefix := fmt.Sprintf("%s [%s][%s] -- ", timestamp, level, l.prefix)
 
 	// Build structured log entry
-	var output = fmt.Sprintf(":: %s", key)
+	var output = key
 	if len(fields) != 0 {
-		output = fmt.Sprintf("%s ::", output)
+		output = fmt.Sprintf("%s >>", output)
 		for key, value := range fields {
 			output += fmt.Sprintf(" %s=%v", key, value)
 		}

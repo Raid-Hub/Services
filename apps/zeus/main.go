@@ -50,18 +50,21 @@ var proxyTransport = &transport{}
 func main() {
 	flag.Parse()
 
+	// Start metrics worker goroutine
+	go metricsWorker()
+
 	// Get security key from environment for API key forwarding
 	securityKey = env.BungieAPIKey
 	// Initialize transport with IPv6 support if available, otherwise use default
 	// In dev mode, use single transport (no round robin). In production, use multiple transports.
 	numIPs := 1
-	if !*dev && env.IPV6 != "" {
+	if !*dev && env.ZeusIPV6 != "" {
 		numIPs = *ipv6n
 	}
 
-	if env.IPV6 != "" && numIPs > 1 {
+	if env.ZeusIPV6 != "" && numIPs > 1 {
 		// Production mode with IPv6: create multiple transports for round robin
-		addr := netip.MustParseAddr(env.IPV6)
+		addr := netip.MustParseAddr(env.ZeusIPV6)
 		for i := 0; i < numIPs; i++ {
 			d := &net.Dialer{
 				LocalAddr: &net.TCPAddr{
@@ -86,9 +89,9 @@ func main() {
 			"interface":   *ipv6interface,
 			"round_robin": true,
 		})
-	} else if env.IPV6 != "" {
+	} else if env.ZeusIPV6 != "" {
 		// Dev mode with IPv6: use single IPv6 address
-		addr := netip.MustParseAddr(env.IPV6)
+		addr := netip.MustParseAddr(env.ZeusIPV6)
 		d := &net.Dialer{
 			LocalAddr: &net.TCPAddr{
 				IP: net.IP(addr.AsSlice()),
@@ -177,10 +180,14 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	var rl *rate.Limiter
 	var n int64
 	var rt http.RoundTripper
+	var endpointType string
+	startTime := time.Now()
+	var rateLimiterWait time.Duration
 
 	if strings.Contains(r.URL.Path, "Destiny2/Stats/PostGameCarnageReport") {
 		n = atomic.AddInt64(&t.nS, 1)
 		r.Host = "stats.bungie.net"
+		endpointType = "stats"
 		if len(t.statsRl) > 0 {
 			// In dev mode, always use the first rate limiter (single transport)
 			// In production, round robin through rate limiters
@@ -189,6 +196,7 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	} else {
 		n = atomic.AddInt64(&t.nW, 1)
 		r.Host = "www.bungie.net"
+		endpointType = "www"
 		if len(t.wwwRl) > 0 {
 			// In dev mode, always use the first rate limiter (single transport)
 			// In production, round robin through rate limiters
@@ -203,7 +211,7 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 			"path":   r.URL.Path,
 			"method": r.Method,
 		})
-		r.Header.Set("X-API-KEY", securityKey)
+		r.Header.Set("x-api-key", securityKey)
 		r.Header.Add("x-forwarded-for", securityKey)
 	} else if securityKey != "" {
 		// Only log warning if security key is configured but not provided
@@ -214,11 +222,14 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 		})
 	}
 
+	// Measure rate limiter wait time
 	if rl != nil {
+		rateLimiterStart := time.Now()
 		if err := rl.Wait(r.Context()); err != nil {
 			// Context canceled or deadline exceeded - return error
 			return nil, err
 		}
+		rateLimiterWait = time.Since(rateLimiterStart)
 	}
 
 	// In dev mode, always use the first transport (no round robin)
@@ -231,5 +242,21 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 		"host":           r.Host,
 	})
 
-	return rt.RoundTrip(r)
+	// Make the actual request
+	resp, err := rt.RoundTrip(r)
+	duration := time.Since(startTime)
+
+	// Send metrics event to channel (non-blocking with buffered channel)
+	select {
+	case metricsChan <- metricsEvent{
+		endpointType:    endpointType,
+		duration:        duration,
+		rateLimiterWait: rateLimiterWait,
+	}:
+	default:
+		// Channel full, drop metric to avoid blocking (buffer should be large enough)
+		logger.Warn("METRICS_CHANNEL_FULL", map[string]any{})
+	}
+
+	return resp, err
 }

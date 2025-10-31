@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"raidhub/lib/monitoring"
+	"raidhub/lib/monitoring/atlas_metrics"
 	"raidhub/lib/utils/logging"
 )
 
@@ -38,7 +38,7 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 
 		spawnWorkers(workers, periodLength, &consumerConfig)
 
-		monitoring.ActiveWorkers.Set(float64(workers))
+		atlas_metrics.ActiveWorkers.Set(float64(workers))
 
 		metrics, err := GetMetricsForScaling(time.Since(startTime))
 		if err != nil {

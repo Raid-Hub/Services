@@ -29,7 +29,7 @@ var (
 	BungieAPIKey  string
 	BungieURLBase string
 	ZeusAPIKeys   string
-	IPV6          string
+	ZeusIPV6      string
 	PGCRURLBase   string
 
 	// Webhooks (optional)
@@ -51,6 +51,7 @@ var (
 	// Metrics export ports (for Prometheus scraping)
 	AtlasMetricsPort  string
 	HermesMetricsPort string
+	ZeusMetricsPort   string
 )
 
 var envIssues []string
@@ -80,7 +81,7 @@ func init() {
 	BungieAPIKey = requireEnv("BUNGIE_API_KEY")
 	BungieURLBase = requireEnv("BUNGIE_URL_BASE")
 	ZeusAPIKeys = getEnv("ZEUS_API_KEYS")
-	IPV6 = getEnv("IPV6")
+	ZeusIPV6 = getEnv("ZEUS_IPV6")
 	PGCRURLBase = requireEnv("PGCR_URL_BASE")
 
 	// Webhooks (optional)
@@ -102,6 +103,7 @@ func init() {
 	// Metrics export ports (for Prometheus scraping)
 	AtlasMetricsPort = requireEnv("ATLAS_METRICS_PORT")
 	HermesMetricsPort = requireEnv("HERMES_METRICS_PORT")
+	ZeusMetricsPort = getEnv("ZEUS_METRICS_PORT")
 
 	if len(envIssues) > 0 {
 		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))

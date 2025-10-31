@@ -10,7 +10,6 @@ import (
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
-	"raidhub/lib/monitoring"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
 )
@@ -31,10 +30,6 @@ func offloadWorker(consumerConfig *ConsumerConfig) {
 			startTime := time.Now()
 			for i := 1; i <= 6; i++ {
 				result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
-
-				statusStr := fmt.Sprintf("%d", result)
-				attemptsStr := fmt.Sprintf("%d", -i)
-				monitoring.PGCRCrawlStatus.WithLabelValues(statusStr, attemptsStr).Inc()
 
 				if err != nil {
 					// Check if this is a timeout error - log at Debug level instead of Warn

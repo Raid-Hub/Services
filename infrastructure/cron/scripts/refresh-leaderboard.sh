@@ -1,23 +1,20 @@
 #!/bin/bash
-# Unified Materialized View Refresher for RaidHub Services
-# Handles both regular views and leaderboard views (with cache management)
-# Usage: refresh-view.sh VIEW_NAME
+# Leaderboard Refresher for RaidHub Services
+# Refreshes cache view first, then the leaderboard view (completely independent)
+# After leaderboard refresh, clears the cache to free up space
+# Usage: refresh-leaderboard.sh LEADERBOARD_NAME
 #
-# For leaderboard views (individual_global_leaderboard, individual_raid_leaderboard):
-#   - Refreshes cache view first
-#   - Refreshes leaderboard view
-#   - Clears cache after refresh to free up space
-#
-# For other views:
-#   - Simple CONCURRENTLY refresh
+# Supported leaderboard names:
+#   - individual_global_leaderboard (uses _global_leaderboard_cache)
+#   - individual_raid_leaderboard (uses _raid_leaderboard_cache)
 
 set -e
 
-VIEW_NAME="$1"
+LEADERBOARD_NAME="$1"
 LOG_FILE="/RaidHub/cron.log"
 
-if [ -z "$VIEW_NAME" ]; then
-    echo "Error: No view name provided"
+if [ -z "$LEADERBOARD_NAME" ]; then
+    echo "Error: No leaderboard name provided"
     exit 1
 fi
 
@@ -29,47 +26,44 @@ if [ -f .env ]; then
     set +a
 fi
 
-# Check if this is a leaderboard refresh
-case "$VIEW_NAME" in
+# Determine which cache view to refresh based on leaderboard name
+case "$LEADERBOARD_NAME" in
     "individual_global_leaderboard")
-        IS_LEADERBOARD=true
         CACHE_VIEW="_global_leaderboard_cache"
         ;;
     "individual_raid_leaderboard")
-        IS_LEADERBOARD=true
         CACHE_VIEW="_raid_leaderboard_cache"
         ;;
     *)
-        IS_LEADERBOARD=false
+        echo "Error: Unknown leaderboard '$LEADERBOARD_NAME'"
+        echo "Supported: individual_global_leaderboard, individual_raid_leaderboard"
+        exit 1
         ;;
 esac
 
-if [ "$IS_LEADERBOARD" = true ]; then
-    # Leaderboard refresh: cache -> leaderboard -> clear cache
-    
-    # Refresh the cache view first
-    echo "[$(date)] Refreshing cache: leaderboard.$CACHE_VIEW" >> "$LOG_FILE"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-        -c "REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard.$CACHE_VIEW WITH DATA" >> "$LOG_FILE" 2>&1
-    
-    # Then refresh the leaderboard view
-    echo "[$(date)] Refreshing leaderboard: leaderboard.$VIEW_NAME" >> "$LOG_FILE"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-        -c "REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard.$VIEW_NAME WITH DATA" >> "$LOG_FILE" 2>&1
-    
-    # Clear the cache after leaderboard refresh to free up space
-    # Recreate the cache view with original definition (empty until next refresh)
-    echo "[$(date)] Clearing cache: leaderboard.$CACHE_VIEW" >> "$LOG_FILE"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
+# Refresh the cache view first
+echo "[$(date)] Refreshing cache: leaderboard.$CACHE_VIEW" >> "$LOG_FILE"
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard.$CACHE_VIEW WITH DATA" >> "$LOG_FILE" 2>&1
+
+# Then refresh the leaderboard view
+echo "[$(date)] Refreshing leaderboard: leaderboard.$LEADERBOARD_NAME" >> "$LOG_FILE"
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard.$LEADERBOARD_NAME WITH DATA" >> "$LOG_FILE" 2>&1
+
+# Clear the cache after leaderboard refresh to free up space
+# Recreate the cache view with original definition (empty until next refresh)
+echo "[$(date)] Clearing cache: leaderboard.$CACHE_VIEW" >> "$LOG_FILE"
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
 -- Refresh without CONCURRENTLY first (required before dropping)
 REFRESH MATERIALIZED VIEW leaderboard.$CACHE_VIEW WITH DATA;
 -- Drop and recreate with original query (will be empty until next refresh)
 DROP MATERIALIZED VIEW leaderboard.$CACHE_VIEW CASCADE;
 EOF
 
-    # Recreate with original query structure (empty until next refresh)
-    if [ "$CACHE_VIEW" = "_global_leaderboard_cache" ]; then
-        PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
+# Recreate with original query structure (empty until next refresh)
+if [ "$CACHE_VIEW" = "_global_leaderboard_cache" ]; then
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
 CREATE MATERIALIZED VIEW leaderboard._global_leaderboard_cache AS
 SELECT
   membership_id,
@@ -90,8 +84,8 @@ CREATE INDEX idx_global_leaderboard_cache_speed ON leaderboard._global_leaderboa
 CREATE INDEX idx_global_leaderboard_cache_time ON leaderboard._global_leaderboard_cache (total_time_played_seconds DESC, membership_id ASC);
 CREATE INDEX idx_global_leaderboard_cache_wfr ON leaderboard._global_leaderboard_cache (wfr_score DESC, membership_id ASC);
 EOF
-    elif [ "$CACHE_VIEW" = "_raid_leaderboard_cache" ]; then
-        PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
+elif [ "$CACHE_VIEW" = "_raid_leaderboard_cache" ]; then
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF >> "$LOG_FILE" 2>&1
 CREATE MATERIALIZED VIEW leaderboard._raid_leaderboard_cache AS
 SELECT
   ps.activity_id,
@@ -112,12 +106,6 @@ CREATE INDEX idx_raid_leaderboard_cache_fresh_clears ON leaderboard._raid_leader
 CREATE INDEX idx_raid_leaderboard_cache_sherpas ON leaderboard._raid_leaderboard_cache (activity_id ASC, sherpas DESC, membership_id ASC);
 CREATE INDEX idx_raid_leaderboard_cache_time ON leaderboard._raid_leaderboard_cache (activity_id ASC, total_time_played_seconds DESC, membership_id ASC);
 EOF
-    fi
-else
-    # Regular view refresh: simple CONCURRENTLY refresh
-    echo "[$(date)] Refreshing view: $VIEW_NAME" >> "$LOG_FILE"
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-        -c "REFRESH MATERIALIZED VIEW CONCURRENTLY $VIEW_NAME WITH DATA" >> "$LOG_FILE" 2>&1
 fi
 
 exit $?

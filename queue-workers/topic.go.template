@@ -76,7 +76,7 @@ func YourTopicName() processing.Topic {
 }
 
 // processYourTopicName handles messages for your topic
-func processYourTopicName(worker *processing.Worker, message amqp.Delivery) error {
+func processYourTopicName(worker processing.WorkerInterface, message amqp.Delivery) error {
 	// Option 1: JSON message
 	var request messages.YourMessageType  // Define in messages package
 	if err := json.Unmarshal(message.Body, &request); err != nil {

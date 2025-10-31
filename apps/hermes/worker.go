@@ -1,11 +1,12 @@
-package processing
+package main
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"raidhub/lib/monitoring"
+	"raidhub/lib/messaging/processing"
+	"raidhub/lib/monitoring/hermes_metrics"
 	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -19,22 +20,20 @@ const (
 // Worker represents a message processing worker with structured logging
 type Worker struct {
 	// Public fields (accessed by processors)
-	ID        int
-	QueueName string
-	Config    TopicManagerConfig
-	logger    logging.Logger
+	ID            int
+	QueueName     string
+	managerConfig topicManagerConfig
+	Topic         processing.Topic
+	logger        logging.Logger
 
 	// Private fields (internal worker state)
 	ctx         context.Context         // Worker context that cancels on shutdown or autoscale
 	cancel      context.CancelCauseFunc // Cancel function for worker context (with cause)
 	amqpChannel *amqp.Channel           // RabbitMQ channel for this worker
 	channel     <-chan amqp.Delivery
-	processor   ProcessorFunc
+	processor   processing.ProcessorFunc
 	done        chan struct{} // Channel that closes when worker is finished
 }
-
-// ProcessorFunc defines the function signature for processing messages
-type ProcessorFunc func(worker *Worker, message amqp.Delivery) error
 
 // Run starts the worker and kicks off the polling
 func (w *Worker) Run() {
@@ -62,8 +61,8 @@ func (w *Worker) Run() {
 			}
 
 			// Wait for API availability if needed
-			if w.Config.Wg != nil {
-				w.Config.Wg.Wait()
+			if w.managerConfig.wg != nil {
+				w.managerConfig.wg.Wait()
 			}
 
 			err := w.ProcessMessage(msg)
@@ -72,7 +71,7 @@ func (w *Worker) Run() {
 					logging.ERROR: err.Error(),
 				})
 				// Record metrics for failed processing
-				monitoring.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
+				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
 				// NACK with requeue=false to prevent infinite retries on permanent failures
 				// The message will be sent to the dead letter queue if configured
 				if err := msg.Nack(false, false); err != nil {
@@ -90,7 +89,7 @@ func (w *Worker) Run() {
 				})
 			} else {
 				// Record metrics for successful processing
-				monitoring.QueueMessagesProcessed.WithLabelValues(w.QueueName, "success").Inc()
+				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "success").Inc()
 			}
 		}
 	}
@@ -125,7 +124,7 @@ func (w *Worker) ProcessMessage(message amqp.Delivery) error {
 	duration := time.Since(startTime)
 
 	// Record processing duration metric
-	monitoring.QueueMessageProcessingDuration.WithLabelValues(w.QueueName).Observe(duration.Seconds())
+	hermes_metrics.QueueMessageProcessingDuration.WithLabelValues(w.QueueName).Observe(duration.Seconds())
 
 	return err
 }

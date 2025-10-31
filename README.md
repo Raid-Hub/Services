@@ -8,7 +8,7 @@ RaidHub Services follows a microservices architecture with clear separation betw
 
 ### Main Components
 
-- **Apps** (`apps/`): Main application services (Atlas, Hermes, Hades, Athena, etc.)
+- **Apps** (`apps/`): Main application services (Atlas, Hermes, Zeus)
 - **Queue Workers** (`queue-workers/`): Background processing workers for async tasks
 - **Tools** (`tools/`): Utility scripts and one-off tools
 - **Infrastructure** (`infrastructure/`): Database schemas, migrations, cron jobs, and service configs
@@ -144,10 +144,13 @@ Start with: `make up` (starts infrastructure) + run binaries individually or via
 
 These applications run on a schedule via system crontab:
 
-- **`hera`** - Top player crawler for leaderboard maintenance
-- **`hades`** - Missed PGCR recovery processor
-- **`nemesis`** - Cheat detection and player account maintenance
-- **`athena`** - Destiny 2 manifest downloader
+**Tools** (run via cron, consolidated into single binary):
+
+- **`process-missed-pgcrs`** - Processes missed PGCRs (runs every 15 minutes)
+- **`manifest-downloader`** - Downloads Destiny 2 manifest (runs multiple times daily)
+- **`leaderboard-clan-crawl`** - Crawls clans for top leaderboard players (runs weekly)
+- **`cheat-detection`** - Cheat detection and account maintenance (runs 4 times daily)
+- **`refresh-view`** - Refreshes materialized views (runs daily)
 
 Configure in: `infrastructure/cron/prod.crontab`
 
@@ -207,10 +210,11 @@ make apps
 make cron
 
 # Or run manually
-./bin/hera       # Top player crawl
-./bin/hades      # Missed log processor
-./bin/nemesis    # Cheat detection maintenance
-./bin/athena     # Manifest downloader
+./bin/tools process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
+./bin/tools manifest-downloader [--out=<dir>] [--force] [--disk]
+./bin/tools leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
+./bin/tools cheat-detection
+./bin/tools refresh-view <view_name>
 ```
 
 **Manual tools:**
@@ -284,7 +288,7 @@ Key environment variables (see `example.env` for full list):
 BUNGIE_API_KEY=your_api_key
 
 # IPv6 (optional for Zeus - enables load balancing)
-IPV6=2001:db8::1  # Base IPv6 address for load balancing
+ZEUS_IPV6=2001:db8::1  # Base IPv6 address for load balancing
 
 # PostgreSQL
 POSTGRES_USER=username
@@ -380,7 +384,7 @@ Workers automatically scale based on queue depth and processing metrics.
 
 1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8083, 7777, 9090, 15672 are available
 2. **API Key Missing**: Set `BUNGIE_API_KEY` in `.env`
-3. **Zeus IPv6**: Optional - Set `IPV6` in `.env` for production load balancing. Use `--dev` flag to disable round robin (use single transport) while keeping rate limiting enabled for local development.
+3. **Zeus IPv6**: Optional - Set `ZEUS_IPV6` in `.env` for production load balancing. Use `--dev` flag to disable round robin (use single transport) while keeping rate limiting enabled for local development.
 4. **Docker Issues**: Ensure Docker is running and has sufficient resources
 5. **Go Build Errors**: Check Go version and module dependencies
 6. **Tilt Issues**: Ensure Tilt is installed and Docker is running

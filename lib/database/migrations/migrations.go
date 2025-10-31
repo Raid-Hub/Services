@@ -3,8 +3,27 @@ package migrations
 import (
 	"os"
 	"path/filepath"
+	"raidhub/lib/utils/logging"
 	"sort"
 )
+
+var logger = logging.NewLogger("Migrations")
+
+func Info(message string, fields map[string]any) {
+	logger.Info(message, fields)
+}
+
+func Debug(message string, fields map[string]any) {
+	logger.Debug(message, fields)
+}
+
+func Warn(message string, fields map[string]any) {
+	logger.Warn(message, fields)
+}
+
+func Error(message string, fields map[string]any) {
+	logger.Error(message, fields)
+}
 
 // GetMigrationFiles reads all SQL files from a directory and returns them sorted
 func GetMigrationFiles(directory string) ([]string, error) {
@@ -40,11 +59,17 @@ func ReadMigrationFile(directory, filename string) (string, error) {
 
 // RunMigrations is a generic migration runner that handles the common logic
 func RunMigrations(config MigrationConfig) error {
-	MigrationsLogger.InfoF("Found %d migration files in %s", len(config.MigrationFiles), config.Directory)
+	Info("FOUND_MIGRATION_FILES", map[string]any{
+		"count":     len(config.MigrationFiles),
+		"directory": config.Directory,
+	})
 
 	// Query applied migrations
 	appliedMigrations, err := config.GetAppliedMigrations()
 	if err != nil {
+		Error("FAILED_TO_GET_APPLIED_MIGRATIONS", map[string]any{
+			"error": err.Error(),
+		})
 		return err
 	}
 
@@ -52,30 +77,46 @@ func RunMigrations(config MigrationConfig) error {
 	appliedCount := 0
 	for _, filename := range config.MigrationFiles {
 		if appliedMigrations[filename] {
-			MigrationsLogger.InfoF("✓ %s (already applied)", filename)
+			Debug("MIGRATION_ALREADY_APPLIED", map[string]any{
+				"filename": filename,
+			})
 			continue
 		}
 
-		MigrationsLogger.InfoF("→ Applying migration: %s", filename)
+		Info("APPLYING_MIGRATION", map[string]any{
+			"filename": filename,
+		})
 
 		migrationSQL, err := ReadMigrationFile(config.Directory, filename)
 		if err != nil {
+			Error("FAILED_TO_READ_MIGRATION_FILE", map[string]any{
+				"filename": filename,
+				"error":    err.Error(),
+			})
 			return err
 		}
 
 		err = config.ApplyMigration(filename, migrationSQL)
 		if err != nil {
+			Error("FAILED_TO_APPLY_MIGRATION", map[string]any{
+				"filename": filename,
+				"error":    err.Error(),
+			})
 			return err
 		}
 
-		MigrationsLogger.InfoF("✓ Applied %s", filename)
+		Info("MIGRATION_APPLIED", map[string]any{
+			"filename": filename,
+		})
 		appliedCount++
 	}
 
 	if appliedCount == 0 {
-		MigrationsLogger.Info("\n✓ Database is up to date")
+		Info("DATABASE_UP_TO_DATE", nil)
 	} else {
-		MigrationsLogger.InfoF("\n✓ Applied %d new migration(s)", appliedCount)
+		Info("MIGRATIONS_COMPLETE", map[string]any{
+			"applied_count": appliedCount,
+		})
 	}
 
 	return nil

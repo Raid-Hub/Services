@@ -1,4 +1,4 @@
-package main
+package missedpgcr
 
 import (
 	"bufio"
@@ -21,29 +21,26 @@ import (
 	"slices"
 )
 
-var (
-	gap        = flag.Bool("gap", false, "process gaps in the missed log")
-	force      = flag.Bool("force", false, "force processing all PGCRs, ignoring database recency check")
-	numWorkers = flag.Int("workers", 1, "number of workers to spawn")
-	retries    = flag.Int("retries", 5, "number of retries for each PGCR")
+var logger = logging.NewLogger("MISSED_PGCR")
 
-	// Global worker state
+// Global worker state
+var (
 	workerLatestId   int64
 	workerForce      bool
 	workerMaxRetries int
-
-	logger        = logging.NewLogger("HADES")
-	hadesAlerting *discord.DiscordAlerting
 )
 
-func init() {
-	hadesAlerting = discord.NewDiscordAlerting(env.HadesWebhookURL, logger)
-}
+// ProcessMissedPGCRs is the command function for processing missed PGCRs
+// Usage: ./bin/tools process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
+func ProcessMissedPGCRs() {
+	fs := flag.NewFlagSet("process-missed-pgcrs", flag.ExitOnError)
+	gap := fs.Bool("gap", false, "process gaps in the missed log")
+	force := fs.Bool("force", false, "force processing all PGCRs, ignoring database recency check")
+	numWorkers := fs.Int("workers", 1, "number of workers to spawn")
+	retries := fs.Int("retries", 5, "number of retries for each PGCR")
+	fs.Parse(flag.Args())
 
-func main() {
-	flag.Parse()
-
-	// monitoring.RegisterPrometheus(9091)
+	hadesAlerting := discord.NewDiscordAlerting(env.HadesWebhookURL, logger)
 
 	// missedLogPath is where new missed PGCRs are accumulated
 	missedLogPath := env.MissedPGCRLogFilePath
@@ -60,19 +57,19 @@ func main() {
 				// missedLogPath exists, move it to processingLogPath for processing
 				err = moveFile(missedLogPath, processingLogPath)
 				if err != nil {
-					panic(err)
+					logger.Fatal("ERROR_MOVING_FILE", map[string]any{logging.ERROR: err.Error()})
 				}
 			} else if !os.IsNotExist(err) {
 				// Some other error checking missedLogPath
-				panic(err)
+				logger.Fatal("ERROR_CHECKING_MISSED_LOG_PATH", map[string]any{logging.ERROR: err.Error()})
 			} else {
 				// missedLogPath doesn't exist, nothing to process - just create empty missedLogPath and exit
 				if err := os.MkdirAll(logDir, 0755); err != nil {
-					panic(err)
+					logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", map[string]any{logging.ERROR: err.Error()})
 				}
 				missedLogFile, err := createFile(missedLogPath)
 				if err != nil {
-					panic(err)
+					logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
 				}
 				missedLogFile.Close()
 				logger.Info("NO_MISSED_PGCRS_TO_PROCESS", map[string]any{})
@@ -82,17 +79,20 @@ func main() {
 			// It will be created at the end after processing completes, so that any failed PGCRs
 			// written during processing are preserved
 		} else {
-			panic(err)
+			logger.Fatal("ERROR_STAT_PROCESSING_LOG_PATH", map[string]any{logging.ERROR: err.Error()})
 		}
 	}
 
 	logFile, err := os.Open(processingLogPath)
 	if err != nil {
-		panic(err)
+		logger.Fatal("ERROR_OPENING_PROCESSING_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer logFile.Close()
 
 	logger.Info("READING_MISSED_PGCRS", map[string]any{logging.PATH: processingLogPath})
+
+	// Wait for PostgreSQL connection to be ready
+	postgres.Wait()
 
 	// Create a map to store unique numbers
 	uniqueNumbers := make(map[int64]bool)
@@ -130,7 +130,7 @@ func main() {
 
 	if err := scanner.Err(); err != nil {
 		logger.Warn("DATABASE_QUERY_ERROR", map[string]any{logging.ERROR: err.Error()})
-		panic(err)
+		logger.Fatal("ERROR_SCANNING_FILE", map[string]any{logging.ERROR: err.Error()})
 	}
 
 	// postgres.DB is initialized in init()
@@ -172,7 +172,7 @@ func main() {
 			var err error
 			latestId, err = instance.GetLatestInstanceId(5_000)
 			if err != nil {
-				panic(fmt.Sprintf("error getting latest instance ID: %s", err))
+				logger.Fatal("ERROR_GETTING_LATEST_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
 			}
 		} else {
 			latestId = 0 // Set to 0 when forcing, worker will skip the comparison
@@ -231,7 +231,7 @@ func main() {
 	// Remove processingLogPath file
 	if _, err := os.Stat(processingLogPath); err == nil {
 		if err := os.Remove(processingLogPath); err != nil {
-			panic(err)
+			logger.Fatal("ERROR_REMOVING_PROCESSING_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
 		}
 		logger.Debug("TEMPORARY_FILE_DELETED_SUCCESSFULLY", map[string]any{})
 	}
@@ -240,17 +240,17 @@ func main() {
 	// (failed PGCRs written during processing should be preserved)
 	if _, err := os.Stat(missedLogPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			panic(err)
+			logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", map[string]any{logging.ERROR: err.Error()})
 		}
 		missedLogFile, err := createFile(missedLogPath)
 		if err != nil {
-			panic(err)
+			logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
 		}
 		missedLogFile.Close()
 	}
 
 	gaps := findGaps(failed)
-	postResults(len(numbers), len(failed), len(found), minFailed, maxFailed, gaps)
+	postResults(hadesAlerting, len(numbers), len(failed), len(found), minFailed, maxFailed, gaps)
 }
 
 func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.WaitGroup) {
@@ -331,7 +331,7 @@ type Gap struct {
 	Count int64
 }
 
-func postResults(count int, failed int, found int, minFailed int64, maxFailed int64, gaps []Gap) {
+func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, found int, minFailed int64, maxFailed int64, gaps []Gap) {
 	// Message to be sent
 	message := fmt.Sprintf("Info: Processed %d missing PGCR(s). Failed on %d. Added %d to the dataset.", count, failed, found)
 

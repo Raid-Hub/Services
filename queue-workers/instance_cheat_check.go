@@ -28,7 +28,7 @@ func InstanceCheatCheckTopic() processing.Topic {
 }
 
 // processInstanceCheatCheck handles instance cheat check messages
-func processInstanceCheatCheck(worker *processing.Worker, message amqp.Delivery) error {
+func processInstanceCheatCheck(worker processing.WorkerInterface, message amqp.Delivery) error {
 	instanceIdStr := string(message.Body)
 	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
 	if err != nil {

@@ -27,7 +27,7 @@ func ActivityHistoryTopic() processing.Topic {
 }
 
 // processActivityHistory handles activity history messages
-func processActivityHistory(worker *processing.Worker, message amqp.Delivery) error {
+func processActivityHistory(worker processing.WorkerInterface, message amqp.Delivery) error {
 	membershipIdStr := string(message.Body)
 
 	// Call player activity history logic

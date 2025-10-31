@@ -15,9 +15,9 @@ func PlayerCrawlTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
 		QueueName:             routing.PlayerCrawl,
 		MinWorkers:            5,
-		MaxWorkers:            100,
+		MaxWorkers:            70,
 		DesiredWorkers:        20,
-		ContestWeekendWorkers: 50,
+		ContestWeekendWorkers: 40,
 		KeepInReady:           true,
 		PrefetchCount:         1,
 		ScaleUpThreshold:      100,
@@ -28,7 +28,7 @@ func PlayerCrawlTopic() processing.Topic {
 }
 
 // processPlayerCrawl handles player crawl messages
-func processPlayerCrawl(worker *processing.Worker, message amqp.Delivery) error {
+func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery) error {
 	membershipIdStr := string(message.Body)
 	membershipId, err := strconv.ParseInt(membershipIdStr, 10, 64)
 	if err != nil {
@@ -39,7 +39,7 @@ func processPlayerCrawl(worker *processing.Worker, message amqp.Delivery) error 
 	}
 
 	// Call player crawl logic
-	err = player.Crawl(worker.Config.Context, membershipId)
+	err = player.Crawl(worker.Context(), membershipId)
 
 	if err != nil {
 		worker.Warn("PLAYER_CRAWL_ERROR", map[string]any{

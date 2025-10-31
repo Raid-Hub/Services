@@ -3,13 +3,13 @@ package updateskull
 import (
 	"encoding/json"
 	"raidhub/lib/database/postgres"
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 
 	"github.com/lib/pq"
 )
 
-var updateSkullLogger = utils.NewLogger("UPDATE_SKULL_TOOL")
+var logger = logging.NewLogger("UPDATE_SKULL_TOOL")
 
 func UpdateSkullHashes() {
 	db := postgres.DB
@@ -19,13 +19,13 @@ func UpdateSkullHashes() {
 		JOIN pgcr USING (instance_id)
 		WHERE hash = 1044919065 AND instance_id < 16377060020`)
 	if err != nil {
-		updateSkullLogger.ErrorF("Error querying instance table:", err)
+		logger.Error("ERROR_QUERYING_INSTANCE_TABLE", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer rows.Close()
 
 	stmt, err := db.Prepare(`UPDATE instance SET skull_hashes = $1 WHERE instance_id = $2`)
 	if err != nil {
-		updateSkullLogger.ErrorF("Error preparing update statement:", err)
+		logger.Error("ERROR_PREPARING_UPDATE_STATEMENT", map[string]any{logging.ERROR: err.Error()})
 	}
 	defer stmt.Close()
 
@@ -34,13 +34,13 @@ func UpdateSkullHashes() {
 	for rows.Next() {
 		var data []byte
 		if err := rows.Scan(&data); err != nil {
-			updateSkullLogger.ErrorFln("Error scanning instance_id:", err)
+			logger.Error("ERROR_SCANNING_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
 		}
 
 		var pgcr bungie.DestinyPostGameCarnageReport
 		err := json.Unmarshal(data, &pgcr)
 		if err != nil {
-			updateSkullLogger.ErrorFln("Error unmarshalling pgcr data:", err)
+			logger.Error("ERROR_UNMARSHALLING_PGCR_DATA", map[string]any{logging.ERROR: err.Error()})
 		}
 
 		if pgcr.SelectedSkullHashes != nil {
@@ -55,14 +55,14 @@ func UpdateSkullHashes() {
 
 			_, err := stmt.Exec(pq.Array(skullHashes), pgcr.ActivityDetails.InstanceId)
 			if err != nil {
-				updateSkullLogger.ErrorFf("Error updating instance %d with skull hashes: %v", pgcr.ActivityDetails.InstanceId, err)
+				logger.Error("ERROR_UPDATING_INSTANCE_WITH_SKULL_HASHES", map[string]any{"instance_id": pgcr.ActivityDetails.InstanceId, logging.ERROR: err.Error()})
 			}
 		}
 
 		count++
 		if count%1000 == 0 {
 			ratio := float64(count) / total
-			updateSkullLogger.InfoF("Processed %.2f%% of instances", ratio*100)
+			logger.Info("PROCESSED_INSTANCES", map[string]any{"percent": ratio * 100})
 		}
 	}
 }

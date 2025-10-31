@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"raidhub/lib/env"
+	"raidhub/lib/monitoring/atlas_metrics"
+	"raidhub/lib/monitoring/global_metrics"
+	"raidhub/lib/monitoring/hermes_metrics"
+	"raidhub/lib/monitoring/zeus_metrics"
 	"raidhub/lib/utils/logging"
 	"strconv"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -38,35 +41,31 @@ func loadMetricsPort(port string) (int, bool) {
 	}
 }
 
-// Track the count of each Bungie error code returned by the API
+// RegisterAtlasMetrics registers Atlas-specific metrics and starts the metrics server
 func RegisterAtlasMetrics() {
-
-	prometheus.MustRegister(ActiveWorkers)
-	prometheus.MustRegister(PGCRCrawlLag)
-	prometheus.MustRegister(PGCRCrawlStatus)
-	prometheus.MustRegister(GetPostGameCarnageReportRequest)
-	prometheus.MustRegister(PGCRStoreActivity)
+	global_metrics.RegisterGlobalMetrics()
+	atlas_metrics.Register()
 
 	if metricsPort, ok := loadMetricsPort(env.AtlasMetricsPort); ok {
 		serveMetrics(metricsPort)
 	}
-
 }
 
+// RegisterHermesMetrics registers Hermes-specific metrics and starts the metrics server
 func RegisterHermesMetrics() {
-	prometheus.MustRegister(FloodgatesRecent)
-	prometheus.MustRegister(PGCRCrawlLag)
-	prometheus.MustRegister(PGCRStoreActivity)
-	prometheus.MustRegister(GetPostGameCarnageReportRequest)
-
-	// Queue worker metrics
-	prometheus.MustRegister(QueueWorkerCount)
-	prometheus.MustRegister(QueueDepth)
-	prometheus.MustRegister(QueueMessagesProcessed)
-	prometheus.MustRegister(QueueMessageProcessingDuration)
-	prometheus.MustRegister(QueueScalingDecisions)
+	global_metrics.RegisterGlobalMetrics()
+	hermes_metrics.Register()
 
 	if metricsPort, ok := loadMetricsPort(env.HermesMetricsPort); ok {
+		serveMetrics(metricsPort)
+	}
+}
+
+// RegisterZeusMetrics registers Zeus-specific metrics and starts the metrics server
+func RegisterZeusMetrics() {
+	zeus_metrics.Register()
+
+	if metricsPort, ok := loadMetricsPort(env.ZeusMetricsPort); ok {
 		serveMetrics(metricsPort)
 	}
 }

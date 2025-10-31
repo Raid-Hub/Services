@@ -54,36 +54,7 @@ local_resource(
 # CRON SERVICES
 # =============================================================================
 
-local_resource(
-    "hades",
-    cmd="go run ./apps/hades/",
-    resource_deps=["postgres", "rabbitmq", "clickhouse"],
-    auto_init=False,
-    labels=["cron"],
-)
 
-local_resource(
-    "athena",
-    cmd="go run ./apps/athena/",
-    auto_init=False,
-    labels=["cron"],
-)
-
-local_resource(
-    "hera",
-    cmd="go run ./apps/hera/",
-    resource_deps=["postgres", "rabbitmq"],
-    auto_init=False,
-    labels=["cron"],
-)
-
-local_resource(
-    "nemesis",
-    cmd="go run ./apps/nemesis/",
-    resource_deps=["postgres", "rabbitmq"],
-    auto_init=False,
-    labels=["cron"],
-)
 
 # =============================================================================
 # TOOLS

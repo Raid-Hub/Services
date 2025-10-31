@@ -117,25 +117,21 @@ verify_env_keys() {
         value="${value%$'\r'}"  # Remove carriage return if present
         value=$(echo "$value" | xargs)  # Trim whitespace
         
-        # Check if key exists in .env with a non-empty value
+        # Skip if value in example.env is empty (don't add empty keys)
+        if [ -z "${value}" ]; then
+            continue
+        fi
+        
+        # Check if key exists in .env (regardless of value)
         grep_result=$(grep "^${key}=" .env 2>/dev/null || echo "")
         
         if [ -z "$grep_result" ]; then
-            # Key doesn't exist at all
+            # Key doesn't exist at all, add it
             missing_keys+=("$key")
             missing_values+=("${key}=${value}")
             added_count=$((added_count + 1))
-        else
-            # Key exists, check if value is empty
-            env_value=$(echo "$grep_result" | cut -d'=' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            if [ -z "${env_value}" ]; then
-                # Value is empty, replace it
-                missing_keys+=("$key")
-                missing_values+=("${key}=${value}")
-                grep -v "^${key}=" .env > .env.tmp 2>/dev/null && mv .env.tmp .env || true
-                added_count=$((added_count + 1))
-            fi
         fi
+        # If key exists (even with empty value), skip it
     done < example.env
     
     if [ ${#missing_keys[@]} -gt 0 ]; then
@@ -218,12 +214,6 @@ echo "🔧 Generating service configurations..."
 ./infrastructure/generate-configs.sh 2>&1
 echo ""
 
-
-# Stop any existing services and start fresh
-echo "🐳 Stopping any existing services..."
-docker-compose -f docker-compose.yml --env-file ./.env down --remove-orphans 2>/dev/null || true
-echo ""
-
 # Start infrastructure services (postgres, clickhouse, rabbitmq)
 echo "🐳 Starting containerized infrastructure services..."
 docker-compose -f docker-compose.yml --env-file ./.env up -d
@@ -301,6 +291,16 @@ else
     echo "⚠️  Seeding failed with exit code $exit_code (non-critical)"
 fi
 
+# Run manifest downloader to populate definitions
+echo ""
+echo "🔮 Running manifest downloader to populate weapon and feat definitions..."
+if ./bin/tools manifest-downloader --out="./.raidhub/defs" -f; then
+    echo "✅ Manifest downloader completed"
+else
+    exit_code=$?
+    echo "⚠️  Manifest downloader failed with exit code $exit_code (non-critical)"
+fi
+
 # Final summary
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -310,8 +310,7 @@ echo "📚 Useful commands:"
 echo ""
 echo "🚀 Development:"
 echo "   ▶️  Start dev:    make dev        (Tilt UI at http://localhost:10350)"
-echo "   🛑 Stop dev:      make dev-down"
-echo "   📊 View logs:     make dev-logs"
+echo "   🛑 Stop dev:      make down"
 echo ""
 echo "🔧 Service Management:"
 echo "   🗺️  Run Atlas Crawler:           ./bin/atlas --workers 10"
@@ -328,4 +327,5 @@ echo ""
 echo "⚠️  IMPORTANT: Set your BUNGIE_API_KEY in .env"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+
 

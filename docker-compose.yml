@@ -12,6 +12,8 @@ services:
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    stop_grace_period: 20s
+    stop_signal: SIGTERM
 
   rabbitmq:
     image: rabbitmq:3.8-management
@@ -25,6 +27,8 @@ services:
     volumes:
       - ./volumes/rabbitmq:/var/lib/rabbitmq
       - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    stop_grace_period: 20s
+    stop_signal: SIGTERM
 
   clickhouse:
     image: clickhouse/clickhouse-server
@@ -46,6 +50,8 @@ services:
       - ./infrastructure/clickhouse/config.xml:/etc/clickhouse-server/config.d/default_database.xml:ro
       - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
       - ./infrastructure/clickhouse/named_collections.xml:/etc/clickhouse-server/named_collections.d/postgres_creds.xml:ro
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
 
   prometheus:
     image: prom/prometheus
@@ -54,3 +60,5 @@ services:
     volumes:
       - ./volumes/prometheus:/prometheus
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    stop_grace_period: 10s
+    stop_signal: SIGTERM

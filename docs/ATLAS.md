@@ -8,7 +8,7 @@ Atlas is a PGCR (Post Game Carnage Report) crawler service that continuously pro
 
 ### What Atlas Does
 
-Atlas is responsible for discovering and fetching PGCRs (Post Game Carnage Reports) from the Bungie API. PGCRs contain detailed information about completed activities in Destiny 2, including raid completions, player performance, and activity metadata. These instance IDs are sequential integers that increment as activities are completed.
+Atlas is responsible for discovering and fetching PGCRs (Post Game Carnage Reports) from the Bungie API. PGCRs contain detailed information about completed activities in Destiny 2, including raid completions, player performance, and activity metadata. These instance IDs are pseudo-sequential integers that generally increment as activities are completed.
 
 ### Role in RaidHub Services
 
@@ -44,10 +44,10 @@ Atlas fetches PGCRs sequentially, processes them, and publishes successful resul
 
 ### Instance IDs
 
-- **Sequential Identifiers**: Each PGCR has a unique `instance_id` - a sequential 64-bit integer
-- **Global Sequence**: Instance IDs increment globally across all Destiny 2 activities (raids, strikes, crucible, etc.)
-- **Chronological Order**: Higher instance IDs correspond to activities completed more recently
-- **Unique Identifier**: Each instance ID maps to exactly one activity completion (or doesn't exist if the activity was never completed)
+- **Pseudo-Sequential Identifiers**: Each PGCR has a unique `instance_id` - a 64-bit integer that is generally sequential but not strictly so
+- **Global Sequence**: Instance IDs increment globally across all Destiny 2 activities (raids, strikes, crucible, etc.), but gaps and non-sequential values exist
+- **Chronological Order**: Higher instance IDs generally correspond to activities completed more recently, but the relationship is not perfect
+- **Not Truly Sequential**: Instance IDs have gaps, missing values, and may not always increment strictly by 1
 
 ### PGCR Processing Flow
 
@@ -56,7 +56,7 @@ When Atlas processes a PGCR:
 1. **Fetch**: Retrieves raw PGCR JSON from Bungie API
 2. **Validate**: Checks if it's a valid PGCR response
 3. **Parse**: Extracts activity metadata and player information
-4. **Filter**: Identifies if it's a raid activity (non-raids are logged but not stored)
+4. **Filter**: Identifies if it's a raid activity (non-raids are discarded after recording lag metrics)
 5. **Process**: Converts to internal activity format
 6. **Publish**: Sends to queue for storage
 7. **Store**: Queue workers store processed data in PostgreSQL and raw JSON in ClickHouse
@@ -66,14 +66,14 @@ When Atlas processes a PGCR:
 Atlas processes all PGCRs but only stores raid-related data:
 
 - **Raid Activities**: Stored in database, used for leaderboards and statistics
-- **Non-Raid Activities**: Processed and logged (for lag tracking) but not stored in database
+- **Non-Raid Activities**: Discarded after recording lag metrics (used for tracking crawl position relative to live instances)
 - This filtering happens during processing to avoid storing irrelevant data
 
 ## Crawling Strategy
 
 ### Sequential Instance ID Processing
 
-Atlas uses a **sequential crawling strategy** to process instance IDs from the Destiny 2 API. Instance IDs are sequential integers that increment as activities are completed in Destiny 2. Atlas maintains a cursor (`LatestId`) that tracks the current position in the sequence.
+Atlas uses a **sequential crawling strategy** to process instance IDs from the Destiny 2 API. Instance IDs are pseudo-sequential integers that generally increment as activities are completed in Destiny 2, though gaps and non-sequential values exist. Atlas maintains a cursor (`LatestId`) that tracks the current position in the sequence.
 
 ### How Atlas Processes Instance IDs
 
@@ -82,15 +82,15 @@ Atlas uses a **sequential crawling strategy** to process instance IDs from the D
 - On startup, Atlas determines the starting instance ID:
   - If `targetInstanceId` is specified: Starts at `targetInstanceId - buffer`
   - Otherwise: Queries database for the latest stored instance ID, then starts `buffer` IDs behind (default: 10,000 IDs)
-- This buffer ensures Atlas processes slightly older instances first, avoiding race conditions with live data
+- This buffer ensures Atlas doesn't miss any small gaps by starting slightly behind the latest known instance
 
 **2. Sequential Incrementing**
 
 - Each period, Atlas spawns workers that process `periodLength` instance IDs
 - Instance IDs are incremented atomically: `LatestId += (Skip + 1)` for each ID
+- In normal operation, `Skip = 0`, so IDs are processed sequentially: `1000000, 1000001, 1000002...`
+- In dev mode only, `Skip` can be set to skip IDs (e.g., `Skip = 4` processes every 5th ID: `1000000, 1000005, 1000010...`)
 - Workers pull IDs from an unbuffered channel, ensuring immediate processing
-- Example: If `Skip = 0`, processes IDs sequentially: `1000000, 1000001, 1000002...`
-- Example: If `Skip = 4` (dev mode), processes every 5th ID: `1000000, 1000005, 1000010...`
 
 ### API Polling Behavior
 
@@ -105,7 +105,7 @@ Atlas uses a **sequential crawling strategy** to process instance IDs from the D
 4. **Processes result**:
    - **Success**: Publishes to `InstanceStore` queue, breaks retry loop
    - **NotFound (404)**: Increments notFoundCount, retries up to 3 times
-   - **NonRaid**: Records lag metric, breaks (non-raid activities don't need storage)
+   - **NonRaid**: Records lag metric and discards (non-raid activities don't need storage)
    - **SystemDisabled**: Observes 0 lag, waits 45 seconds, retries
    - **RateLimited/InsufficientPrivileges**: Publishes to retry queue, breaks
    - **BadFormat/ExternalError**: Logs as missed, offloads if multiple errors
@@ -181,7 +181,43 @@ The autoscaling system uses the following metrics collected from Prometheus:
 - **Count404**: Absolute count of 404 responses in the time window
   - Used for gap detection thresholds
 
-## Atlas Strategy
+## Architecture
+
+### Core Components
+
+1. **Scaling Loop** (`scaling.go`): Main control loop that spawns workers, collects metrics, and makes scaling decisions
+2. **Metrics Service** (`metrics_service.go`): Fetches metrics from Prometheus for scaling decisions
+3. **Workers** (`worker.go`): Individual goroutines that process PGCR instances
+4. **Gap Checker** (`gap_checker.go`): Detects and handles gaps in instance sequences independently
+5. **Alerting** (`alerting.go`): Sends status updates and alerts to Discord
+
+### Key Metrics
+
+The autoscaling system uses the following metrics collected from Prometheus:
+
+- **P20Lag**: 20th percentile lag (how far behind the latest instance we are, in seconds)
+
+  - Calculated using `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket[2m])) by (le))`
+  - Lower values indicate we're closer to catching up to live instances
+  - Default fallback: 900 seconds if no data available
+
+- **Fraction404**: Fraction of requests that result in 404 (Not Found) responses
+
+  - Indicates gaps in instance sequences or instances that don't exist
+  - High values (>0.50) trigger gap detection mode
+
+- **ErrorFraction**: Fraction of requests that result in errors (status codes 6-10)
+
+  - Includes various error types like rate limiting, system disabled, etc.
+
+- **PGCRRate**: Rate of successful PGCR processing (PGCRs per second)
+
+  - Used to calculate appropriate period lengths
+
+- **Count404**: Absolute count of 404 responses in the time window
+  - Used for gap detection thresholds
+
+## Autoscaling Strategy
 
 ### Overall Approach
 
@@ -218,7 +254,7 @@ Atlas uses an **adaptive, metrics-driven autoscaling strategy** that dynamically
 - Scales down gradually when ahead to avoid oscillation
 - Maintains minimum worker count to ensure continuous operation
 
-### How Atlas Chooses Strategies
+### Strategy Selection
 
 Atlas evaluates three key metrics after each period:
 
@@ -239,10 +275,6 @@ Normal Operations       → Strategy 3: Fine-Tuning Mode
 ```
 
 The strategy selection happens every ~5 minutes (or after each period completes), allowing Atlas to quickly adapt to changing conditions.
-
-## Scaling Strategies
-
-Atlas uses three distinct scaling strategies based on current conditions:
 
 ### Strategy 1: High 404 Rate (>50%) - Gap Detection Mode
 
@@ -340,11 +372,7 @@ Period length is calculated differently based on the scaling strategy:
   - If `Fraction404 >= 0.075`: `100 * PGCRRate` (reduced period when encountering gaps)
   - Otherwise: `300 * PGCRRate` (targets 5 minutes = 300 seconds at current processing rate)
 
-The design ensures that under normal healthy conditions, each period takes approximately 5 minutes, providing:
-
-- Regular scaling decision intervals
-- Adequate time for metrics collection
-- Stable throughput measurement windows
+The design ensures that under normal healthy conditions, each period takes approximately 5 minutes, providing regular scaling decision intervals, adequate time for metrics collection, and stable throughput measurement windows.
 
 ## Gap Detection and Handling
 
@@ -504,16 +532,8 @@ Atlas sends status updates to Discord including:
 
 ## Future Improvements
 
-See `AUTOSCALING_AUDIT.md` for detailed recommendations:
-
 1. Add dead zone to prevent oscillation
 2. Track actual throughput per worker
 3. Coordinate gap checker with main scaling loop
 4. Implement feedback loop to verify scaling effectiveness
 5. Use consistent time windows for all metrics
-
-## Related Documentation
-
-- `AUTOSCALING_AUDIT.md`: Detailed audit of autoscaling implementation with issues and recommendations
-- `ARCHITECTURE.md`: Overall system architecture
-- `LOGGING.md`: Logging conventions and practices

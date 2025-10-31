@@ -10,59 +10,54 @@
 #   3. Verify: crontab -l
 
 # Environment variables
-RAIDHUB_ENV=prod
-RAIDHUB_PATH=/RaidHub/Services
-PATH=/usr/local/bin:/usr/bin:/bin
-
-# Note: All binaries automatically load .env from the working directory
+RAIDHUB_PATH=/RaidHub
+PATH=$RAIDHUB_PATH/bin:/usr/local/bin:/usr/bin:/bin
+HOME=$RAIDHUB_PATH/Services
 
 # ============================================================================
 # Database Materialized View Refreshes
 # ============================================================================
 
 # Individual Global Leaderboard - Daily at 10:05 AM UTC
-5 10 * * * cd $RAIDHUB_PATH && infrastructure/cron/scripts/refresh-view.sh individual_global_leaderboard
+# Uses Go tool (handles cache refresh + clear automatically)
+5 10 * * * refresh-view individual_global_leaderboard
 
-# Individual Raid Leaderboard - Daily at 10:05 AM UTC
-5 10 * * * cd $RAIDHUB_PATH && infrastructure/cron/scripts/refresh-view.sh individual_raid_leaderboard
+# Individual Raid Leaderboard - Daily at 9:05 AM UTC
+# Uses Go tool (handles cache refresh + clear automatically)
+5 9 * * * refresh-view individual_raid_leaderboard
 
 # World First Contest Leaderboard - Daily at 5:00 PM UTC
-0 17 * * * cd $RAIDHUB_PATH && infrastructure/cron/scripts/refresh-view.sh world_first_contest_leaderboard
+0 17 * * * refresh-view world_first_contest_leaderboard
 
 # Team Activity Version Leaderboard - Daily at 7:00 PM UTC
-0 19 * * * cd $RAIDHUB_PATH && infrastructure/cron/scripts/refresh-view.sh team_activity_version_leaderboard
+0 19 * * * refresh-view team_activity_version_leaderboard
 
 # ============================================================================
 # Process Missed PGCRs
 # ============================================================================
 
 # Hades - Process missed PGCRs every 15 minutes (with lock file to prevent overlapping runs)
-*/15 * * * * flock -n /tmp/hades.lock -c 'cd $RAIDHUB_PATH && ./bin/hades' 2>> /RaidHub/hades.log
+*/15 * * * * flock -n /tmp/process-missed-pgcrs.lock -c 'process-missed-pgcrs'
 
 # ============================================================================
 # Manifest Management
 # ============================================================================
 
-# Athena - Download manifest 5 times during peak hours (5:00 PM, 5:05 PM, 5:10 PM, 5:15 PM, 5:20 PM, repeated at 6-7 PM)
-*/5 17,18,19 * * * (cd $RAIDHUB_PATH && ./bin/athena --dir="/RaidHub/artifacts")
+# Manifest Downloader - Checks the manifest more during peak hours
+*/5 17 * * * manifest-downloader --out="$RAIDHUB_PATH/artifacts"
+*/15 18 * * * manifest-downloader --out="$RAIDHUB_PATH/artifacts"
+0 */4 * * * manifest-downloader --out="$RAIDHUB_PATH/artifacts"
 
 # ============================================================================
 # Clan Crawl
 # ============================================================================
 
-# Hera - Clan crawl for top leaderboard players, weekly on Monday at 12:00 PM UTC
-0 12 * * 1 (cd $RAIDHUB_PATH && bin/hera 2>> /RaidHub/hera.log)
-
-# ============================================================================
-# Service Management
-# ============================================================================
-
-# Zeus - Restart service daily at 9:11 AM UTC
-11 9 * * * cd $RAIDHUB_PATH && /usr/bin/systemctl restart zeus
+# Leaderboard Clan Crawl - Clan crawl for top leaderboard players, weekly on Monday at 12:00 PM UTC
+0 12 * * 1 leaderboard-clan-crawl
 
 # ============================================================================
 # Cheater Detection
 # ============================================================================
 
-# Nemesis - Cheater detection and account maintenance, 4 times daily at 5:30 AM, 1:30 PM, 7:30 PM, 11:30 PM UTC
-30 5,13,19,23 * * * (cd $RAIDHUB_PATH && ./bin/nemesis 2>> /RaidHub/nemesis.log)
+# Cheat Detection - Cheater detection and account maintenance, 4 times daily at 5:30 AM, 1:30 PM, 7:30 PM, 11:30 PM UTC
+30 5,13,19,23 * * * cheat-detection

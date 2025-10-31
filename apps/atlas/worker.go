@@ -10,7 +10,7 @@ import (
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
-	"raidhub/lib/monitoring"
+	"raidhub/lib/monitoring/atlas_metrics"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
@@ -38,7 +38,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 			statusStr := fmt.Sprintf("%d", result)
 			attemptsStr := fmt.Sprintf("%d", i+1)
 
-			monitoring.PGCRCrawlStatus.WithLabelValues(statusStr, attemptsStr).Inc()
+			atlas_metrics.PGCRCrawlStatus.WithLabelValues(statusStr, attemptsStr).Inc()
 
 			// Handle the result
 			if result == pgcr_processing.NonRaid {
@@ -53,7 +53,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 
 				lag := time.Since(endDate)
 				if lag >= 0 {
-					monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+					atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
 				}
 				break
 			} else if result == pgcr_processing.Success {
@@ -71,7 +71,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 					workerTime := endTime.Sub(startTime)
 					lag := time.Since(activity.DateCompleted)
 					if lag >= 0 {
-						monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+						atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
 					}
 					w.Info("PUBLISHED_INSTANCE", map[string]any{
 						logging.INSTANCE_ID: instanceID,
@@ -84,7 +84,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 			} else if result == pgcr_processing.NotFound {
 				notFoundCount++
 			} else if result == pgcr_processing.SystemDisabled {
-				monitoring.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
+				atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
 				time.Sleep(45 * time.Second)
 				continue
 			} else if result == pgcr_processing.InsufficientPrivileges {

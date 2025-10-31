@@ -72,7 +72,7 @@ func main() {
 		qw.InstanceStoreTopic(),
 	}
 
-	var topicManagers []*processing.TopicManager
+	var topicManagers []*TopicManager
 
 	if *topicType == "" {
 		// Start all topics
@@ -92,9 +92,9 @@ func main() {
 				"topic": t.Config.QueueName,
 				"mode":  "all",
 			})
-			tm, err := processing.StartTopicManager(t, processing.TopicManagerConfig{
-				Context: ctx,
-				Wg:      nil,
+			tm, err := startTopicManager(t, topicManagerConfig{
+				context: ctx,
+				wg:      nil,
 			})
 			if err != nil {
 				logger.Error(FAILED_TO_START_TOPIC, map[string]any{
@@ -138,8 +138,8 @@ func main() {
 			"topic": topicInstance.Config.QueueName,
 			"mode":  "individual",
 		})
-		tm, err := processing.StartTopicManager(topicInstance, processing.TopicManagerConfig{
-			Context: ctx,
+		tm, err := startTopicManager(topicInstance, topicManagerConfig{
+			context: ctx,
 		})
 		if err != nil {
 			logger.Fatal(FAILED_TO_START_TOPIC, map[string]any{

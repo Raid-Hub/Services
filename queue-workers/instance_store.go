@@ -29,7 +29,7 @@ func InstanceStoreTopic() processing.Topic {
 }
 
 // processInstanceStore handles instance store messages
-func processInstanceStore(worker *processing.Worker, message amqp.Delivery) error {
+func processInstanceStore(worker processing.WorkerInterface, message amqp.Delivery) error {
 	var msg messages.PGCRStoreMessage
 	if err := json.Unmarshal(message.Body, &msg); err != nil {
 		worker.Error("FAILED_TO_UNMARSHAL_PGCR_STORE_MESSAGE", map[string]any{

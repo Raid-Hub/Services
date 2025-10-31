@@ -2,71 +2,84 @@ package processpgcr
 
 import (
 	"flag"
-	"fmt"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
-	"raidhub/lib/utils"
+	"raidhub/lib/utils/logging"
 	"strconv"
 )
 
-var processPGCRLogger = utils.NewLogger("PROCESS_PGCR_TOOL")
+var logger = logging.NewLogger("PROCESS_PGCR_TOOL")
 
 func ProcessSinglePGCR() {
 	// 1. Parse the instance ID from command line args
 	// Since main.go uses flag.Parse(), the actual arguments start from flag.Arg(1)
 	if flag.NArg() < 2 {
-		processPGCRLogger.ErrorF("Usage: scripts process-single-pgcr <instance_id>")
+		logger.Error("USAGE_ERROR", map[string]any{"message": "Usage: scripts process-single-pgcr <instance_id>"})
+		return
 	}
 
 	instanceId, err := strconv.ParseInt(flag.Arg(1), 10, 64)
 	if err != nil {
-		processPGCRLogger.ErrorFf("Invalid instance ID: %v", err)
+		logger.Error("INVALID_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
+		return
 	}
 
-	processPGCRLogger.InfoF("Processing PGCR with instance ID: %d", instanceId)
+	logger.Info("PROCESSING_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// 2. Fetch and process the PGCR
 	result, processedActivity, rawPGCR, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
 	if err != nil {
-		processPGCRLogger.ErrorFf("Failed to fetch and process PGCR: %v", err)
+		logger.Error("FAILED_TO_FETCH_AND_PROCESS_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
+		return
 	}
 
 	if result != pgcr_processing.Success {
-		processPGCRLogger.ErrorFf("PGCR fetch failed with result: %v", result)
+		logger.Error("PGCR_FETCH_FAILED", map[string]any{logging.INSTANCE_ID: instanceId, "result": result})
+		return
 	}
 
 	if processedActivity == nil {
-		processPGCRLogger.ErrorF("Processed activity is nil")
+		logger.Error("PROCESSED_ACTIVITY_IS_NIL", map[string]any{logging.INSTANCE_ID: instanceId})
+		return
 	}
 
 	if rawPGCR == nil {
-		processPGCRLogger.ErrorF("Raw PGCR is nil")
+		logger.Error("RAW_PGCR_IS_NIL", map[string]any{logging.INSTANCE_ID: instanceId})
+		return
 	}
 
-	processPGCRLogger.InfoF("Successfully fetched and processed PGCR")
+	logger.Info("SUCCESSFULLY_FETCHED_AND_PROCESSED_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// 3. Store the PGCR
-	lag, isNew, err := instance_storage.StorePGCR(processedActivity, rawPGCR)
+	lag, committed, err := instance_storage.StorePGCR(processedActivity, rawPGCR)
 	if err != nil {
-		processPGCRLogger.ErrorFf("Failed to store PGCR: %v", err)
+		logger.Error("FAILED_TO_STORE_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
+		return
 	}
 
-	if isNew {
-		processPGCRLogger.InfoF("✓ Stored NEW PGCR with lag: %v", lag)
-	} else {
-		processPGCRLogger.InfoF("✓ PGCR already exists (lag: %v)", lag)
+	// Prepare summary fields
+	summaryFields := map[string]any{
+		logging.INSTANCE_ID: processedActivity.InstanceId,
+		logging.HASH:        processedActivity.Hash,
+		"date_started":      processedActivity.DateStarted,
+		"date_completed":    processedActivity.DateCompleted,
+		logging.DURATION:    processedActivity.DurationSeconds,
+		logging.COUNT:       len(processedActivity.Players),
+		"completed":         processedActivity.Completed,
 	}
-
-	fmt.Printf("\n=== PGCR Processing Complete ===\n")
-	fmt.Printf("Instance ID: %d\n", processedActivity.InstanceId)
-	fmt.Printf("Activity Hash: %d\n", processedActivity.Hash)
-	fmt.Printf("Date Started: %s\n", processedActivity.DateStarted)
-	fmt.Printf("Duration: %d seconds\n", processedActivity.DurationSeconds)
-	fmt.Printf("Players: %d\n", len(processedActivity.Players))
-	fmt.Printf("Fresh: %t\n", *processedActivity.Fresh)
-	fmt.Printf("Flawless: %t\n", *processedActivity.Flawless)
-	fmt.Printf("Completed: %t\n", processedActivity.Completed)
+	if processedActivity.Fresh != nil {
+		summaryFields["fresh"] = *processedActivity.Fresh
+	}
+	if processedActivity.Flawless != nil {
+		summaryFields["flawless"] = *processedActivity.Flawless
+	}
 	if lag != nil {
-		fmt.Printf("Processing Lag: %v\n", *lag)
+		summaryFields[logging.LAG] = lag
+	}
+
+	if committed {
+		logger.Info("STORED_NEW_PGCR", summaryFields)
+	} else {
+		logger.Info("PGCR_ALREADY_EXISTS", summaryFields)
 	}
 }

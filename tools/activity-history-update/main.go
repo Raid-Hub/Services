@@ -6,7 +6,10 @@ import (
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/utils/logging"
 )
+
+var logger = logging.NewLogger("TOOLS")
 
 const (
 	numProfiles = 2500
@@ -15,9 +18,9 @@ const (
 
 // ActivityHistoryUpdate is the command function
 func ActivityHistoryUpdate() {
-	ToolsLogger.Info("starting")
+	logger.Info("STARTING", map[string]any{})
 
-	ToolsLogger.Info("querying")
+	logger.Info("QUERYING", map[string]any{})
 	rows, err := postgres.DB.Query(`SELECT * FROM (
 		SELECT membership_id FROM player
 		WHERE history_last_crawled IS NULL OR (history_last_crawled < NOW() - INTERVAL '25 weeks')
@@ -31,7 +34,7 @@ func ActivityHistoryUpdate() {
 	defer rows.Close()
 
 	var id int64
-	ToolsLogger.Info("scanning")
+	logger.Info("SCANNING", map[string]any{})
 	for rows.Next() {
 		rows.Scan(&id)
 		err = publishing.PublishTextMessage(context.TODO(), routing.ActivityCrawl, fmt.Sprintf("%d", id))
@@ -40,5 +43,5 @@ func ActivityHistoryUpdate() {
 		}
 	}
 
-	ToolsLogger.Info("done")
+	logger.Info("DONE", map[string]any{})
 }

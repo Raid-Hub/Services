@@ -203,7 +203,7 @@ CREATE TABLE "definitions"."activity_feat_definition" (
         trim(both from regexp_replace(name, '^Feat:\s*', '', 'i'))
     ) STORED,
     "description" TEXT NOT NULL,
-    "icon" TEXT NOT NULL,
+    "icon_path" TEXT NOT NULL,
     "description_short" TEXT NOT NULL,
     "modifier_power_contribution" INT NOT NULL,
     "created_at" TIMESTAMPTZ(0) NOT NULL DEFAULT NOW()

@@ -1,4 +1,4 @@
-package main
+package cheatdetection
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Nemesis logging constants
+// CheatDetection logging constants
 const (
 	SERVICE_STARTED              = "SERVICE_STARTED"
 	PROCESSING_COMPLETE          = "PROCESSING_COMPLETE"
@@ -18,7 +18,7 @@ const (
 	PLAYER_INSTANCES_BLACKLISTED = "PLAYER_INSTANCES_BLACKLISTED"
 )
 
-var logger = logging.NewLogger("NEMESIS")
+var logger = logging.NewLogger("CHEAT_DETECTION")
 
 const (
 	numBungieWorkers     = 15
@@ -32,14 +32,17 @@ type LevelsDTO struct {
 	CheaterAccountFlags       uint64
 }
 
-func main() {
+// CheatDetection is the command function for cheat detection and player account maintenance
+// Usage: ./bin/tools cheat-detection
+func CheatDetection() {
 	logger.Info(SERVICE_STARTED, map[string]any{
-		logging.SERVICE: "nemesis",
+		logging.SERVICE: "cheat-detection",
 		"workers":       []string{"cheat_detection", "account_maintenance"},
 		logging.VERSION: versionPrefix,
 	})
 
 	// postgres.DB is initialized in init()
+	postgres.Wait()
 
 	// step 1: get all player instance flags and check their cheat levels
 	flags := make(chan cheat_detection.PlayerInstanceFlagStats)
@@ -231,7 +234,7 @@ func main() {
 	})
 
 	logger.Info(PROCESSING_COMPLETE, map[string]any{
-		logging.SERVICE: "nemesis",
+		logging.SERVICE: "cheat-detection",
 		logging.STATUS:  "complete",
 	})
 }

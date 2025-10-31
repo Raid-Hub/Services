@@ -17,12 +17,17 @@ var (
 )
 
 func init() {
-	initDone = singleton.InitAsync("POSTGRES", 10, func() error {
+	initDone = singleton.InitAsync("POSTGRES", 5, func() error {
 		searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
 		connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable search_path=%s",
 			env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			return err
+		}
+		// Validate the connection with a ping
+		if err := db.Ping(); err != nil {
+			db.Close()
 			return err
 		}
 		DB = db

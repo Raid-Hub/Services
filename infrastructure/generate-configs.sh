@@ -41,8 +41,6 @@ for var in "${required_vars[@]}"; do
     fi
 done
 
-echo "✅ All required environment variables are defined"
-
 # Create infrastructure directories
 mkdir -p infrastructure/postgres/init
 mkdir -p infrastructure/rabbitmq
@@ -87,6 +85,9 @@ replace_template() {
         -e "s|{{CLICKHOUSE_PASSWORD}}|${CLICKHOUSE_PASSWORD}|g" \
         -e "s|{{POSTGRES_HOST}}|${POSTGRES_HOST:-localhost}|g" \
         -e "s|{{POSTGRES_PORT}}|${POSTGRES_PORT:-5432}|g" \
+        -e "s|{{ATLAS_METRICS_PORT}}|${ATLAS_METRICS_PORT}|g" \
+        -e "s|{{HERMES_METRICS_PORT}}|${HERMES_METRICS_PORT}|g" \
+        -e "s|{{ZEUS_METRICS_PORT}}|${ZEUS_METRICS_PORT}|g" \
         -e "s|{{PROMETHEUS_REMOTE_WRITE_URL}}|${PROMETHEUS_REMOTE_WRITE_URL}|g" \
         -e "s|{{PROMETHEUS_REMOTE_WRITE_USERNAME}}|${PROMETHEUS_REMOTE_WRITE_USERNAME}|g" \
         -e "s|{{PROMETHEUS_REMOTE_WRITE_PASSWORD}}|${PROMETHEUS_REMOTE_WRITE_PASSWORD}|g" \

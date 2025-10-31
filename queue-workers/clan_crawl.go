@@ -28,7 +28,7 @@ func ClanCrawlTopic() processing.Topic {
 }
 
 // processClanCrawl handles clan crawl messages
-func processClanCrawl(worker *processing.Worker, message amqp.Delivery) error {
+func processClanCrawl(worker processing.WorkerInterface, message amqp.Delivery) error {
 	groupIdStr := string(message.Body)
 	groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
 	if err != nil {

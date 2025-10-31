@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"raidhub/lib/dto"
-	"raidhub/lib/monitoring"
+	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -34,7 +34,7 @@ func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.D
 	start := time.Now()
 	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
 	if resp.BungieErrorCode > 0 {
-		monitoring.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
+		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
 	}
 
 	if !resp.Success {

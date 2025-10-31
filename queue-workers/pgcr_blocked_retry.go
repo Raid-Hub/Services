@@ -45,7 +45,7 @@ func PgcrBlockedTopic() processing.Topic {
 // processPgcrBlocked handles PGCR blocked messages with floodgate detection
 // When Bungie blocks PGCRs (InsufficientPrivileges), this worker retries them
 // When enough PGCRs successfully process, it assumes floodgates are "opened"
-func processPgcrBlocked(worker *processing.Worker, message amqp.Delivery) error {
+func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery) error {
 	instanceId, err := strconv.ParseInt(string(message.Body), 10, 64)
 	if err != nil {
 		worker.Error("FAILED_TO_PARSE_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})

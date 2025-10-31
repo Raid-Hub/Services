@@ -28,7 +28,7 @@ func PgcrCrawlTopic() processing.Topic {
 }
 
 // processPgcrCrawl handles PGCR crawl messages
-func processPgcrCrawl(worker *processing.Worker, message amqp.Delivery) error {
+func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) error {
 	instanceIdStr := string(message.Body)
 	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
 	if err != nil {

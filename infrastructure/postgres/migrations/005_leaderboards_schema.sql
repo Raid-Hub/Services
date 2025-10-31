@@ -2,6 +2,54 @@
 -- Computed leaderboards and rankings
 
 -- =============================================================================
+-- CACHE VIEWS (Pre-filtered base data for faster leaderboard refreshes)
+-- =============================================================================
+
+-- Cache for global leaderboard (filters once, reused by individual_global_leaderboard)
+CREATE MATERIALIZED VIEW "leaderboard"."_global_leaderboard_cache" AS
+SELECT
+  membership_id,
+  clears,
+  fresh_clears,
+  sherpas,
+  sum_of_best,
+  total_time_played_seconds,
+  wfr_score,
+  COUNT(*) OVER ()::numeric AS total_count
+FROM "core"."player"
+WHERE clears > 0 AND NOT is_private AND cheat_level < 2;
+
+CREATE UNIQUE INDEX idx_global_leaderboard_cache_membership_id ON "leaderboard"."_global_leaderboard_cache" (membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_clears ON "leaderboard"."_global_leaderboard_cache" (clears DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_fresh_clears ON "leaderboard"."_global_leaderboard_cache" (fresh_clears DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_sherpas ON "leaderboard"."_global_leaderboard_cache" (sherpas DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_speed ON "leaderboard"."_global_leaderboard_cache" (sum_of_best ASC NULLS LAST, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_time ON "leaderboard"."_global_leaderboard_cache" (total_time_played_seconds DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_wfr ON "leaderboard"."_global_leaderboard_cache" (wfr_score DESC, membership_id ASC);
+
+-- Cache for raid leaderboard (filters once, reused by individual_raid_leaderboard)
+CREATE MATERIALIZED VIEW "leaderboard"."_raid_leaderboard_cache" AS
+SELECT
+  ps.activity_id,
+  ps.membership_id,
+  ps.clears,
+  ps.fresh_clears,
+  ps.sherpas,
+  ps.total_time_played_seconds,
+  COUNT(*) OVER (PARTITION BY ps.activity_id) AS total_count
+FROM "core"."player_stats" ps
+JOIN "core"."player" p ON p.membership_id = ps.membership_id
+WHERE ps.clears > 0
+  AND NOT p.is_private
+  AND p.cheat_level < 2;
+
+CREATE UNIQUE INDEX idx_raid_leaderboard_cache_activity_membership ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_clears ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, clears DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_fresh_clears ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, fresh_clears DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_sherpas ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, sherpas DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_time ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, total_time_played_seconds DESC, membership_id ASC);
+
+-- =============================================================================
 -- LEADERBOARD VIEWS
 -- =============================================================================
 
@@ -128,46 +176,108 @@ CREATE INDEX idx_team_activity_version_leaderboard_membership_id ON "leaderboard
 
 -- Individual global leaderboard
 CREATE MATERIALIZED VIEW "leaderboard"."individual_global_leaderboard" AS
-WITH total_count AS (
-  SELECT COUNT(*)::float AS cnt
-  FROM "core"."player"
-  WHERE clears > 0 AND NOT is_private AND cheat_level < 2
+WITH base AS (
+  SELECT
+    membership_id,
+    clears,
+    fresh_clears,
+    sherpas,
+    sum_of_best,
+    total_time_played_seconds,
+    wfr_score,
+    total_count
+  FROM "leaderboard"."_global_leaderboard_cache"
+),
+total_count AS (
+  SELECT DISTINCT total_count::numeric AS cnt FROM base LIMIT 1
+),
+clears_ranked AS (
+  SELECT
+    membership_id,
+    clears,
+    ROW_NUMBER() OVER (ORDER BY clears DESC, membership_id ASC) AS clears_position,
+    RANK() OVER (ORDER BY clears DESC) AS clears_rank,
+    1.0 - ((RANK() OVER (ORDER BY clears DESC) - 1) / (tc.cnt - 1)) AS clears_percentile
+  FROM base, total_count tc
+),
+fresh_clears_ranked AS (
+  SELECT
+    membership_id,
+    fresh_clears,
+    ROW_NUMBER() OVER (ORDER BY fresh_clears DESC, membership_id ASC) AS fresh_clears_position,
+    RANK() OVER (ORDER BY fresh_clears DESC) AS fresh_clears_rank,
+    1.0 - ((RANK() OVER (ORDER BY fresh_clears DESC) - 1) / (tc.cnt - 1)) AS fresh_clears_percentile
+  FROM base, total_count tc
+),
+sherpas_ranked AS (
+  SELECT
+    membership_id,
+    sherpas,
+    ROW_NUMBER() OVER (ORDER BY sherpas DESC, membership_id ASC) AS sherpas_position,
+    RANK() OVER (ORDER BY sherpas DESC) AS sherpas_rank,
+    1.0 - ((RANK() OVER (ORDER BY sherpas DESC) - 1) / (tc.cnt - 1)) AS sherpas_percentile
+  FROM base, total_count tc
+),
+speed_ranked AS (
+  SELECT
+    membership_id,
+    sum_of_best AS speed,
+    ROW_NUMBER() OVER (ORDER BY sum_of_best ASC, membership_id ASC) AS speed_position,
+    RANK() OVER (ORDER BY sum_of_best ASC) AS speed_rank,
+    1.0 - ((RANK() OVER (ORDER BY sum_of_best ASC) - 1) / (tc.cnt - 1)) AS speed_percentile
+  FROM base, total_count tc
+),
+total_time_played_ranked AS (
+  SELECT
+    membership_id,
+    total_time_played_seconds AS total_time_played,
+    ROW_NUMBER() OVER (ORDER BY total_time_played_seconds DESC, membership_id ASC) AS total_time_played_position,
+    RANK() OVER (ORDER BY total_time_played_seconds DESC) AS total_time_played_rank,
+    1.0 - ((RANK() OVER (ORDER BY total_time_played_seconds DESC) - 1) / (tc.cnt - 1)) AS total_time_played_percentile
+  FROM base, total_count tc
+),
+wfr_score_ranked AS (
+  SELECT
+    membership_id,
+    wfr_score,
+    ROW_NUMBER() OVER (ORDER BY wfr_score DESC, membership_id ASC) AS wfr_score_position,
+    RANK() OVER (ORDER BY wfr_score DESC) AS wfr_score_rank,
+    1.0 - ((RANK() OVER (ORDER BY wfr_score DESC) - 1) / (tc.cnt - 1)) AS wfr_score_percentile
+  FROM base, total_count tc
 )
 SELECT
-  membership_id,
-
-  clears,
-  ROW_NUMBER() OVER (ORDER BY clears DESC, membership_id ASC) AS clears_position,
-  RANK() OVER (ORDER BY clears DESC) AS clears_rank,
-  1.0 - ((RANK() OVER (ORDER BY clears DESC) - 1) / (tc.cnt - 1)) AS clears_percentile,
-
-  fresh_clears,
-  ROW_NUMBER() OVER (ORDER BY fresh_clears DESC, membership_id ASC) AS fresh_clears_position,
-  RANK() OVER (ORDER BY fresh_clears DESC) AS fresh_clears_rank,
-  1.0 - ((RANK() OVER (ORDER BY fresh_clears DESC) - 1) / (tc.cnt - 1)) AS fresh_clears_percentile,
-
-  sherpas,
-  ROW_NUMBER() OVER (ORDER BY sherpas DESC, membership_id ASC) AS sherpas_position,
-  RANK() OVER (ORDER BY sherpas DESC) AS sherpas_rank,
-  1.0 - ((RANK() OVER (ORDER BY sherpas DESC) - 1) / (tc.cnt - 1)) AS sherpas_percentile,
-
-  sum_of_best AS speed,
-  ROW_NUMBER() OVER (ORDER BY sum_of_best ASC, membership_id ASC) AS speed_position,
-  RANK() OVER (ORDER BY sum_of_best ASC) AS speed_rank,
-  1.0 - ((RANK() OVER (ORDER BY sum_of_best ASC) - 1) / (tc.cnt - 1)) AS speed_percentile,
-
-  total_time_played_seconds AS total_time_played,
-  ROW_NUMBER() OVER (ORDER BY total_time_played_seconds DESC, membership_id ASC) AS total_time_played_position,
-  RANK() OVER (ORDER BY total_time_played_seconds DESC) AS total_time_played_rank,
-  1.0 - ((RANK() OVER (ORDER BY total_time_played_seconds DESC) - 1) / (tc.cnt - 1)) AS total_time_played_percentile,
-
-  wfr_score,
-  ROW_NUMBER() OVER (ORDER BY wfr_score DESC, membership_id ASC) AS wfr_score_position,
-  RANK() OVER (ORDER BY wfr_score DESC) AS wfr_score_rank,
-  1.0 - ((RANK() OVER (ORDER BY wfr_score DESC) - 1) / (tc.cnt - 1)) AS wfr_score_percentile
-
-FROM "core"."player", total_count tc
-WHERE clears > 0 AND NOT is_private AND cheat_level < 2;
+  base.membership_id,
+  clears_ranked.clears,
+  clears_ranked.clears_position,
+  clears_ranked.clears_rank,
+  clears_ranked.clears_percentile,
+  fresh_clears_ranked.fresh_clears,
+  fresh_clears_ranked.fresh_clears_position,
+  fresh_clears_ranked.fresh_clears_rank,
+  fresh_clears_ranked.fresh_clears_percentile,
+  sherpas_ranked.sherpas,
+  sherpas_ranked.sherpas_position,
+  sherpas_ranked.sherpas_rank,
+  sherpas_ranked.sherpas_percentile,
+  speed_ranked.speed,
+  speed_ranked.speed_position,
+  speed_ranked.speed_rank,
+  speed_ranked.speed_percentile,
+  total_time_played_ranked.total_time_played,
+  total_time_played_ranked.total_time_played_position,
+  total_time_played_ranked.total_time_played_rank,
+  total_time_played_ranked.total_time_played_percentile,
+  wfr_score_ranked.wfr_score,
+  wfr_score_ranked.wfr_score_position,
+  wfr_score_ranked.wfr_score_rank,
+  wfr_score_ranked.wfr_score_percentile
+FROM base
+JOIN clears_ranked ON base.membership_id = clears_ranked.membership_id
+JOIN fresh_clears_ranked ON base.membership_id = fresh_clears_ranked.membership_id
+JOIN sherpas_ranked ON base.membership_id = sherpas_ranked.membership_id
+JOIN speed_ranked ON base.membership_id = speed_ranked.membership_id
+JOIN total_time_played_ranked ON base.membership_id = total_time_played_ranked.membership_id
+JOIN wfr_score_ranked ON base.membership_id = wfr_score_ranked.membership_id;
 
 CREATE UNIQUE INDEX idx_global_leaderboard_membership_id ON "leaderboard"."individual_global_leaderboard" (membership_id ASC);
 CREATE UNIQUE INDEX idx_global_leaderboard_clears ON "leaderboard"."individual_global_leaderboard" (clears_position ASC);
@@ -176,3 +286,89 @@ CREATE UNIQUE INDEX idx_global_leaderboard_sherpas ON "leaderboard"."individual_
 CREATE UNIQUE INDEX idx_global_leaderboard_speed ON "leaderboard"."individual_global_leaderboard" (speed_position ASC);
 CREATE UNIQUE INDEX idx_global_leaderboard_total_time_played ON "leaderboard"."individual_global_leaderboard" (total_time_played_position ASC);
 CREATE UNIQUE INDEX idx_global_leaderboard_wfr_score ON "leaderboard"."individual_global_leaderboard" (wfr_score_position ASC);
+
+-- Individual raid leaderboard (per activity)
+CREATE MATERIALIZED VIEW "leaderboard"."individual_raid_leaderboard" AS
+WITH base AS (
+  SELECT
+    activity_id,
+    membership_id,
+    clears,
+    fresh_clears,
+    sherpas,
+    total_time_played_seconds,
+    total_count
+  FROM "leaderboard"."_raid_leaderboard_cache"
+),
+clears_ranked AS (
+  SELECT
+    activity_id,
+    membership_id,
+    clears,
+    ROW_NUMBER() OVER (PARTITION BY activity_id ORDER BY clears DESC, membership_id ASC) AS clears_position,
+    RANK() OVER (PARTITION BY activity_id ORDER BY clears DESC) AS clears_rank,
+    1.0 - ((RANK() OVER (PARTITION BY activity_id ORDER BY clears DESC) - 1) / NULLIF(total_count - 1, 0)) AS clears_percentile
+  FROM base
+),
+fresh_clears_ranked AS (
+  SELECT
+    activity_id,
+    membership_id,
+    fresh_clears,
+    ROW_NUMBER() OVER (PARTITION BY activity_id ORDER BY fresh_clears DESC, membership_id ASC) AS fresh_clears_position,
+    RANK() OVER (PARTITION BY activity_id ORDER BY fresh_clears DESC) AS fresh_clears_rank,
+    1.0 - ((RANK() OVER (PARTITION BY activity_id ORDER BY fresh_clears DESC) - 1) / NULLIF(total_count - 1, 0)) AS fresh_clears_percentile
+  FROM base
+),
+sherpas_ranked AS (
+  SELECT
+    activity_id,
+    membership_id,
+    sherpas,
+    ROW_NUMBER() OVER (PARTITION BY activity_id ORDER BY sherpas DESC, membership_id ASC) AS sherpas_position,
+    RANK() OVER (PARTITION BY activity_id ORDER BY sherpas DESC) AS sherpas_rank,
+    1.0 - ((RANK() OVER (PARTITION BY activity_id ORDER BY sherpas DESC) - 1) / NULLIF(total_count - 1, 0)) AS sherpas_percentile
+  FROM base
+),
+total_time_played_ranked AS (
+  SELECT
+    activity_id,
+    membership_id,
+    total_time_played_seconds AS total_time_played,
+    ROW_NUMBER() OVER (PARTITION BY activity_id ORDER BY total_time_played_seconds DESC, membership_id ASC) AS total_time_played_position,
+    RANK() OVER (PARTITION BY activity_id ORDER BY total_time_played_seconds DESC) AS total_time_played_rank,
+    1.0 - ((RANK() OVER (PARTITION BY activity_id ORDER BY total_time_played_seconds DESC) - 1) / NULLIF(total_count - 1, 0)) AS total_time_played_percentile
+  FROM base
+)
+SELECT
+  clears_ranked.activity_id,
+  clears_ranked.membership_id,
+  clears_ranked.clears,
+  clears_ranked.clears_position,
+  clears_ranked.clears_rank,
+  clears_ranked.clears_percentile,
+  fresh_clears_ranked.fresh_clears,
+  fresh_clears_ranked.fresh_clears_position,
+  fresh_clears_ranked.fresh_clears_rank,
+  fresh_clears_ranked.fresh_clears_percentile,
+  sherpas_ranked.sherpas,
+  sherpas_ranked.sherpas_position,
+  sherpas_ranked.sherpas_rank,
+  sherpas_ranked.sherpas_percentile,
+  total_time_played_ranked.total_time_played,
+  total_time_played_ranked.total_time_played_position,
+  total_time_played_ranked.total_time_played_rank,
+  total_time_played_ranked.total_time_played_percentile
+FROM clears_ranked
+JOIN fresh_clears_ranked ON clears_ranked.activity_id = fresh_clears_ranked.activity_id 
+  AND clears_ranked.membership_id = fresh_clears_ranked.membership_id
+JOIN sherpas_ranked ON clears_ranked.activity_id = sherpas_ranked.activity_id 
+  AND clears_ranked.membership_id = sherpas_ranked.membership_id
+JOIN total_time_played_ranked ON clears_ranked.activity_id = total_time_played_ranked.activity_id 
+  AND clears_ranked.membership_id = total_time_played_ranked.membership_id;
+
+CREATE UNIQUE INDEX idx_raid_leaderboard_activity_membership ON "leaderboard"."individual_raid_leaderboard" (activity_id ASC, membership_id ASC);
+CREATE UNIQUE INDEX idx_raid_leaderboard_clears ON "leaderboard"."individual_raid_leaderboard" (activity_id ASC, clears_position ASC);
+CREATE UNIQUE INDEX idx_raid_leaderboard_fresh_clears ON "leaderboard"."individual_raid_leaderboard" (activity_id ASC, fresh_clears_position ASC);
+CREATE UNIQUE INDEX idx_raid_leaderboard_sherpas ON "leaderboard"."individual_raid_leaderboard" (activity_id ASC, sherpas_position ASC);
+CREATE UNIQUE INDEX idx_raid_leaderboard_total_time_played ON "leaderboard"."individual_raid_leaderboard" (activity_id ASC, total_time_played_position ASC);
