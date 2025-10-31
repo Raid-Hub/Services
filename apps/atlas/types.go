@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	"raidhub/lib/utils/logging"
 )
 
@@ -37,7 +34,7 @@ type AtlasWorker struct {
 func NewAtlasWorker(workerID int, offloadChannel chan int64) *AtlasWorker {
 	return &AtlasWorker{
 		ID:             workerID,
-		logger:         logging.NewLogger(fmt.Sprintf("Atlas::Worker#%d", workerID)),
+		logger:         AtlasLogger,
 		offloadChannel: offloadChannel,
 	}
 }
@@ -68,29 +65,4 @@ func (w *AtlasWorker) Error(key string, fields map[string]any) {
 
 func (w *AtlasWorker) Fatal(key string, fields map[string]any) {
 	w.logger.Fatal(key, w.addWorkerFields(fields))
-}
-
-// LogPGCRError logs PGCR fetch errors, handling timeout and connection errors more gracefully
-func (w *AtlasWorker) LogPGCRError(err error, instanceID int64, attempt int) {
-	errStr := err.Error()
-	isTimeout := strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded")
-	isConnectionError := strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "connection reset")
-
-	fields := map[string]any{
-		logging.INSTANCE_ID: instanceID,
-		logging.ERROR:       errStr,
-		logging.ATTEMPT:     attempt,
-	}
-
-	if isTimeout {
-		w.Warn("PGCR_FETCH_TIMEOUT", fields)
-		return
-	}
-
-	if isConnectionError {
-		w.Warn("PGCR_CONNECTION_ERROR", fields)
-		return
-	}
-
-	w.Error("PGCR_REQUEST_ERROR", fields)
 }

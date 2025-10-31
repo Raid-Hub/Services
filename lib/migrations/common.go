@@ -49,11 +49,6 @@ func ReadMigrationFile(directory, filename string) (string, error) {
 
 // RunMigrations is a generic migration runner that handles the common logic
 func RunMigrations(config MigrationConfig) error {
-	logger.Info(MIGRATIONS_FILES_READ, map[string]any{
-		logging.COUNT:     len(config.MigrationFiles),
-		logging.DIRECTORY: config.Directory,
-	})
-
 	// Query applied migrations
 	appliedMigrations, err := config.GetAppliedMigrations()
 	if err != nil {
@@ -64,17 +59,8 @@ func RunMigrations(config MigrationConfig) error {
 	appliedCount := 0
 	for _, filename := range config.MigrationFiles {
 		if appliedMigrations[filename] {
-			logger.Info("MIGRATION_SKIPPED", map[string]any{
-				logging.FILENAME: filename,
-				logging.REASON:   "already_applied",
-			})
 			continue
 		}
-
-		logger.Info("MIGRATION_APPLYING", map[string]any{
-			logging.FILENAME: filename,
-			logging.STATUS:   "starting",
-		})
 
 		migrationSQL, err := ReadMigrationFile(config.Directory, filename)
 		if err != nil {
@@ -86,10 +72,6 @@ func RunMigrations(config MigrationConfig) error {
 			return err
 		}
 
-		logger.Info("MIGRATION_APPLIED", map[string]any{
-			logging.FILENAME: filename,
-			logging.STATUS:   "completed",
-		})
 		appliedCount++
 	}
 
@@ -97,8 +79,7 @@ func RunMigrations(config MigrationConfig) error {
 		logger.Info(MIGRATIONS_UP_TO_DATE, nil)
 	} else {
 		logger.Info("MIGRATIONS_COMPLETED", map[string]any{
-			logging.COUNT:  appliedCount,
-			logging.STATUS: "completed",
+			logging.COUNT: appliedCount,
 		})
 	}
 

@@ -42,7 +42,7 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 
 		metrics, err := GetMetricsForScaling(time.Since(startTime))
 		if err != nil {
-			logger.Error("FAILED_TO_GET_METRICS", map[string]any{
+			AtlasLogger.Error("FAILED_TO_GET_METRICS", map[string]any{
 				logging.ERROR: err.Error(),
 			})
 			// Continue with previous worker count and period length on metrics failure

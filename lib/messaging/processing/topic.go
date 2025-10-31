@@ -2,6 +2,9 @@ package processing
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -23,6 +26,46 @@ type WorkerInterface interface {
 	Error(key string, fields map[string]any)
 	Debug(key string, fields map[string]any)
 	Context() context.Context
+}
+
+// ParseJSON parses JSON from message body using a generic type parameter and logs errors automatically
+func ParseJSON[T any](worker WorkerInterface, data []byte) (T, error) {
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		worker.Error("FAILED_TO_UNMARSHAL_MESSAGE", map[string]any{
+			"error": err.Error(),
+		})
+		return v, err
+	}
+	return v, nil
+}
+
+// ParseText parses text from message body and logs errors automatically
+func ParseText(worker WorkerInterface, data []byte) (string, error) {
+	text := string(data)
+	if text == "" {
+		worker.Error("EMPTY_MESSAGE_BODY", nil)
+		return "", fmt.Errorf("empty message body")
+	}
+	return text, nil
+}
+
+// ParseInt64 parses int64 from message body and logs errors automatically
+func ParseInt64(worker WorkerInterface, data []byte) (int64, error) {
+	text := string(data)
+	if text == "" {
+		worker.Error("EMPTY_MESSAGE_BODY", nil)
+		return 0, fmt.Errorf("empty message body")
+	}
+	value, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		worker.Error("FAILED_TO_PARSE_INT64", map[string]any{
+			"error": err.Error(),
+			"value": text,
+		})
+		return 0, err
+	}
+	return value, nil
 }
 
 // TopicConfig defines the configuration for a topic

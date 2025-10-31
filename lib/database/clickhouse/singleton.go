@@ -14,9 +14,13 @@ var (
 )
 
 func init() {
-	initDone = singleton.InitAsync("CLICKHOUSE", 10, func() error {
+	initDone = singleton.InitAsync("CLICKHOUSE", 10, map[string]any{
+		"host": env.ClickHouseHost,
+		"port": env.ClickHousePort,
+		"db":   env.ClickHouseDB,
+	}, func() error {
 		conn, err := clickhouse.Open(&clickhouse.Options{
-			Addr: []string{"localhost:" + env.ClickHousePort},
+			Addr: []string{env.ClickHouseHost + ":" + env.ClickHousePort},
 			Auth: clickhouse.Auth{
 				Database: env.ClickHouseDB,
 				Username: env.ClickHouseUser,

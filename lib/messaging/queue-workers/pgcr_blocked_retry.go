@@ -10,7 +10,6 @@ import (
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
-	"strconv"
 	"sync"
 	"time"
 
@@ -46,9 +45,8 @@ func PgcrBlockedTopic() processing.Topic {
 // When Bungie blocks PGCRs (InsufficientPrivileges), this worker retries them
 // When enough PGCRs successfully process, it assumes floodgates are "opened"
 func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery) error {
-	instanceId, err := strconv.ParseInt(string(message.Body), 10, 64)
+	instanceId, err := processing.ParseInt64(worker, message.Body)
 	if err != nil {
-		worker.Error("FAILED_TO_PARSE_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 
@@ -70,11 +68,7 @@ func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery
 		}
 
 		// Try to fetch and process the PGCR
-		result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
-		if err != nil && result != pgcr_processing.NotFound {
-			worker.Error("ERROR_FETCHING_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
-		}
-
+		result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
 		// Handle the result
 		if result == pgcr_processing.NonRaid {
 			// Successfully confirmed it's not a raid - mark as processed
@@ -87,7 +81,7 @@ func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery
 			worker.Info("BLOCKED_PGCR_SUCCESSFULLY_PROCESSED", map[string]any{logging.INSTANCE_ID: instanceId})
 
 			// Publish to storage queue
-			storeMessage := messages.NewPGCRStoreMessage(activity, raw)
+			storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 			if publishErr := publishing.PublishJSONMessage(worker.Context(), routing.InstanceStore, storeMessage); publishErr != nil {
 				worker.Error("FAILED_TO_PUBLISH_PGCR_FOR_STORAGE", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: publishErr.Error()})
 				return publishErr

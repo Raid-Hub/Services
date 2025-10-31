@@ -1,7 +1,6 @@
 package queueworkers
 
 import (
-	"encoding/json"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
@@ -30,17 +29,16 @@ func CharacterFillTopic() processing.Topic {
 
 // processCharacterFill handles character fill messages
 func processCharacterFill(worker processing.WorkerInterface, message amqp.Delivery) error {
-	var request messages.CharacterFillMessage
-	if err := json.Unmarshal(message.Body, &request); err != nil {
-		worker.Error("Failed to unmarshal character fill request", map[string]any{logging.ERROR: err.Error()})
+	request, err := processing.ParseJSON[messages.CharacterFillMessage](worker, message.Body)
+	if err != nil {
 		return err
 	}
 
 	// Call character fill logic
-	err := character.Fill(request.MembershipId, request.CharacterId, request.InstanceId)
+	err = character.Fill(request.MembershipId, request.CharacterId, request.InstanceId)
 
 	if err != nil {
-		worker.Error("Failed to fill character", map[string]any{logging.ERROR: err.Error()})
+		worker.Error("FAILED_TO_UPDATE_CHARACTER", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

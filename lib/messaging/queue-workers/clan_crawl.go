@@ -5,7 +5,6 @@ import (
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/clan"
 	"raidhub/lib/utils/logging"
-	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -29,10 +28,8 @@ func ClanCrawlTopic() processing.Topic {
 
 // processClanCrawl handles clan crawl messages
 func processClanCrawl(worker processing.WorkerInterface, message amqp.Delivery) error {
-	groupIdStr := string(message.Body)
-	groupId, err := strconv.ParseInt(groupIdStr, 10, 64)
+	groupId, err := processing.ParseInt64(worker, message.Body)
 	if err != nil {
-		worker.Error("Failed to parse group ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

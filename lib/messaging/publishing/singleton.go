@@ -10,7 +10,7 @@ var (
 )
 
 func init() {
-	initDone = singleton.InitAsync("RABBITMQ_PUBLISHER", 3, func() error {
+	initDone = singleton.InitAsync("RABBITMQ_PUBLISHER", 3, map[string]any{}, func() error {
 		// Wait for RabbitMQ connection to be ready before creating publisher channel
 		rabbit.Wait()
 

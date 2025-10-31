@@ -27,31 +27,17 @@ func ProcessSinglePGCR() {
 	logger.Info("PROCESSING_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// 2. Fetch and process the PGCR
-	result, processedActivity, rawPGCR, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
-	if err != nil {
-		logger.Error("FAILED_TO_FETCH_AND_PROCESS_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
-		return
-	}
+	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
 
 	if result != pgcr_processing.Success {
 		logger.Error("PGCR_FETCH_FAILED", map[string]any{logging.INSTANCE_ID: instanceId, "result": result})
 		return
 	}
 
-	if processedActivity == nil {
-		logger.Error("PROCESSED_ACTIVITY_IS_NIL", map[string]any{logging.INSTANCE_ID: instanceId})
-		return
-	}
-
-	if rawPGCR == nil {
-		logger.Error("RAW_PGCR_IS_NIL", map[string]any{logging.INSTANCE_ID: instanceId})
-		return
-	}
-
 	logger.Info("SUCCESSFULLY_FETCHED_AND_PROCESSED_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// 3. Store the PGCR
-	lag, committed, err := instance_storage.StorePGCR(processedActivity, rawPGCR)
+	lag, committed, err := instance_storage.StorePGCR(instance, pgcr)
 	if err != nil {
 		logger.Error("FAILED_TO_STORE_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
 		return
@@ -59,19 +45,19 @@ func ProcessSinglePGCR() {
 
 	// Prepare summary fields
 	summaryFields := map[string]any{
-		logging.INSTANCE_ID: processedActivity.InstanceId,
-		logging.HASH:        processedActivity.Hash,
-		"date_started":      processedActivity.DateStarted,
-		"date_completed":    processedActivity.DateCompleted,
-		logging.DURATION:    processedActivity.DurationSeconds,
-		logging.COUNT:       len(processedActivity.Players),
-		"completed":         processedActivity.Completed,
+			logging.INSTANCE_ID: instance.InstanceId,
+		logging.HASH:        instance.Hash,
+		"date_started":      instance.DateStarted,
+		"date_completed":    instance.DateCompleted,
+		logging.DURATION:    instance.DurationSeconds,
+		logging.COUNT:       len(instance.Players),
+		"completed":         instance.Completed,
 	}
-	if processedActivity.Fresh != nil {
-		summaryFields["fresh"] = *processedActivity.Fresh
+	if instance.Fresh != nil {
+		summaryFields["fresh"] = *instance.Fresh
 	}
-	if processedActivity.Flawless != nil {
-		summaryFields["flawless"] = *processedActivity.Flawless
+	if instance.Flawless != nil {
+		summaryFields["flawless"] = *instance.Flawless
 	}
 	if lag != nil {
 		summaryFields[logging.LAG] = lag

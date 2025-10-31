@@ -34,15 +34,13 @@ func sanitizeVersionForFilename(version string) string {
 }
 
 // DownloadManifest is the command function for downloading and processing Destiny 2 manifest
-// Usage: ./bin/manifest-downloader [--out=<directory>] [--force] [--disk]
-func DownloadManifest() {
-	fs := flag.NewFlagSet("manifest-downloader", flag.ExitOnError)
-	out := fs.String("out", "", "where to store the sqlite (required)")
-	force := fs.Bool("f", false, "force the defs to be updated")
-	fromDisk := fs.Bool("disk", false, "read from disk, not bnet")
+// Usage: ./bin/manifest-downloader [-out=<directory>] [-f] [-disk]
+func DownloadManifest() string {
+	out := flag.String("out", "", "where to store the sqlite (required)")
+	force := flag.Bool("f", false, "force the defs to be updated")
+	fromDisk := flag.Bool("disk", false, "read from disk, not bnet")
 
-	// Parse flags after the command name
-	fs.Parse(flag.Args())
+	flag.Parse()
 
 	if *out == "" {
 		logger.Fatal("MISSING_OUTPUT_DIRECTORY", map[string]any{"message": "must specify an artifacts output directory with the -out flag"})
@@ -85,7 +83,8 @@ func DownloadManifest() {
 		} else {
 			if !*force {
 				logger.Info("NO_NEW_MANIFEST_DEFINITIONS", map[string]any{})
-				return
+				os.Exit(0)
+				return ""
 			}
 			logger.Info("RELOADING_EXISTING_MANIFEST_DEFINITIONS", map[string]any{logging.VERSION: manifest.Version})
 		}
@@ -228,32 +227,10 @@ func DownloadManifest() {
 		}
 	}
 
-	definitions, err := sql.Open("sqlite3", sqlitePath)
-	if err != nil {
-		logger.Warn("ERROR_OPENING_SQLITE_DATABASE", map[string]any{logging.ERROR: err.Error()})
-	}
-	logger.Debug("CONNECTED_TO_SQLITE3", map[string]any{})
-	defer definitions.Close()
-
-	// Wait for PostgreSQL connection to be ready
-	postgres.Wait()
-
-	// postgres.DB is initialized in init()
-	logger.Debug("CONNECTED_TO_POSTGRES", map[string]any{})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-
-	wg.Add(2)
-	go saveWeaponDefinitions(ctx, &wg, postgres.DB, definitions)
-	go saveFeatDefinitions(ctx, &wg, postgres.DB, definitions)
-
-	wg.Wait()
+	return sqlitePath
 }
 
-func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, definitions *sql.DB) {
+func saveWeaponDefinitions(ctx context.Context, wg *sync.WaitGroup, definitions *sql.DB) {
 	defer wg.Done()
 
 	rows, err := definitions.QueryContext(ctx, `SELECT 
@@ -345,7 +322,7 @@ type FeatData struct {
 	ModifierPowerContribution int
 }
 
-func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, definitions *sql.DB) {
+func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, definitions *sql.DB) {
 	defer wg.Done()
 
 	// first, get all raid hashes
@@ -433,6 +410,28 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 }
 
 func main() {
-	flag.Parse()
-	DownloadManifest()
+	path := DownloadManifest()
+	definitions, err := sql.Open("sqlite3", path)
+	if err != nil {
+		logger.Warn("ERROR_OPENING_SQLITE_DATABASE", map[string]any{logging.ERROR: err.Error()})
+	}
+	logger.Debug("CONNECTED_TO_SQLITE3", map[string]any{})
+	defer definitions.Close()
+
+	// Wait for PostgreSQL connection to be ready
+	postgres.Wait()
+
+	// postgres.DB is initialized in init()
+	logger.Debug("CONNECTED_TO_POSTGRES", map[string]any{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go saveWeaponDefinitions(ctx, &wg, definitions)
+	go saveFeatDefinitions(ctx, &wg, definitions)
+
+	wg.Wait()
 }

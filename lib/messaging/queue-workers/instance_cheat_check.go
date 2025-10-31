@@ -5,7 +5,6 @@ import (
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/cheat_detection"
 	"raidhub/lib/utils/logging"
-	"strconv"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -29,10 +28,8 @@ func InstanceCheatCheckTopic() processing.Topic {
 
 // processInstanceCheatCheck handles instance cheat check messages
 func processInstanceCheatCheck(worker processing.WorkerInterface, message amqp.Delivery) error {
-	instanceIdStr := string(message.Body)
-	instanceId, err := strconv.ParseInt(instanceIdStr, 10, 64)
+	instanceId, err := processing.ParseInt64(worker, message.Body)
 	if err != nil {
-		worker.Error("Failed to parse instance ID", map[string]any{logging.ERROR: err.Error()})
 		return err
 	}
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"raidhub/lib/messaging/messages"
@@ -14,13 +13,7 @@ import (
 	"raidhub/lib/utils/logging"
 )
 
-var offloadLogger = logging.NewLogger("ATLAS::OFFLOAD_WORKER")
-
-// isTimeoutError checks if an error is a timeout/deadline exceeded error
-func isTimeoutError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded")
-}
+var offloadLogger = logging.NewLogger("atlas::offloadWorker")
 
 func offloadWorker(consumerConfig *ConsumerConfig) {
 	for id := range consumerConfig.OffloadChannel {
@@ -29,30 +22,13 @@ func offloadWorker(consumerConfig *ConsumerConfig) {
 			time.Sleep(15 * time.Second)
 			startTime := time.Now()
 			for i := 1; i <= 6; i++ {
-				result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceId)
-
-				if err != nil {
-					// Check if this is a timeout error - log at Debug level instead of Warn
-					if isTimeoutError(err) {
-						offloadLogger.Debug("PGCR_FETCH_TIMEOUT", map[string]any{
-							logging.INSTANCE_ID: instanceId,
-							logging.ERROR:       err.Error(),
-							logging.ATTEMPT:     i,
-						})
-					} else {
-						offloadLogger.Warn("PGCR_FETCH_ERROR", map[string]any{
-							logging.INSTANCE_ID: instanceId,
-							logging.ERROR:       err.Error(),
-							logging.ATTEMPT:     i,
-						})
-					}
-				}
+				result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
 
 				if result == pgcr_processing.NonRaid {
 					return
 				} else if result == pgcr_processing.Success {
 					// Publish to queue for async storage
-					storeMessage := messages.NewPGCRStoreMessage(activity, raw)
+					storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 					err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
 					if err != nil {
 						offloadLogger.Warn("FAILED_TO_PUBLISH_PGCR_STORE_MESSAGE", map[string]any{

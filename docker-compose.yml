@@ -1,13 +1,43 @@
-name: raidhub-services
+name: raidhub
+
+x-app-services: &app-services
+  env_file:
+    - ./.env
+  environment:
+    # these are the service names for the docker compose services
+    - POSTGRES_HOST=postgres
+    - RABBITMQ_HOST=rabbitmq
+    - CLICKHOUSE_HOST=clickhouse
+    - PROMETHEUS_HOST=prometheus
+    - ZEUS_HOST=zeus
+    - LOKI_HOST=loki
+    # in docker, the ports use the default values internally
+    - PROMETHEUS_PORT=9090
+    - LOKI_PORT=3100
+    - ZEUS_PORT=7777
+    - POSTGRES_PORT=5432
+    - RABBITMQ_PORT=5672
+    - RABBITMQ_UI_PORT=15672
+    - CLICKHOUSE_PORT=9000
+    - CLICKHOUSE_HTTP_PORT=8123
+    - GRAFANA_PORT=3000
+  volumes:
+    - ./.raidhub:/.raidhub
+  restart: unless-stopped
+
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
 
 services:
+  # Infrastructure services
   postgres:
     image: postgres:13
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT}:5432"
     environment:
-      POSTGRES_DB: "${POSTGRES_DB}"
-      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_DB: "raidhub"
+      POSTGRES_USER: "postgres"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
@@ -18,12 +48,12 @@ services:
   rabbitmq:
     image: rabbitmq:3.8-management
     environment:
-      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER}"
-      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD}"
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
       RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/definitions.json
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_UI_PORT:-15672}:15672"
+      - "${RABBITMQ_PORT}:5672" # AMQP
+      - "${RABBITMQ_UI_PORT}:15672" # Management UI
     volumes:
       - ./volumes/rabbitmq:/var/lib/rabbitmq
       - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
@@ -33,32 +63,105 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server
     ports:
-      - "${CLICKHOUSE_PORT:-9000}:9000"
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_PORT}:9000" # Native
+      - "${CLICKHOUSE_HTTP_PORT}:8123" # HTTP
     environment:
-      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
-      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
-      CLICKHOUSE_DB: "${CLICKHOUSE_DB}"
-      POSTGRES_USER: "${POSTGRES_USER}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: "${POSTGRES_DB}"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DB: "default"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: ""
+      POSTGRES_DB: "raidhub"
     volumes:
       # Data
       - ./volumes/clickhouse:/var/lib/clickhouse
       - ./volumes/logs/clickhouse-server:/var/log/clickhouse-server
       # Config
-      - ./infrastructure/clickhouse/config.xml:/etc/clickhouse-server/config.d/default_database.xml:ro
-      - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
-      - ./infrastructure/clickhouse/named_collections.xml:/etc/clickhouse-server/named_collections.d/postgres_creds.xml:ro
+      - ./infrastructure/clickhouse/named_collections.xml:/etc/clickhouse-server/config.d/named_collections.xml:ro
     stop_grace_period: 30s
     stop_signal: SIGTERM
 
   prometheus:
     image: prom/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${PROMETHEUS_PORT}:9090"
     volumes:
       - ./volumes/prometheus:/prometheus
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     stop_grace_period: 10s
     stop_signal: SIGTERM
+
+  # Logging stack
+  loki:
+    image: grafana/loki:2.9.6
+    command: ["-config.file=/etc/loki/loki.yml", "-config.expand-env=true"]
+    ports:
+      - "${LOKI_PORT}:3100"
+    volumes:
+      - ./volumes/loki:/loki
+      - ./infrastructure/loki/loki.yml:/etc/loki/loki.yml:ro
+    stop_grace_period: 10s
+    stop_signal: SIGTERM
+
+  promtail:
+    image: grafana/promtail:2.9.6
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infrastructure/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+    depends_on:
+      - loki
+    stop_grace_period: 10s
+    stop_signal: SIGTERM
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+      - ./infrastructure/grafana:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+      - prometheus
+    stop_grace_period: 10s
+    stop_signal: SIGTERM
+
+  # Application services
+  atlas:
+    <<: *app-services
+    container_name: raidhub-atlas
+    build:
+      <<: *app-build
+      args:
+        APP_NAME: atlas
+    command: ["--dev"]
+    depends_on:
+      - postgres
+      - rabbitmq
+      - zeus
+
+  zeus:
+    <<: *app-services
+    container_name: raidhub-zeus
+    build:
+      <<: *app-build
+      args:
+        APP_NAME: zeus
+    ports:
+      - "${ZEUS_PORT}:7777"
+
+  hermes:
+    <<: *app-services
+    container_name: raidhub-hermes
+    build:
+      <<: *app-build
+      args:
+        APP_NAME: hermes
+    depends_on:
+      - postgres
+      - rabbitmq
+      - clickhouse

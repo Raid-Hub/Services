@@ -1,22 +1,15 @@
-default: apps tools
-
-.PHONY: seed apps tools migrate
-# Go Binaries
+.PHONY: seed tools migrate compose env rebuild-apps rebuild-app recreate-apps recreate-app apps config sync-dashboards infra
+# Go Binaries (optional - for production tool binaries)
 GO_BUILD = go build
 BIN_DIR = ./bin/
-APPS_DIR = ./apps/
 TOOLS_DIR = ./tools/
-
-apps:
-	mkdir -p $(BIN_DIR)
-	$(GO_BUILD) -o $(BIN_DIR) $(APPS_DIR)...
 
 tools:
 	mkdir -p $(BIN_DIR)
 	$(GO_BUILD) -o $(BIN_DIR) $(TOOLS_DIR)...
 
 # Docker Services
-DOCKER_COMPOSE = docker-compose -f docker-compose.yml --env-file ./.env
+DOCKER_COMPOSE = docker compose -f docker-compose.yml --env-file ./.env
 
 # Development Commands (Recommended)
 dev:
@@ -24,10 +17,14 @@ dev:
 	@echo "This provides hot reload, service orchestration, and monitoring"
 	@echo "Access Tilt UI at: http://localhost:10350"
 	@echo "Press Ctrl+C to stop"
-	tilt up
+	tilt up --watch
 
 up:
 	$(DOCKER_COMPOSE) up -d
+
+infra:
+	@echo "Starting infrastructure services..."
+	$(DOCKER_COMPOSE) up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
 
 down:
 	$(DOCKER_COMPOSE) down
@@ -40,6 +37,11 @@ stop:
 
 ps:
 	$(DOCKER_COMPOSE) ps
+
+# Rebuild and recreate app containers
+apps:
+	$(DOCKER_COMPOSE) build hermes atlas zeus
+	$(DOCKER_COMPOSE) up -d --force-recreate hermes atlas zeus
 
 # Database management
 migrate: migrate-postgres migrate-clickhouse
@@ -72,8 +74,57 @@ cron:
 
 
 config:
-	./infrastructure/generate-configs.sh
+	@echo "✅ Configuration files are now static - no generation needed"
+
+# Sync Grafana dashboards from UI back to infrastructure files
+sync-dashboards:
+	@echo "📥 Syncing Grafana dashboards..."
+	@./infrastructure/grafana/sync-dashboards.sh
+
+# Environment file management
+env:
+	@if [ ! -f .env ]; then \
+		echo "📝 Creating .env file from example.env..."; \
+		cp example.env .env; \
+		echo "✅ .env file created"; \
+	else \
+		echo "✅ .env file already exists"; \
+	fi
+	@if [ -f example.env ] && [ -f .env ]; then \
+		missing_keys=(); \
+		missing_values=(); \
+		added_count=0; \
+		while IFS='=' read -r key value || [ -n "$$key" ]; do \
+			key=$$(echo "$$key" | xargs); \
+			[[ "$$key" =~ ^# ]] && continue; \
+			[[ -z "$$key" ]] && continue; \
+			value=$${value%$$'\r'}; \
+			value=$$(echo "$$value" | xargs); \
+			if [ -z "$$value" ]; then \
+				continue; \
+			fi; \
+			grep_result=$$(grep "^$$key=" .env 2>/dev/null || echo ""); \
+			if [ -z "$$grep_result" ]; then \
+				missing_keys+=("$$key"); \
+				missing_values+=("$$key=$$value"); \
+				added_count=$$((added_count + 1)); \
+			fi; \
+		done < example.env; \
+		if [ $${#missing_keys[@]} -gt 0 ]; then \
+			echo "" >> .env; \
+			echo "# Keys automatically added by make env on $$(date)" >> .env; \
+			for entry in "$${missing_values[@]}"; do \
+				echo "$$entry" >> .env; \
+			done; \
+			echo "📝 Added $$added_count missing key(s) to .env"; \
+			for key in "$${missing_keys[@]}"; do \
+				echo "   + $$key"; \
+			done; \
+		else \
+			echo "✅ All keys from example.env are present in .env"; \
+		fi; \
+	fi
 
 clean:
-	rm -rf $(BIN_DIR)
-	rm -rf volumes/
+	$(DOCKER_COMPOSE) down
+	rm -rf $(BIN_DIR) volumes/ logs/ .raidhub/

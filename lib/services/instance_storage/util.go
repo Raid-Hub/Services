@@ -8,29 +8,29 @@ import (
 )
 
 var (
-	activityInfoCache = make(map[uint32]activityInfoCacheEntry)
+	activityInfoCache = make(map[uint32]ActivityInfo)
 	cacheMu           = sync.RWMutex{}
 )
 
-type activityInfoCacheEntry struct {
+type ActivityInfo struct {
 	activityId   int
 	activityName string
 	versionName  string
 }
 
 // getActivityInfo retrieves activity information from the database (with caching)
-func getActivityInfo(hash uint32) (int, string, string, error) {
+func getActivityInfo(hash uint32) (ActivityInfo, error) {
 	// Try cache first
 	cacheMu.RLock()
 	cached, found := activityInfoCache[hash]
 	cacheMu.RUnlock()
 
 	if found {
-		return cached.activityId, cached.activityName, cached.versionName, nil
+		return cached, nil
 	}
 
 	// Query database
-	cacheEntry := activityInfoCacheEntry{}
+	cacheEntry := ActivityInfo{}
 	err := postgres.DB.QueryRow(`SELECT activity_id, activity_definition.name, version_definition.name
 			FROM activity_version 
 			JOIN activity_definition ON activity_version.activity_id = activity_definition.id 
@@ -39,9 +39,9 @@ func getActivityInfo(hash uint32) (int, string, string, error) {
 		hash).Scan(&cacheEntry.activityId, &cacheEntry.activityName, &cacheEntry.versionName)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, "", "", fmt.Errorf("activity not found for hash %d: %w", hash, err)
+			return ActivityInfo{}, fmt.Errorf("activity not found for hash %d: %w", hash, err)
 		}
-		return 0, "", "", fmt.Errorf("error finding activity_id for hash %d: %w", hash, err)
+		return ActivityInfo{}, fmt.Errorf("error finding activity_id for hash %d: %w", hash, err)
 	}
 
 	// Store in cache
@@ -49,5 +49,5 @@ func getActivityInfo(hash uint32) (int, string, string, error) {
 	activityInfoCache[hash] = cacheEntry
 	cacheMu.Unlock()
 
-	return cacheEntry.activityId, cacheEntry.activityName, cacheEntry.versionName, nil
+	return cacheEntry, nil
 }

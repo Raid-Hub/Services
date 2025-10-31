@@ -165,7 +165,7 @@ func main() {
 	}
 
 	logger.Info("FOUND_SEED_FILES", map[string]any{
-		logging.COUNT:    len(seedFiles),
+		logging.COUNT:     len(seedFiles),
 		logging.DIRECTORY: seedsDir,
 	})
 
@@ -183,4 +183,3 @@ func main() {
 
 	logger.Info("SEEDING_COMPLETED", nil)
 }
-

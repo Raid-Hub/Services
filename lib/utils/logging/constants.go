@@ -33,9 +33,10 @@ const (
 	ATTEMPTS  = "attempts"
 
 	// Network fields
-	METHOD      = "method"
-	ENDPOINT    = "endpoint"
-	STATUS_CODE = "status_code"
+	METHOD            = "method"
+	ENDPOINT          = "endpoint"
+	STATUS_CODE       = "status_code"
+	BUNGIE_ERROR_CODE = "bungie_error_code"
 
 	// User/Entity fields
 	MEMBERSHIP_ID = "membership_id"

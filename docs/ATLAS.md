@@ -161,7 +161,7 @@ The autoscaling system uses the following metrics collected from Prometheus:
 
 - **P20Lag**: 20th percentile lag (how far behind the latest instance we are, in seconds)
 
-  - Calculated using `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket[2m])) by (le))`
+  - Calculated using `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[2m])) by (le))`
   - Lower values indicate we're closer to catching up to live instances
   - Default fallback: 900 seconds if no data available
 
@@ -197,7 +197,7 @@ The autoscaling system uses the following metrics collected from Prometheus:
 
 - **P20Lag**: 20th percentile lag (how far behind the latest instance we are, in seconds)
 
-  - Calculated using `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket[2m])) by (le))`
+  - Calculated using `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[2m])) by (le))`
   - Lower values indicate we're closer to catching up to live instances
   - Default fallback: 900 seconds if no data available
 

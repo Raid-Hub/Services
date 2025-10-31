@@ -4,11 +4,11 @@ global:
 scrape_configs:
   - job_name: "atlas"
     static_configs:
-      - targets: ["localhost:{{ATLAS_METRICS_PORT}}"]
+      - targets: ["atlas:${ATLAS_METRICS_PORT}"]
   - job_name: "hermes"
     static_configs:
-      - targets: ["localhost:{{HERMES_METRICS_PORT}}"]
+      - targets: ["hermes:${HERMES_METRICS_PORT}"]
   - job_name: "zeus"
     static_configs:
-      - targets: ["localhost:{{ZEUS_METRICS_PORT}}"]
+      - targets: ["zeus:${ZEUS_METRICS_PORT}"]
 

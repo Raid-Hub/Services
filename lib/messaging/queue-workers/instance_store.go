@@ -1,7 +1,6 @@
 package queueworkers
 
 import (
-	"encoding/json"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
@@ -30,35 +29,18 @@ func InstanceStoreTopic() processing.Topic {
 
 // processInstanceStore handles instance store messages
 func processInstanceStore(worker processing.WorkerInterface, message amqp.Delivery) error {
-	var msg messages.PGCRStoreMessage
-	if err := json.Unmarshal(message.Body, &msg); err != nil {
-		worker.Error("FAILED_TO_UNMARSHAL_PGCR_STORE_MESSAGE", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+	msg, err := processing.ParseJSON[messages.PGCRStoreMessage](worker, message.Body)
+	if err != nil {
 		return err
 	}
-
-	worker.Debug("PROCESSING_INSTANCE_STORE", map[string]any{logging.INSTANCE_ID: msg.Activity.InstanceId})
+	worker.Debug("PROCESSING_INSTANCE_STORE", map[string]any{logging.INSTANCE_ID: msg.Instance.InstanceId})
 
 	// Store the PGCR using the orchestrator
-	lag, isNew, err := instance_storage.StorePGCR(&msg.Activity, &msg.Raw)
+	_, _, err = instance_storage.StorePGCR(&msg.Instance, &msg.PGCR)
 	if err != nil {
-		worker.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: msg.Activity.InstanceId, logging.ERROR: err.Error()})
-		// Write to missed log for storage failures - if successful, ACK the message since it's tracked
-		instance_storage.WriteMissedLog(msg.Activity.InstanceId)
+		instance_storage.WriteMissedLog(msg.Instance.InstanceId)
 		return nil
 	}
-
-	if isNew {
-		worker.Info(instance_storage.STORED_NEW_INSTANCE, map[string]any{
-			logging.INSTANCE_ID: msg.Activity.InstanceId,
-			logging.LAG:         lag,
-		})
-	} else {
-		worker.Debug(instance_storage.DUPLICATE_INSTANCE, map[string]any{
-			logging.INSTANCE_ID: msg.Activity.InstanceId,
-		})
-	}
-
+	worker.Debug("INSTANCE_STORE_MESSAGE_PROCESSED", map[string]any{logging.INSTANCE_ID: msg.Instance.InstanceId})
 	return nil
 }

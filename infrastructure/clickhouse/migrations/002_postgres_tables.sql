@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS activity_version
     activity_id UInt16,
     version_id UInt16
 )
-ENGINE = PostgreSQL(postgres_creds, 'definitions', 'activity_version');
+ENGINE = PostgreSQL(postgres_creds, database='raidhub', schema='definitions', table='activity_version');
 
 CREATE TABLE IF NOT EXISTS activity
 (
@@ -21,14 +21,14 @@ CREATE TABLE IF NOT EXISTS activity
     milestone_hash UInt32,
     day_one_end DateTime
 )
-ENGINE = PostgreSQL(postgres_creds, 'definitions', 'activity_definition');
+ENGINE = PostgreSQL(postgres_creds, database='raidhub', schema='definitions', table='activity_definition');
 
 CREATE TABLE IF NOT EXISTS version
 (
     id Int32,
     name String
 )
-ENGINE = PostgreSQL(postgres_creds, 'definitions', 'version_definition');
+ENGINE = PostgreSQL(postgres_creds, database='raidhub', schema='definitions', table='version_definition');
 
 CREATE TABLE IF NOT EXISTS weapon_definition
 (
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS weapon_definition
     rarity String,
     weapon_type String
 )
-ENGINE = PostgreSQL(postgres_creds, 'definitions', 'weapon_definition');
+ENGINE = PostgreSQL(postgres_creds, database='raidhub', schema='definitions', table='weapon_definition');
 
 CREATE TABLE IF NOT EXISTS player
 (
@@ -56,5 +56,5 @@ CREATE TABLE IF NOT EXISTS player
     sherpas Int32,
     sum_of_best Nullable(Int32)
 )
-ENGINE = PostgreSQL(postgres_creds, 'definitions', 'player');
+ENGINE = PostgreSQL(postgres_creds, database='raidhub', schema='core', table='player');
 

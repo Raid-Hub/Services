@@ -17,8 +17,7 @@ RaidHub Services follows a microservices architecture with clear separation betw
 ## Documentation
 
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - Detailed architecture documentation
-- **[Application Categorization](docs/APP_CATEGORIZATION.md)** - How apps are organized by execution model
-- **[Naming Conventions](docs/NAMING_CONVENTIONS.md)** - Naming patterns for services and tools
+- **[Atlas Documentation](docs/ATLAS.md)** - PGCR crawler service details
 - **[Logging Standards](docs/LOGGING.md)** - Comprehensive logging guidelines and standards
 
 ## Quick Start
@@ -179,7 +178,7 @@ make dev    # Start all services with hot reload
 Access services:
 
 - **Tilt UI**: http://localhost:10350 (service monitoring and control)
-- **Hermes**: http://localhost:8083/metrics (queue worker manager)
+- **Hermes**: http://localhost:8081/metrics (queue worker manager)
 - **Atlas**: http://localhost:8080/metrics (PGCR crawler)
 - **Zeus**: http://localhost:7777 (Bungie API proxy)
 
@@ -238,7 +237,7 @@ make cron
 
 ### Application Services
 
-- **Hermes**: `localhost:8083/metrics` (Queue worker manager)
+- **Hermes**: http://localhost:8081/metrics (Queue worker manager)
 - **Atlas**: `localhost:8080/metrics` (PGCR crawler)
 - **Zeus**: `localhost:7777` (Bungie API proxy)
 
@@ -291,18 +290,12 @@ BUNGIE_API_KEY=your_api_key
 # IPv6 (optional for Zeus - enables load balancing)
 ZEUS_IPV6=2001:db8::1  # Base IPv6 address for load balancing
 
-# PostgreSQL
-POSTGRES_USER=username
-POSTGRES_PASSWORD=password
+# PostgreSQL (uses default 'postgres' user with no password)
 POSTGRES_PORT=5432
 
-# RabbitMQ
-RABBITMQ_USER=guest
-RABBITMQ_PASSWORD=guest
+# RabbitMQ (uses default 'guest' user with 'guest' password)
 
-# ClickHouse
-CLICKHOUSE_USER=username
-CLICKHOUSE_PASSWORD=password
+# ClickHouse (uses default 'default' user with no password)
 
 # Webhooks
 ATLAS_WEBHOOK_URL=discord_webhook_url
@@ -374,6 +367,7 @@ The system uses RabbitMQ with self-scaling topic managers:
 - **`character_fill`** - Missing character data completion
 - **`clan_crawl`** - Clan information processing
 - **`pgcr_blocked_retry`** - Retry mechanism for blocked PGCRs
+- **`pgcr_crawl`** - General PGCR processing (existence checking)
 - **`instance_store`** - Primary PGCR data storage
 - **`instance_cheat_check`** - Post-storage cheat detection
 
@@ -383,7 +377,7 @@ Workers automatically scale based on queue depth and processing metrics.
 
 ### Common Issues
 
-1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8083, 7777, 9090, 15672 are available
+1. **Port Conflicts**: Ensure ports 5432, 5672, 8080, 8081, 7777, 9090, 15672, 3000, 3100 are available
 2. **API Key Missing**: Set `BUNGIE_API_KEY` in `.env`
 3. **Zeus IPv6**: Optional - Set `ZEUS_IPV6` in `.env` for production load balancing. Use `--dev` flag to disable round robin (use single transport) while keeping rate limiting enabled for local development.
 4. **Docker Issues**: Ensure Docker is running and has sufficient resources
@@ -400,12 +394,10 @@ Workers automatically scale based on queue depth and processing metrics.
 ## Contributing
 
 1. Follow the architecture principles in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-2. Use appropriate naming conventions from [docs/NAMING_CONVENTIONS.md](docs/NAMING_CONVENTIONS.md)
-3. Follow application categorization in [docs/APP_CATEGORIZATION.md](docs/APP_CATEGORIZATION.md)
-4. Follow logging standards from [docs/LOGGING.md](docs/LOGGING.md)
-5. Keep infrastructure and application code separate
-6. Document new services and workers
-7. Update documentation with significant changes
+2. Follow logging standards from [docs/LOGGING.md](docs/LOGGING.md)
+3. Keep infrastructure and application code separate
+4. Document new services and workers
+5. Update documentation with significant changes
 
 ## License
 

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"raidhub/lib/env"
 	"raidhub/lib/utils/logging"
 )
 
@@ -34,7 +35,11 @@ type PrometheusClient struct {
 // port should be just the port number (e.g., "9090") for the Prometheus API server
 // Note: This is for the Prometheus API (query service), not the exporter
 func NewPrometheusClient(port string) *PrometheusClient {
-	baseURL := fmt.Sprintf("http://localhost:%s", port)
+	baseURL := fmt.Sprintf("http://%s:%s", env.PrometheusHost, port)
+	clientLogger.Info("PROMETHEUS_CLIENT_CREATED", map[string]any{
+		"host": env.PrometheusHost,
+		"port": port,
+	})
 	return &PrometheusClient{
 		baseURL: baseURL,
 		timeout: 10 * time.Second,

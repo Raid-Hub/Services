@@ -2,8 +2,8 @@
   "rabbit_version": "3.8",
   "users": [
     {
-      "name": "{{RABBITMQ_USER}}",
-      "password": "{{RABBITMQ_PASSWORD}}",
+      "name": "guest",
+      "password": "guest",
       "tags": "administrator"
     }
   ],
@@ -14,7 +14,7 @@
   ],
   "permissions": [
     {
-      "user": "{{RABBITMQ_USER}}",
+      "user": "guest",
       "vhost": "/",
       "configure": ".*",
       "write": ".*",

@@ -100,4 +100,3 @@ func main() {
 		log.Fatalf("Error running migrations: %v", err)
 	}
 }
-

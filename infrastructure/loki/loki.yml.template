@@ -1,0 +1,50 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/boltdb-cache
+    shared_store: filesystem
+  filesystem:
+    directory: /loki/chunks
+
+limits_config:
+  retention_period: ${LOKI_RETENTION_DAYS}d
+  ingestion_rate_mb: 16
+  ingestion_burst_size_mb: 32
+  max_query_series: 500000
+  max_cache_freshness_per_query: 10m
+
+chunk_store_config:
+  max_look_back_period: 0s
+
+compactor:
+  working_directory: /loki/compactor
+  compactor_ring:
+    kvstore:
+      store: inmemory
+

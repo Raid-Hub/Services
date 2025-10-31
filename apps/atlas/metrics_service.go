@@ -11,7 +11,7 @@ import (
 	"raidhub/lib/utils/logging"
 )
 
-var metricsLogger = logging.NewLogger("ATLAS::METRICS_SERVICE")
+var metricsLogger = logging.NewLogger("atlas::metricsService")
 
 var prometheusClient *prometheus_api.PrometheusClient
 
@@ -76,7 +76,7 @@ func GetMetrics(intervalMinutes int) (*AtlasMetrics, error) {
 }
 
 func get404Fraction(intervalMins int) (float64, error) {
-	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status{status="3"}[%dm])) / sum(rate(pgcr_crawl_summary_status{}[%dm]))`, intervalMins, intervalMins)
+	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status_count{status="3"}[%dm])) / sum(rate(pgcr_crawl_summary_status_count{}[%dm]))`, intervalMins, intervalMins)
 	f, err := execWeightedQuery(query, intervalMins)
 	if err != nil || f == -1 {
 		return 0, err
@@ -85,7 +85,7 @@ func get404Fraction(intervalMins int) (float64, error) {
 }
 
 func getErrorFraction(intervalMins int) (float64, error) {
-	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status{status=~"6|7|8|9|10"}[%dm])) / sum(rate(pgcr_crawl_summary_status{}[%dm]))`, intervalMins, intervalMins)
+	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status_count{status=~"6|7|8|9|10"}[%dm])) / sum(rate(pgcr_crawl_summary_status_count{}[%dm]))`, intervalMins, intervalMins)
 	f, err := execWeightedQuery(query, intervalMins)
 	if err != nil || f == -1 {
 		return 0, err
@@ -94,7 +94,7 @@ func getErrorFraction(intervalMins int) (float64, error) {
 }
 
 func getP20Lag(intervalMins int) (float64, error) {
-	query := `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket[2m])) by (le))`
+	query := `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[2m])) by (le))`
 	p20Lag, err := execWeightedQuery(query, intervalMins)
 	if err != nil {
 		return 0, err
@@ -106,7 +106,7 @@ func getP20Lag(intervalMins int) (float64, error) {
 }
 
 func get404Rate(intervalMins int) (float64, error) {
-	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status{status="3"}[%dm])) * %d * 60`, intervalMins, intervalMins)
+	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status_count{status="3"}[%dm])) * %d * 60`, intervalMins, intervalMins)
 	res, err := prometheusClient.QueryRange(query, 0)
 	if err != nil {
 		return 0, err
@@ -118,7 +118,7 @@ func get404Rate(intervalMins int) (float64, error) {
 }
 
 func getPgcrsPerSecond(intervalMins int) (float64, error) {
-	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status{status=~"1|2"}[%dm]))`, intervalMins)
+	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status_count{status=~"1|2"}[%dm]))`, intervalMins)
 	f, err := execWeightedQuery(query, intervalMins)
 	if err != nil || f == -1 {
 		return 0, err

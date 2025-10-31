@@ -3,9 +3,7 @@ package pgcr_processing
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"raidhub/lib/dto"
-	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -17,6 +15,7 @@ type PGCRResult int
 
 const RAID_ACTIVITY_MODE = 4
 
+// PGCRResult is the result of the PGCR processing
 const (
 	Success                PGCRResult = 1
 	NonRaid                PGCRResult = 2
@@ -30,56 +29,34 @@ const (
 	RateLimited   PGCRResult = 10
 )
 
-func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.DestinyPostGameCarnageReport, error) {
-	start := time.Now()
-	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
-	if resp.BungieErrorCode > 0 {
-		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
-	}
-
-	if !resp.Success {
-		switch resp.BungieErrorCode {
-		case bungie.SystemDisabled:
-			return SystemDisabled, nil, nil, err
-		case bungie.InsufficientPrivileges:
-			return InsufficientPrivileges, nil, nil, err
-		case bungie.PGCRNotFound:
-			return NotFound, nil, nil, err
-		case bungie.NetworkError:
-			return ExternalError, nil, nil, err
-		default:
-			switch resp.HttpStatusCode {
-			case http.StatusForbidden:
-				return RateLimited, nil, nil, err
-			default:
-				logger.Error("UNEXPECTED_PGCR_ENDPOINT_ERROR", map[string]any{
-					logging.ERROR:       err.Error(),
-					logging.STATUS_CODE: resp.HttpStatusCode,
-					logging.INSTANCE_ID: instanceID,
-				})
-				return ExternalError, nil, nil, err
-			}
-		}
+// From an id, fetch the PGCR and process it into an Instance, returning the result, the instance, and the raw PGCR
+func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.DestinyPostGameCarnageReport) {
+	result, rawPGCR := FetchPGCR(instanceID)
+	if result != Success {
+		return result, nil, nil
 	}
 
 	// Check if this is a raid activity
-	if resp.Data.ActivityDetails.Mode != RAID_ACTIVITY_MODE {
-		return NonRaid, nil, resp.Data, nil
+	if rawPGCR.ActivityDetails.Mode != RAID_ACTIVITY_MODE {
+		return NonRaid, nil, rawPGCR
 	}
 
-	pgcr, isExpectedError, err := parsePGCRToInstance(resp.Data)
+	pgcr, isExpectedError, err := parsePGCRToInstance(rawPGCR)
 
 	if err != nil {
-		if !isExpectedError {
-			logger.Error("PGCR_PARSING_ERROR", map[string]any{
-				logging.ERROR:       err.Error(),
-				logging.INSTANCE_ID: instanceID,
-			})
+		fields := map[string]any{
+			logging.ERROR:       err.Error(),
+			logging.INSTANCE_ID: instanceID,
 		}
-		return BadFormat, nil, nil, fmt.Errorf("pgcr parsing error: %w", err)
+		if !isExpectedError {
+			logger.Error("PGCR_PARSING_EXCEPTION", fields)
+		} else {
+			logger.Warn("PGCR_PARSING_ERROR", fields)
+		}
+		return BadFormat, nil, nil
 	}
 
-	return Success, pgcr, resp.Data, nil
+	return Success, pgcr, rawPGCR
 }
 
 func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Instance, bool, error) {

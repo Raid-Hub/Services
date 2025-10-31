@@ -21,8 +21,6 @@ var logger = logging.NewLogger("INSTANCE_STORAGE_SERVICE")
 // 2. instance domain (structured data storage)
 // 3. ClickHouse publishing (external, non-transactional)
 func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
-	lag := time.Since(inst.DateCompleted)
-
 	// Start transaction for atomic storage of pgcr + instance data
 	tx, err := postgres.DB.Begin()
 	if err != nil {
@@ -50,6 +48,9 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	// If neither was new, return early - no need to process further
 	if !isNew {
 		tx.Rollback()
+		logger.Debug(DUPLICATE_INSTANCE, map[string]any{
+			logging.INSTANCE_ID: inst.InstanceId,
+		})
 		return nil, false, nil
 	}
 
@@ -72,10 +73,13 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 		return nil, false, err
 	}
 
-	// 5. Monitoring
-	_, activityName, versionName, err := getActivityInfo(inst.Hash)
+	// Calculate lag using current time (after storage is complete)
+	lag := time.Since(inst.DateCompleted)
+
+	// 5. Get activity info for metrics and logging
+	activityInfo, err := getActivityInfo(inst.Hash)
 	if err == nil && inst.DateCompleted.After(time.Now().Add(-5*time.Hour)) {
-		global_metrics.PGCRStoreActivity.WithLabelValues(activityName, versionName, fmt.Sprintf("%v", inst.Completed)).Inc()
+		global_metrics.PGCRStoreActivity.WithLabelValues(activityInfo.activityName, activityInfo.versionName, fmt.Sprintf("%v", inst.Completed)).Inc()
 	}
 
 	// Publish side effects (only if instance was new)
@@ -91,6 +95,22 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 			}
 		}
 		publishing.PublishTextMessage(context.TODO(), routing.InstanceCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
+	}
+
+	// Log successful storage
+	if isNew {
+		logFields := map[string]any{
+			logging.INSTANCE_ID: inst.InstanceId,
+			logging.LAG:         lag,
+			"activity":     activityInfo.activityName,
+			"version":      activityInfo.versionName,
+		}
+		logger.Info(STORED_NEW_INSTANCE, logFields)
+	} else {
+		logger.Debug(FOUND_DUPLICATE_INSTANCE, map[string]any{
+			logging.INSTANCE_ID: inst.InstanceId,
+			logging.LAG:         lag,
+		})
 	}
 
 	return &lag, isNew, nil

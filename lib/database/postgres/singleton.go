@@ -17,10 +17,15 @@ var (
 )
 
 func init() {
-	initDone = singleton.InitAsync("POSTGRES", 5, func() error {
-		searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
-		connStr := fmt.Sprintf("user=%s dbname=%s password=%s sslmode=disable search_path=%s",
-			env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
+	searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw"
+	initDone = singleton.InitAsync("POSTGRES", 5, map[string]any{
+		"host":        env.PostgresHost,
+		"port":        env.PostgresPort,
+		"db":          env.PostgresDB,
+		"search_path": searchPath,
+	}, func() error {
+		connStr := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=disable search_path=%s",
+			env.PostgresHost, env.PostgresPort, env.PostgresUser, env.PostgresDB, env.PostgresPassword, searchPath)
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
 			return err

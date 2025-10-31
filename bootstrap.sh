@@ -90,79 +90,9 @@ install_tilt() {
     echo "✅ Tilt installed"
 }
 
-# Function to verify and add missing keys from example.env to .env
-verify_env_keys() {
-    if [ ! -f example.env ]; then
-        echo "⚠️  example.env not found, skipping key verification"
-        return
-    fi
-    
-    if [ ! -f .env ]; then
-        echo "⚠️  .env not found, skipping key verification"
-        return
-    fi
-    
-    missing_keys=()
-    missing_values=()
-    added_count=0
-    
-    # Extract keys from example.env and check/add to .env
-    while IFS='=' read -r key value; do
-        # Skip comments and empty lines
-        [[ "$key" =~ ^# ]] && continue
-        [[ -z "$key" ]] && continue
-        
-        # Remove leading/trailing whitespace
-        key=$(echo "$key" | xargs)
-        value="${value%$'\r'}"  # Remove carriage return if present
-        value=$(echo "$value" | xargs)  # Trim whitespace
-        
-        # Skip if value in example.env is empty (don't add empty keys)
-        if [ -z "${value}" ]; then
-            continue
-        fi
-        
-        # Check if key exists in .env (regardless of value)
-        grep_result=$(grep "^${key}=" .env 2>/dev/null || echo "")
-        
-        if [ -z "$grep_result" ]; then
-            # Key doesn't exist at all, add it
-            missing_keys+=("$key")
-            missing_values+=("${key}=${value}")
-            added_count=$((added_count + 1))
-        fi
-        # If key exists (even with empty value), skip it
-    done < example.env
-    
-    if [ ${#missing_keys[@]} -gt 0 ]; then
-        # Add timestamp comment before adding keys
-        echo "" >> .env
-        echo "# Keys automatically added by bootstrap.sh on $(date)" >> .env
-        for entry in "${missing_values[@]}"; do
-            echo "$entry" >> .env
-        done
-        
-        echo "📝 Added ${added_count} missing key(s) to .env"
-        for key in "${missing_keys[@]}"; do
-            echo "   + $key"
-        done
-    else
-        echo "✅ All keys from example.env are present in .env"
-    fi
-}
-
-# Check if .env exists
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file from example.env..."
-    cp example.env .env
-    echo "✅ .env file created"
-    echo ""
-else
-    echo "✅ .env file already exists"
-fi
-
-# Verify all keys from example.env are present in .env
-verify_env_keys
+# Setup .env file using make env
+echo "📋 Setting up .env file..."
+make env
 echo ""
 
 echo "📋 Checking dependencies..."
@@ -194,6 +124,28 @@ else
     echo "✅ Docker is running"
 fi
 
+# Function to detect docker-compose command (standalone or plugin)
+detect_docker_compose() {
+    if command -v docker-compose &> /dev/null; then
+        echo "docker-compose"
+    elif docker compose version > /dev/null 2>&1; then
+        echo "docker compose"
+    else
+        echo ""
+    fi
+}
+
+# Check for docker-compose (standalone or plugin)
+DOCKER_COMPOSE_CMD=$(detect_docker_compose)
+if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+    echo "❌ docker-compose not found"
+    echo "   Docker Compose V2 (plugin) is recommended: https://docs.docker.com/compose/install/"
+    echo "   Or install standalone: https://docs.docker.com/compose/install/standalone/"
+    exit 1
+else
+    echo "✅ docker-compose is available ($DOCKER_COMPOSE_CMD)"
+fi
+
 # Check and install Tilt
 if ! command -v tilt &> /dev/null; then
     echo "❌ Tilt not found"
@@ -209,24 +161,28 @@ mkdir -p volumes logs bin
 echo "✅ Directories created"
 echo ""
 
-# Generate service configurations from .env
-echo "🔧 Generating service configurations..."
-./infrastructure/generate-configs.sh 2>&1
+# Configuration files are now static - no generation needed
+echo "✅ Using static configuration files"
 echo ""
 
-# Start infrastructure services (postgres, clickhouse, rabbitmq)
+# Stop any running services
+echo "🛑 Stopping any running services..."
+$DOCKER_COMPOSE_CMD down
+echo "✅ Services stopped"
+echo ""
+
+# Start infrastructure services (postgres, clickhouse, rabbitmq, prometheus, loki, promtail, grafana)
+# Exclude app services (atlas, hermes, zeus)
 echo "🐳 Starting containerized infrastructure services..."
-docker-compose -f docker-compose.yml --env-file ./.env up -d
+$DOCKER_COMPOSE_CMD --env-file ./.env up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
 echo "✅ Infrastructure services started"
 echo ""
 
-# Build all applications and tools
-echo "🔨 Building applications and tools..."
-if ! make 2>&1; then
-    exit_code=$?
-    echo "❌ Build failed with exit code $exit_code"
-    exit 1
-fi
+# Build app services (but don't start them)
+echo "🔨 Building app services (atlas, hermes)..."
+$DOCKER_COMPOSE_CMD --env-file ./.env build atlas hermes
+echo "✅ App services built (not started)"
+echo "ℹ️  App services (atlas, hermes) can be started with 'make dev' or manually."
 echo ""
 
 # Wait for databases to be ready
@@ -236,7 +192,7 @@ attempt=0
 
 # Wait for PostgreSQL
 while [ $attempt -lt $max_attempts ]; do
-    if docker-compose -f docker-compose.yml --env-file ./.env exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+    if $DOCKER_COMPOSE_CMD --env-file ./.env exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
         echo "✅ PostgreSQL is ready"
         break
     fi
@@ -255,8 +211,8 @@ fi
 attempt=0
 while [ $attempt -lt $max_attempts ]; do
     # Check if container is running and ClickHouse is responding
-    if docker-compose -f docker-compose.yml --env-file ./.env ps clickhouse | grep -q "Up" && \
-       docker-compose -f docker-compose.yml --env-file ./.env exec -T clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
+    if $DOCKER_COMPOSE_CMD --env-file ./.env ps clickhouse | grep -q "Up" && \
+       $DOCKER_COMPOSE_CMD --env-file ./.env exec -T clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
         echo "✅ ClickHouse is ready"
         break
     fi
@@ -291,10 +247,16 @@ else
     echo "⚠️  Seeding failed with exit code $exit_code (non-critical)"
 fi
 
-# Run manifest downloader to populate definitions
+# Start zeus (needed for manifest downloader)
 echo ""
+echo "⚡ Starting Zeus API proxy (required for manifest downloader)..."
+$DOCKER_COMPOSE_CMD --env-file ./.env up -d zeus
+echo "✅ Zeus started"
+echo ""
+
+# Run manifest downloader to populate definitions
 echo "🔮 Running manifest downloader to populate weapon and feat definitions..."
-if ./bin/manifest-downloader --out="./.raidhub/defs" -f; then
+if go run ./tools/manifest-downloader -out="./.raidhub/defs" -f; then
     echo "✅ Manifest downloader completed"
 else
     exit_code=$?
@@ -306,23 +268,33 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 Bootstrap complete!"
 echo ""
-echo "📚 Useful commands:"
+echo "📚 How to run everything:"
 echo ""
-echo "🚀 Development:"
-echo "   ▶️  Start dev:    make dev        (Tilt UI at http://localhost:10350)"
-echo "   🛑 Stop dev:      make down"
+echo "🚀 Development (Recommended):"
+echo "   ▶️  Start all services:    make dev        (Tilt UI at http://localhost:10350)"
+echo "                              This starts infrastructure + apps with hot reload"
+echo "   🛑 Stop all services:      make down"
 echo ""
-echo "🔧 Service Management:"
+echo "🐳 Manual Docker Compose:"
+echo "   ▶️  Start infrastructure:  make infra"
+echo "   ▶️  Start Zeus:            docker compose up -d zeus"
+echo "   ▶️  Start apps:            docker compose up -d atlas hermes"
+echo "   ▶️  Start everything:      make up"
+echo "   🛑 Stop everything:        make down"
+echo ""
+echo "🔧 Individual Services (Built Binaries):"
 echo "   🗺️  Run Atlas Crawler:           ./bin/atlas --workers 10"
 echo "   🗺️  Run Async Queue Worker:      ./bin/hermes"
+echo "   ⚡ Run Zeus API Proxy:           ./bin/zeus"
 echo ""
 echo "🗄️  Database:"
-echo "   🔄 Migrate:       make migrate"
-echo "   🌱 Seed:          make seed"
+echo "   🔄 Run migrations:    make migrate"
+echo "   🌱 Seed database:     make seed"
 echo ""
 echo "🛠️  Investigation:"
-echo "   📊 Service logs:  docker-compose logs -f <service>"
-echo "   🧹 Clean:         make clean      (removes volumes and data)"
+echo "   📊 View logs:         docker compose logs -f <service>"
+echo "   📋 List services:     docker compose ps"
+echo "   🧹 Clean everything:  make clean      (removes volumes and data)"
 echo ""
 echo "⚠️  IMPORTANT: Set your BUNGIE_API_KEY in .env"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

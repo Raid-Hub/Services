@@ -46,17 +46,17 @@ RaidHub-Services/
 │   ├── monitoring/              # Prometheus metrics
 │   ├── utils/                   # Common utilities
 │   └── env/                     # Environment configuration
-├── tools/                       # Utilities and maintenance tools (consolidated binary)
-│   ├── main.go                 # Tool dispatcher
-│   ├── process-missed-pgcrs/   # Processes missed PGCRs (used by cron)
-│   ├── manifest-downloader/    # Destiny 2 manifest downloader (used by cron)
-│   ├── leaderboard-clan-crawl/ # Clan crawler for leaderboard players (used by cron)
-│   ├── cheat-detection/        # Cheat detection and account maintenance (used by cron)
-│   ├── refresh-view/           # Materialized view refresher (used by cron)
+├── tools/                       # Utilities and maintenance tools
 │   ├── activity-history-update/ # Batch activity history updates
+│   ├── cheat-detection/        # Cheat detection and account maintenance (used by cron)
 │   ├── fix-sherpa-clears/      # Data correction utilities
 │   ├── flag-restricted-pgcrs/  # Batch PGCR flagging
+│   ├── leaderboard-clan-crawl/ # Clan crawler for leaderboard players (used by cron)
+│   ├── manifest-downloader/    # Destiny 2 manifest downloader (used by cron)
+│   ├── process-missed-pgcrs/   # Processes missed PGCRs (used by cron)
 │   ├── process-single-pgcr/    # Individual PGCR processing
+│   ├── refresh-view/           # Materialized view refresher (used by cron)
+│   ├── seed/                   # Database seeding utility
 │   └── update-skull-hashes/    # Manifest hash updates
 ├── infrastructure/              # Infrastructure configuration (NO application code)
 │   ├── postgres/                # PostgreSQL infrastructure
@@ -83,7 +83,7 @@ RaidHub-Services/
 - **`apps/`** - Long-running application services (hermes, atlas, zeus)
 - **`lib/messaging/queue-workers/`** - Topic-based asynchronous processing definitions
 - **`lib/`** - Shared business logic and infrastructure libraries
-- **`tools/`** - Maintenance utilities and scheduled tasks (consolidated into single binary)
+- **`tools/`** - Maintenance utilities and scheduled tasks
 - **`infrastructure/`** - Pure infrastructure configuration (NO application code)
 
 ### 2. Event-Driven Architecture
@@ -176,12 +176,13 @@ These services run continuously and are started with `make up`:
 - `character_fill`: Missing character data completion
 - `clan_crawl`: Clan information processing
 - `pgcr_blocked_retry`: Retry mechanism for failed PGCRs
+- `pgcr_crawl`: General PGCR processing (existence checking)
 - `instance_store`: Primary PGCR data storage
 - `instance_cheat_check`: Post-storage cheat detection
 
 ### Scheduled Services (Cron Jobs)
 
-These tools run on a schedule via system crontab but are part of the consolidated tools binary:
+These tools run on a schedule via system crontab:
 
 #### Process Missed PGCRs
 
@@ -262,18 +263,18 @@ The system uses RabbitMQ with a topic-based architecture where each queue type i
 
    - **Purpose**: Stores processed PGCRs to PostgreSQL and ClickHouse
    - **Triggers**: Character fill, player crawl, cheat check side effects
-   - **Workers**: 5-50 (15 desired, 30 contest)
+   - **Workers**: 1-50 (10 desired, 20 contest)
 
 2. **`instance_cheat_check`** - Post-storage cheat detection
    - **Purpose**: Runs cheat detection algorithms on stored instances
-   - **Workers**: 5-100 (25 desired, 75 contest)
+   - **Workers**: 1-10 (2 desired, 5 contest)
 
 #### Support Queues
 
 3. **`player_crawl`** - Player data updates
 
    - **Purpose**: Fetches and updates player profile data
-   - **Workers**: 5-100 (20 desired, 50 contest)
+   - **Workers**: 5-70 (20 desired, 40 contest)
 
 4. **`activity_history_crawl`** - Activity history processing
 
@@ -283,16 +284,21 @@ The system uses RabbitMQ with a topic-based architecture where each queue type i
 5. **`character_fill`** - Character data completion
 
    - **Purpose**: Fills missing character information
-   - **Workers**: 1-50 (5 desired, 20 contest)
+   - **Workers**: 1-15 (3 desired, 8 contest)
 
 6. **`clan_crawl`** - Clan information updates
 
    - **Purpose**: Processes clan data and membership
-   - **Workers**: 1-25 (3 desired, 10 contest)
+   - **Workers**: 1-5 (1 desired, 2 contest)
 
 7. **`pgcr_blocked_retry`** - Failed PGCR retry mechanism
-   - **Purpose**: Retries PGCRs that failed due to permissions or rate limiting
-   - **Workers**: 1-10 (2 desired, 5 contest)
+
+   - **Purpose**: Retries PGCRs that failed due to permissions or rate limiting with floodgate detection
+   - **Workers**: 10-500 (50 desired, 200 contest)
+
+8. **`pgcr_crawl`** - General PGCR processing
+   - **Purpose**: Checks PGCR existence in database
+   - **Workers**: 1-20 (2 desired, 5 contest)
 
 ### Scaling Parameters
 
@@ -322,8 +328,8 @@ Each topic has configurable scaling parameters:
 ### Recovery and Retry Mechanisms
 
 1. **Offload Workers** (Atlas): Handle slow or problematic PGCRs
-2. **Missed Log Processing** (Hades): Recovers PGCRs that failed completely
-3. **Blocked Retry Queue**: Handles permission-based failures
+2. **Missed Log Processing** (process-missed-pgcrs tool): Recovers PGCRs that failed completely
+3. **Blocked Retry Queue**: Handles permission-based failures with floodgate detection
 4. **Gap Detection**: Identifies and fills missing PGCR sequences
 
 ### Cheat Detection Pipeline
@@ -453,10 +459,8 @@ See `example.env` for all configuration options.
 ### Critical Variables
 
 - `BUNGIE_API_KEY`: Primary Bungie API authentication
-- `ZEUS_API_KEYS`: Comma-separated list of API keys for Zeus rotation
-- `ZEUS_IPV6`: Base IPv6 address for Zeus load balancing
 - Database credentials: `POSTGRES_*`, `CLICKHOUSE_*`, `RABBITMQ_*`
-- Webhook URLs: `ATLAS_WEBHOOK_URL`, `HADES_WEBHOOK_URL`
+- Webhook URLs
 
 ## Deployment Architecture
 
@@ -471,10 +475,10 @@ See `example.env` for all configuration options.
 #### Scheduled Tasks (Cron)
 
 - **Process Missed PGCRs**: Recovery processing every 15 minutes
-- **Leaderboard Clan Crawl**: Daily/weekly player updates
-- **Cheat Detection**: Cheat detection maintenance
-- **Manifest Downloader**: Manifest updates
-- **Refresh View**: Materialized view refreshes
+- **Leaderboard Clan Crawl**: Weekly player updates
+- **Cheat Detection**: Cheat detection maintenance (4 times daily)
+- **Manifest Downloader**: Manifest updates (multiple times daily)
+- **Refresh View**: Materialized view refreshes (daily)
 
 #### On-Demand Tools
 

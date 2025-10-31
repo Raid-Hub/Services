@@ -16,7 +16,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 	for {
 		metrics, err := GetMetrics(4)
 		if err != nil {
-			logger.Error("FAILED_TO_GET_METRICS_IN_GAP_CHECKER", map[string]any{
+			AtlasLogger.Error("FAILED_TO_GET_METRICS_IN_GAP_CHECKER", map[string]any{
 				logging.ERROR: err.Error(),
 			})
 			time.Sleep(5 * time.Minute)
@@ -31,7 +31,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 
 			metrics, err := GetMetricsForScaling(time.Since(startTime))
 			if err != nil {
-				logger.Error("FAILED_TO_GET_METRICS_AFTER_GAP_SUPERCHARGE", map[string]any{
+				AtlasLogger.Error("FAILED_TO_GET_METRICS_AFTER_GAP_SUPERCHARGE", map[string]any{
 					logging.ERROR: err.Error(),
 				})
 				// Continue loop without evaluating metrics
@@ -49,7 +49,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 
 				if err != nil {
 					// Error finding block start
-					logger.Warn("GAP_BLOCK_SEARCH_FAILED", map[string]any{
+					AtlasLogger.Warn("GAP_BLOCK_SEARCH_FAILED", map[string]any{
 						logging.ERROR:       err.Error(),
 						logging.INSTANCE_ID: consumerConfig.LatestId,
 						logging.FROM:        minCursor,
@@ -58,7 +58,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 					})
 					latestId, completionDate, err := instance.GetLatestInstance()
 					if err != nil {
-						logger.Fatal("FAILED_TO_GET_LATEST_INSTANCE", map[string]any{
+						AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE", map[string]any{
 							logging.ERROR: err.Error(),
 						})
 					}
@@ -90,9 +90,9 @@ func binarySearchForBlockStart(minCursor, maxCursor int64) (int64, error) {
 	hasFound := false
 	for minCursor < maxCursor {
 		mid := (minCursor + maxCursor) / 2
-		result, _, _, _ := pgcr_processing.FetchAndProcessPGCR(mid)
+		result, _ := pgcr_processing.FetchPGCR(mid)
 		switch result {
-		case pgcr_processing.Success, pgcr_processing.NonRaid:
+		case pgcr_processing.Success:
 			hasFound = true
 			maxCursor = mid
 		case pgcr_processing.NotFound:

@@ -22,33 +22,19 @@ dc_resource("postgres", labels=["infrastructure"])
 dc_resource("rabbitmq", labels=["infrastructure"])
 dc_resource("clickhouse", labels=["infrastructure"])
 dc_resource("prometheus", labels=["infrastructure"])
+dc_resource("loki", labels=["infrastructure"]) 
+dc_resource("promtail", labels=["infrastructure"]) 
+dc_resource("grafana", labels=["infrastructure"]) 
 
 # =============================================================================
 # HERMES / ATLAS / ZEUS
 # =============================================================================
 
-local_resource(
-    "hermes",
-    serve_cmd="go run ./apps/hermes/",
-    resource_deps=["postgres", "rabbitmq", "clickhouse"],
-    auto_init=False,
-    labels=["core"],
-)
+dc_resource("hermes", labels=["core"], resource_deps=["postgres", "rabbitmq", "clickhouse"]) 
 
-local_resource(
-    "atlas",
-    serve_cmd="go run ./apps/atlas/ --dev",
-    resource_deps=["postgres", "rabbitmq", "clickhouse"],
-    auto_init=False,
-    labels=["core"],
-)
+dc_resource("atlas", labels=["core"], resource_deps=["postgres", "rabbitmq", "clickhouse"]) 
 
-local_resource(
-    "zeus",
-    serve_cmd="go run ./apps/zeus/ --dev",
-    auto_init=False,
-    labels=["core"],
-)
+dc_resource("zeus", labels=["core"], resource_deps=["postgres"]) 
 
 # =============================================================================
 # CRON SERVICES

@@ -28,12 +28,9 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 		notFoundCount := 0
 		errCount := 0
 		i := 0
-
+		
 		for {
-			result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceID)
-			if err != nil && result != pgcr_processing.NotFound {
-				w.LogPGCRError(err, instanceID, i+1)
-			}
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
 
 			statusStr := fmt.Sprintf("%d", result)
 			attemptsStr := fmt.Sprintf("%d", i+1)
@@ -42,14 +39,14 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 
 			// Handle the result
 			if result == pgcr_processing.NonRaid {
-				startDate, err := time.Parse(time.RFC3339, raw.Period)
+				startDate, err := time.Parse(time.RFC3339, pgcr.Period)
 				if err != nil {
 					w.Error("Failed to parse time", map[string]any{
 						logging.ERROR: err.Error(),
 					})
 					continue
 				}
-				endDate := pgcr_processing.CalculateDateCompleted(startDate, raw.Entries[0])
+				endDate := pgcr_processing.CalculateDateCompleted(startDate, pgcr.Entries[0])
 
 				lag := time.Since(endDate)
 				if lag >= 0 {
@@ -58,7 +55,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				break
 			} else if result == pgcr_processing.Success {
 				// Publish to queue for async storage
-				storeMessage := messages.NewPGCRStoreMessage(activity, raw)
+				storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 				err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
 				if err != nil {
 					errCount++
@@ -69,7 +66,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				} else {
 					endTime := time.Now()
 					workerTime := endTime.Sub(startTime)
-					lag := time.Since(activity.DateCompleted)
+					lag := time.Since(instance.DateCompleted)
 					if lag >= 0 {
 						atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
 					}

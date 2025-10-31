@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,12 +30,12 @@ const (
 )
 
 var (
-	port          = flag.Int("port", 7777, "port to listen on")
+	port          = flag.Int("port", 0, "port to listen on (defaults to ZEUS_PORT env var)")
 	dev           = flag.Bool("dev", false, "disable round robin for development (single transport)")
 	ipv6interface = flag.String("interface", DEFAULT_INTERFACE, "ipv6 interface")
 	ipv6n         = flag.Int("v6_n", 16, "number of sequential ipv6 addresses")
 	securityKey   = ""
-	logger        = logging.NewLogger("ZEUS")
+	logger        = logging.NewLogger("zeus")
 )
 
 type transport struct {
@@ -49,6 +50,21 @@ var proxyTransport = &transport{}
 
 func main() {
 	flag.Parse()
+
+	// Use env port if flag not provided
+	if *port == 0 {
+		if env.ZeusPort != "" {
+			var err error
+			if *port, err = strconv.Atoi(env.ZeusPort); err != nil {
+				logger.Fatal("INVALID_ZEUS_PORT", map[string]any{
+					logging.ERROR: err.Error(),
+					"port":        env.ZeusPort,
+				})
+			}
+		} else {
+			*port = 7777 // fallback default
+		}
+	}
 
 	// Start metrics worker goroutine
 	go metricsWorker()

@@ -21,9 +21,9 @@ type StoreSideEffects struct {
 // Store stores instance data to the database within a transaction
 // Returns (sideEffects, isNew, error) - isNew indicates if this was a new instance (not duplicate)
 func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
-	sideEffects := &StoreSideEffects{}
+	sideEffects := &StoreSideEffects{}	
 
-	activityId, _, _, err := getActivityInfo(inst.Hash)
+	activityInfo, err := getActivityInfo(inst.Hash)
 	if err != nil {
 		return nil, false, err
 	}
@@ -43,13 +43,13 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
 	var characterRequests []messages.CharacterFillMessage
 
 	for _, playerActivity := range inst.Players {
-		duration, err := getFastestClearDuration(tx, playerActivity.Player.MembershipId, activityId)
+		duration, err := getFastestClearDuration(tx, playerActivity.Player.MembershipId, activityInfo.activityId)
 		if err != nil {
 			return nil, false, err
 		}
 		fastestClearSoFar[playerActivity.Player.MembershipId] = duration
 
-		playerRaidClearCount, err := getPlayerClearCount(tx, playerActivity.Player.MembershipId, activityId)
+		playerRaidClearCount, err := getPlayerClearCount(tx, playerActivity.Player.MembershipId, activityInfo.activityId)
 		if err != nil {
 			return nil, false, err
 		}
@@ -58,7 +58,7 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
 			completedDictionary[playerActivity.Player.MembershipId] = playerRaidClearCount > 0
 		}
 
-		err = storePlayerData(tx, inst, playerActivity, activityId)
+		err = storePlayerData(tx, inst, playerActivity, activityInfo.activityId)
 		if err != nil {
 			return nil, false, err
 		}
@@ -74,14 +74,14 @@ func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
 		characterRequests = charRequests
 	}
 
-	err = updateTimePlayedSeconds(tx, inst, activityId)
+	err = updateTimePlayedSeconds(tx, inst, activityInfo.activityId)
 	if err != nil {
 		return nil, false, err
 	}
 
 	noobsCount, sherpasHappened := determineSherpas(completedDictionary, inst.InstanceId)
 
-	err = updatePlayerStats(tx, inst, completedDictionary, activityId, noobsCount, sherpasHappened, fastestClearSoFar, &sideEffects.PlayerCrawlRequests)
+	err = updatePlayerStats(tx, inst, completedDictionary, activityInfo.activityId, noobsCount, sherpasHappened, fastestClearSoFar, &sideEffects.PlayerCrawlRequests)
 	if err != nil {
 		return nil, false, err
 	}

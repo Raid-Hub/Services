@@ -46,7 +46,7 @@ func FlagRestrictedPGCRs() {
 			logger.Error("ERROR_SCANNING_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
 		}
 
-		result, _, _, _ := pgcr_processing.FetchAndProcessPGCR(instanceId)
+		result, _, _ := pgcr_processing.FetchAndProcessPGCR(instanceId)
 		total++
 
 		switch result {
@@ -56,7 +56,7 @@ func FlagRestrictedPGCRs() {
 			logger.Info("INSTANCE_NOT_RESTRICTED", map[string]any{"instance_id": instanceId})
 		default:
 			logger.Info("INSTANCE_UNEXPECTED_RESULT", map[string]any{"instance_id": instanceId, "result": result})
-			result, _, _, _ = pgcr_processing.FetchAndProcessPGCR(instanceId)
+			result, _, _ = pgcr_processing.FetchAndProcessPGCR(instanceId)
 		}
 
 		if result == pgcr_processing.InsufficientPrivileges {

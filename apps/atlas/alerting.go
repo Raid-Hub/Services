@@ -18,14 +18,13 @@ var (
 	_atlasWebhookURL          string
 	once                      sync.Once
 	missedInstanceRateLimiter = rate.NewLimiter(rate.Every(time.Minute), 1)
-	logger                    = logging.NewLogger("ATLAS")
 	atlasAlerting             *discord.DiscordAlerting
 )
 
 func init() {
 	once.Do(func() {
 		_atlasWebhookURL = env.AtlasWebhookURL
-		atlasAlerting = discord.NewDiscordAlerting(_atlasWebhookURL, logger)
+		atlasAlerting = discord.NewDiscordAlerting(_atlasWebhookURL, AtlasLogger)
 	})
 }
 
@@ -115,7 +114,7 @@ func logMissedInstance(instanceId int64, startTime time.Time) {
 		}
 		atlasAlerting.SendCustom(&webhook, "", nil)
 	}
-	logger.Warn("MISSED_PGCR", map[string]any{
+	AtlasLogger.Warn("MISSED_PGCR", map[string]any{
 		logging.INSTANCE_ID: instanceId,
 		"duration":          fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
 	})
@@ -138,7 +137,7 @@ func logMissedInstanceWarning(instanceId int64, startTime time.Time) {
 		}}
 		atlasAlerting.SendWarning("Unresolved Instance (Warning)", fields, "", nil)
 	}
-	logger.Warn("INSTANCE_RESOLUTION_WARNING", map[string]any{
+	AtlasLogger.Warn("INSTANCE_RESOLUTION_WARNING", map[string]any{
 		logging.INSTANCE_ID: instanceId,
 		"duration":          fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
 		logging.ACTION:      "monitoring",
@@ -164,7 +163,7 @@ func logHigh404Rate(count int, rate float64) {
 		}},
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
-	logger.Warn("HIGH_404_RATE_DETECTED", map[string]any{
+	AtlasLogger.Warn("HIGH_404_RATE_DETECTED", map[string]any{
 		"rate":         rate,
 		logging.COUNT:  count,
 		logging.ACTION: "gap_supercharge_initiated",
@@ -221,7 +220,7 @@ func logRunawayError(percentNotFound float64, currentInstanceId, latestInstanceI
 			}},
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
-	logger.Error("RUNAWAY_ERROR", map[string]any{
+	AtlasLogger.Error("RUNAWAY_ERROR", map[string]any{
 		"percent_not_found":               percentNotFound,
 		"current_instance_id":             currentInstanceId,
 		"latest_instance_id":              latestInstanceId,
@@ -253,7 +252,7 @@ func logGapCheckBlockSkip(oldId int64, newId int64) {
 		}},
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
-	logger.Info("GAP_MODE_BLOCK_SKIP", map[string]any{
+	AtlasLogger.Info("GAP_MODE_BLOCK_SKIP", map[string]any{
 		logging.FROM:   oldId,
 		logging.TO:     newId,
 		"block_size":   newId - oldId,

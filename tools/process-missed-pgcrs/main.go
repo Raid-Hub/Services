@@ -266,13 +266,13 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 		var errors = 0
 		var processed = false
 		for errors <= workerMaxRetries && !processed {
-			result, activity, raw, err := pgcr_processing.FetchAndProcessPGCR(instanceID)
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
 
 			if result == pgcr_processing.NonRaid {
 				processed = true
 				// NonRaid activities are successfully processed, just not raids
 			} else if result == pgcr_processing.Success {
-				_, committed, err := instance_storage.StorePGCR(activity, raw)
+				_, committed, err := instance_storage.StorePGCR(instance, pgcr)
 				if err != nil {
 					attempt := errors + 1
 					if attempt > workerMaxRetries {
@@ -295,12 +295,11 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 					// Not a raid, successfully processed and ignored
 				}
 			} else if result == pgcr_processing.ExternalError || result == pgcr_processing.RateLimited {
-				logger.Warn("ERROR_FETCHING_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error()})
 				time.Sleep(5 * time.Second)
 				errors++
 				// continue loop to retry
 			} else {
-				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error()})
+				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID})
 				instance_storage.WriteMissedLog(instanceID)
 				failures <- instanceID
 				processed = true

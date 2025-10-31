@@ -15,6 +15,8 @@ import (
 func applyMigration(filename, migrationSQL string) error {
 	ctx := context.Background()
 
+	clickhouse.Wait()
+
 	// Split SQL by semicolons and execute each statement
 	statements := splitSQL(migrationSQL)
 	for _, stmt := range statements {
@@ -88,6 +90,9 @@ func splitSQL(sql string) []string {
 func main() {
 	log.Println("ClickHouse Migration Tool")
 	log.Println("=========================")
+
+	// Wait for ClickHouse initialization to complete
+	clickhouse.Wait()
 
 	// Use the existing ClickHouse connection from singleton
 	conn := clickhouse.DB

@@ -26,7 +26,7 @@ type BungieClient struct {
 	apiKey     string
 }
 
-func makePreParseBungieHttpResult[T any](statusCode int) BungieHttpResult[T] {
+func makeNonStandardHttpResult[T any](statusCode int) BungieHttpResult[T] {
 	return BungieHttpResult[T]{
 		Success:           false,
 		HttpStatusCode:    statusCode,
@@ -46,7 +46,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 			logging.ENDPOINT:  url,
 			logging.ERROR:     err.Error(),
 		})
-		return makePreParseBungieHttpResult[T](0), err
+		return makeNonStandardHttpResult[T](0), err
 	}
 	req.Header.Set("X-API-KEY", c.apiKey)
 
@@ -59,24 +59,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 			logging.ERROR:     err.Error(),
 			logging.DURATION:  fmt.Sprintf("%dms", duration),
 		})
-		errMsg := err.Error()
-		isNetworkError := strings.Contains(errMsg, "timeout") ||
-			strings.Contains(errMsg, "deadline exceeded") ||
-			strings.Contains(errMsg, "context canceled") ||
-			strings.Contains(errMsg, "connection refused") ||
-			strings.Contains(errMsg, "no such host")
-
-		if isNetworkError {
-			return BungieHttpResult[T]{
-				Success:           false,
-				HttpStatusCode:    -1,
-				BungieErrorCode:   NetworkError,
-				BungieErrorStatus: "NetworkError",
-				Data:              nil,
-			}, err
-		} else {
-			return makePreParseBungieHttpResult[T](0), err
-		}
+		return makeNonStandardHttpResult[T](0), err
 	}
 
 	// first check if json header is present
@@ -88,7 +71,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 			logging.DURATION:    fmt.Sprintf("%dms", duration),
 			logging.STATUS_CODE: resp.StatusCode,
 		})
-		return makePreParseBungieHttpResult[T](resp.StatusCode), fmt.Errorf("content-type is not application/json")
+		return makeNonStandardHttpResult[T](resp.StatusCode), fmt.Errorf("content-type is not application/json")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -101,7 +84,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 				logging.ERROR:       err.Error(),
 				logging.DURATION:    fmt.Sprintf("%dms", duration),
 			})
-			return makePreParseBungieHttpResult[T](resp.StatusCode), err
+			return makeNonStandardHttpResult[T](resp.StatusCode), err
 		}
 		result := BungieHttpResult[T]{
 			Success:           false,
@@ -129,7 +112,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 			logging.ERROR:       err.Error(),
 			logging.DURATION:    fmt.Sprintf("%dms", duration),
 		})
-		return makePreParseBungieHttpResult[T](resp.StatusCode), err
+		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
 	success := response.ErrorCode == Success

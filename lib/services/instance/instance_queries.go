@@ -1,8 +1,10 @@
 package instance
 
 import (
+	"errors"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/web/bungie"
 	"time"
 )
 
@@ -51,4 +53,70 @@ func GetLatestInstance() (int64, time.Time, error) {
 	} else {
 		return latestID, dateCompleted, nil
 	}
+}
+
+// GetLatestInstanceIdFromWeb uses binary search to find the latest valid PGCR instance ID from the Bungie API
+// Instance IDs are incrementing numbers. This is useful when the database is empty (e.g., in dev mode)
+func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
+	logger.Info("STARTING_WEB_SEARCH_FOR_LATEST_INSTANCE", map[string]any{
+		"method":      "binary_search",
+		"upper_bound": 1_000_000_000_000,
+		"buffer":      buffer,
+	})
+
+	// Instance IDs increment over time. Start from a high estimate and search backwards
+	upperBound := int64(1_000_000_000_000) // 1 trillion
+	lowerBound := int64(1)
+	
+	// Binary search to find the highest valid instance ID
+	left := lowerBound
+	right := upperBound
+	latestFound := int64(0)
+	
+	maxIterations := 50
+	iterations := 0
+	
+	for left <= right && iterations < maxIterations {
+		iterations++
+		mid := (left + right) / 2
+		
+		logger.Debug("BINARY_SEARCH_ITERATION", map[string]any{
+			"iteration": iterations,
+			"left":      left,
+			"right":     right,
+			"mid":       mid,
+		})
+		
+		// Try to fetch PGCR at mid point
+		result, _ := bungie.Client.GetPGCR(mid)
+		
+		if result.Success {
+			// PGCR exists, this is a valid instance ID
+			latestFound = mid
+			// Search in the upper half (higher instance IDs)
+			left = mid + 1
+		} else if result.BungieErrorCode == bungie.PGCRNotFound {
+			// PGCR not found, search in lower half (lower instance IDs)
+			right = mid - 1
+		} else {
+			// Other error (rate limit, system disabled, etc.), skip this and try slightly lower
+			right = mid - 1
+			time.Sleep(500 * time.Millisecond) // Brief delay to avoid rate limits
+		}
+	}
+	
+	if latestFound == 0 {
+		logger.Warn("NO_LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{
+			"iterations": iterations,
+		})
+		return 0, errors.New("no valid PGCR found in search range")
+	}
+	
+	logger.Info("LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{
+		"instance_id": latestFound,
+		"iterations":  iterations,
+		"buffer":      buffer,
+	})
+	
+	return latestFound - buffer, nil
 }

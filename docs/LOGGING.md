@@ -34,11 +34,11 @@ import (
     "errors"
     "fmt"
     "raidhub/lib/dto"
-    "raidhub/lib/utils"
+    "raidhub/lib/utils/logging"
     // other imports...
 )
 
-var logger = utils.NewLogger("PGCR_PROCESSING_SERVICE")
+var logger = logging.NewLogger("PGCR_PROCESSING_SERVICE")
 
 func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInstance, PGCRResult) {
     logger.Debug("STARTING_PGCR_PROCESSING", map[string]any{
@@ -56,29 +56,42 @@ func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInsta
   - `CHEAT_DETECTION_SERVICE`
   - `PGCR_PROCESSING_SERVICE`
   - `PLAYER_SERVICE`
+  - `CHARACTER_SERVICE`
+  - `INSTANCE_SERVICE`
+  - `CLAN_SERVICE`
 
-- **Infrastructure** (`lib/database/`, `lib/messaging/`): Use component name
+- **Infrastructure** (`lib/database/`, `lib/messaging/`, etc.): Use component name
 
   - `POSTGRES`
-  - `CLICKHOUSE`
-  - `RABBITMQ`
+  - `MONITORING`
+  - `MIGRATIONS` (in database migrations package)
 
 - **Applications** (`apps/`): Use Greek mythology names (matching app names)
 
-  - None currently
+  - `atlas` (main logger)
+  - `atlas::metricsService` (sub-logger)
+  - `atlas::offloadWorker` (sub-logger)
+  - `hermes`
+  - `zeus`
 
 - **Tools** (`tools/`): Use tool-specific names
 
-  - `MISSED_PGCR`
-  - `MANIFEST_DOWNLOADER`
-  - `LEADERBOARD_CLAN_CRAWL`
-  - `CHEAT_DETECTION`
-  - `REFRESH_VIEW_TOOL`
-  - `TOOLS` (for general tool logging)
-  - `FLAG_RESTRICTED_TOOL`
+  - `missed_pgcr`
+  - `manifest_downloader`
+  - `leaderboard_clan_crawl`
+  - `cheat_detection`
+  - `refresh_view`
+  - `tools` (for general tool logging)
+  - `flag_restricted`
+  - `process_pgcr`
+  - `fix_sherpa`
+  - `update_skull`
+  - `seed`
+  - `migrations`
 
 - **Web Clients** (`lib/web/`): Use service name with `_CLIENT`
   - `BUNGIE_CLIENT`
+  - `PROMETHEUS_API_CLIENT`
 
 ## Log Levels
 
@@ -393,6 +406,79 @@ var logger = logging.NewLogger("SERVICE_NAME")
 
 All logs are structured JSON for easy querying and analysis.
 
+## Loki / Promtail / Grafana (Local Dev)
+
+### Startup
+
+1. Generate configs:
+
+```
+make config
+```
+
+2. Start via Tilt (recommended):
+
+```
+tilt up
+```
+
+3. Or start via Docker Compose only:
+
+```
+docker-compose up -d
+```
+
+### Access
+
+- Grafana: http://localhost:${GRAFANA_PORT}
+- Loki: http://localhost:${LOKI_PORT}
+
+### LogQL Examples
+
+- Errors by source (last 5m):
+
+```
+sum by (source) (count_over_time({level="ERROR"}[5m]))
+```
+
+- Errors by logger (last 5m):
+
+```
+sum by (logger) (count_over_time({level="ERROR"}[5m]))
+```
+
+- Recent logs from hermes container:
+
+```
+{source="hermes"} | line_format "{{.line}}" | limit 100
+```
+
+- Logs from HERMES logger (regardless of source):
+
+```
+{logger="HERMES"} | line_format "{{.line}}" | limit 100
+```
+
+- Warnings or errors from atlas container:
+
+```
+{source="atlas", level=~"WARN|ERROR"}
+```
+
+### Label Meanings
+
+- **`source`**: Docker Compose service name (hermes, atlas, zeus, postgres, rabbitmq, clickhouse, etc.)
+- **`logger`**: Logger name from log prefix `[LOGGER]` (HERMES, ATLAS, ZEUS, POSTGRES, etc.)
+- **`level`**: Log level (INFO, WARN, ERROR, FATAL, DEBUG)
+- **`container`**: Docker container name
+
+### Notes
+
+- Log format is preserved (structured text) and parsed by Promtail.
+- Tilt now runs `hermes`, `atlas`, `zeus` as Docker services, so Promtail collects logs via Docker service discovery.
+- Use `source` to filter by which container/app emitted the log.
+- Use `logger` to filter by the logger name used in the code.
+
 ## Examples by Service Type
 
 ### Services
@@ -430,24 +516,24 @@ logger.Fatal(DATABASE_CONNECTION_FAILED, map[string]any{
 ### Applications
 
 ```go
-// apps/hades/
+// apps/hermes/main.go
 import (
     "raidhub/lib/utils/logging"
 )
 
 // Constants for major lifecycle events
 const (
-    SERVICE_STARTED = "SERVICE_STARTED"
+    STARTING_TOPIC = "STARTING_TOPIC"
+    STARTED_TOPIC = "STARTED_TOPIC"
 )
 
-var logger = logging.NewLogger("HADES")
+var HermesLogger = logging.NewLogger("hermes")
 
-logger.Info(SERVICE_STARTED, map[string]any{
-    logging.SERVICE: "hades",
-    logging.TYPE: "missed_pgcr_processor",
-    logging.STATUS: "ready",
+HermesLogger.Info(STARTED_TOPIC, map[string]any{
+    "topic": "instance_store",
+    "mode": "all",
 })
-logger.Info("MISSED_PGCRS_FOUND", map[string]any{
+HermesLogger.Info("MISSED_PGCRS_FOUND", map[string]any{
     logging.COUNT: count,
     logging.TYPE: "pgcr",
     logging.ACTION: "queued_for_processing",

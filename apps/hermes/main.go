@@ -24,7 +24,7 @@ const (
 	FAILED_TO_START_TOPIC = "FAILED_TO_START_TOPIC"
 )
 
-var logger = logging.NewLogger("Hermes")
+var HermesLogger = logging.NewLogger("hermes")
 
 func main() {
 	topicType := flag.String("topic", "", "Name of topic to run. If empty, starts all topics.")
@@ -44,7 +44,7 @@ func main() {
 	go func() {
 		sig := <-sigChan
 		mutex.Lock()
-		logger.Info(logging.RECEIVED_SHUTDOWN_SIGNAL, map[string]any{
+		HermesLogger.Info(logging.RECEIVED_SHUTDOWN_SIGNAL, map[string]any{
 			"signal": sig.String(),
 		})
 		cancel(fmt.Errorf("shutdown_requested"))
@@ -53,7 +53,7 @@ func main() {
 
 	monitoring.RegisterHermesMetrics()
 
-	logger.Debug(logging.WAITING_ON_CONNECTIONS, map[string]any{
+	HermesLogger.Debug(logging.WAITING_ON_CONNECTIONS, map[string]any{
 		"services": []string{"postgres", "clickhouse", "rabbit", "publishing"},
 	})
 	postgres.Wait()
@@ -76,19 +76,19 @@ func main() {
 
 	if *topicType == "" {
 		// Start all topics
-		logger.Info("STARTING_ALL_TOPICS", map[string]any{})
+		HermesLogger.Info("STARTING_ALL_TOPICS", map[string]any{})
 		for _, t := range topics {
 			// Check if shutdown was requested
 			mutex.Lock()
 			select {
 			case <-ctx.Done():
-				logger.Warn("STARTUP_INTERRUPTED", map[string]any{})
+				HermesLogger.Warn("STARTUP_INTERRUPTED", map[string]any{})
 				mutex.Unlock()
 				goto shutdown
 			default:
 			}
 
-			logger.Info(STARTING_TOPIC, map[string]any{
+			HermesLogger.Info(STARTING_TOPIC, map[string]any{
 				"topic": t.Config.QueueName,
 				"mode":  "all",
 			})
@@ -97,7 +97,7 @@ func main() {
 				wg:      nil,
 			})
 			if err != nil {
-				logger.Error(FAILED_TO_START_TOPIC, map[string]any{
+				HermesLogger.Error(FAILED_TO_START_TOPIC, map[string]any{
 					logging.ERROR: err.Error(),
 					"topic":       t.Config.QueueName,
 				})
@@ -111,7 +111,7 @@ func main() {
 		}
 	} else {
 		// Start a specific topic
-		logger.Info(STARTING_TOPIC, map[string]any{
+		HermesLogger.Info(STARTING_TOPIC, map[string]any{
 			"topic": *topicType,
 			"mode":  "individual",
 		})
@@ -127,14 +127,14 @@ func main() {
 		}
 
 		if !found {
-			logger.Fatal("UNKNOWN_TOPIC_TYPE", map[string]any{
+			HermesLogger.Fatal("UNKNOWN_TOPIC_TYPE", map[string]any{
 				"topic": *topicType,
 			})
 			return
 		}
 
 		mutex.Lock()
-		logger.Info(STARTING_TOPIC, map[string]any{
+		HermesLogger.Info(STARTING_TOPIC, map[string]any{
 			"topic": topicInstance.Config.QueueName,
 			"mode":  "individual",
 		})
@@ -142,7 +142,7 @@ func main() {
 			context: ctx,
 		})
 		if err != nil {
-			logger.Fatal(FAILED_TO_START_TOPIC, map[string]any{
+			HermesLogger.Fatal(FAILED_TO_START_TOPIC, map[string]any{
 				"topic": topicInstance.Config.QueueName,
 				"error": err.Error(),
 			})
@@ -157,11 +157,11 @@ func main() {
 	}
 
 	// Keep running until cancelled
-	logger.Info("ALL_TOPICS_STARTED", map[string]any{})
+	HermesLogger.Info("ALL_TOPICS_STARTED", map[string]any{})
 	<-ctx.Done()
 
 shutdown:
-	logger.Info("SHUTTING_DOWN", map[string]any{
+	HermesLogger.Info("SHUTTING_DOWN", map[string]any{
 		"context":        ctx.Err().Error(),
 		"topic_managers": len(topicManagers),
 	})
@@ -170,5 +170,5 @@ shutdown:
 		tm.WaitForWorkersToFinish()
 	}
 
-	logger.Info("SHUTDOWN_COMPLETE", map[string]any{})
+	HermesLogger.Info("SHUTDOWN_COMPLETE", map[string]any{})
 }

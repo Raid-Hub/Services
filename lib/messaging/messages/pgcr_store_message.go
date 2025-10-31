@@ -7,14 +7,14 @@ import (
 
 // PGCRStoreMessage matches lib/messaging/queue-workers/instance_store.go
 type PGCRStoreMessage struct {
-	Activity dto.Instance                        `json:"activity"`
-	Raw      bungie.DestinyPostGameCarnageReport `json:"raw"`
+	Instance dto.Instance                        `json:"instance"`
+	PGCR     bungie.DestinyPostGameCarnageReport `json:"pgcr"`
 }
 
 // NewPGCRStoreMessage creates a new PGCR store message
-func NewPGCRStoreMessage(activity *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) PGCRStoreMessage {
+func NewPGCRStoreMessage(instance *dto.Instance, pgcr *bungie.DestinyPostGameCarnageReport) PGCRStoreMessage {
 	return PGCRStoreMessage{
-		Activity: *activity,
-		Raw:      *raw,
+		Instance: *instance,
+		PGCR:     *pgcr,
 	}
 }

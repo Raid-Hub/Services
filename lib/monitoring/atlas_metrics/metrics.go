@@ -14,14 +14,14 @@ var PGCRC_CRAWL_SUMMARY_DIMENSIONS = []string{"status", "attempts"}
 
 var PGCRCrawlStatus = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
-		Name: "pgcr_crawl_summary_status",
+		Name: "pgcr_crawl_summary_status_count",
 	},
 	PGCRC_CRAWL_SUMMARY_DIMENSIONS,
 )
 
 var PGCRCrawlLag = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
-		Name:    "pgcr_crawl_summary_lag",
+		Name:    "pgcr_crawl_summary_lag_bucket",
 		Buckets: []float64{5, 15, 25, 30, 35, 40, 45, 60, 90, 300, 1800, 14400, 86400},
 	},
 	PGCRC_CRAWL_SUMMARY_DIMENSIONS,

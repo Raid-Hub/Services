@@ -149,14 +149,13 @@ func startTopicManager(topic processing.Topic, managerConfig topicManagerConfig)
 		topicConfig.ConsecutiveChecksDown = 3 // Require 3 checks (15 minutes) before scaling down (more conservative)
 	}
 
-	prefix := fmt.Sprintf("%s#manager", topicConfig.QueueName)
 	topicManager := &TopicManager{
 		topic:         topic,
 		activeWorkers: 0,
 		workers:       make(map[int]*Worker),
 		config:        topicConfig,
 		managerConfig: managerConfig,
-		logger:        logging.NewLogger(prefix),
+		logger:        HermesLogger,
 		scalingState: scalingState{
 			lastScaleDirection: "none",
 		},
@@ -315,13 +314,12 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 
 	// Create Worker struct for this goroutine
 
-	prefix := fmt.Sprintf("%s#%d", tm.config.QueueName, workerID)
 	worker := &Worker{
 		ID:            workerID,
 		QueueName:     tm.config.QueueName,
 		managerConfig: tm.managerConfig,
 		Topic:         tm.topic,
-		logger:        logging.NewLogger(prefix),
+		logger:        HermesLogger,
 		ctx:           workerCtx,
 		cancel:        workerCancel,
 		amqpChannel:   ch,
