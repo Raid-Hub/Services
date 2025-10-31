@@ -1,4 +1,4 @@
-package fixsherpa
+package main
 
 import (
 	"context"
@@ -194,4 +194,8 @@ func FixSherpaClears() {
 	logger.Info("TRANSACTION_COMMITTED", map[string]any{})
 
 	logger.Info("COMPLETED", map[string]any{"duration": time.Since(scriptStart).String()})
+}
+
+func main() {
+	FixSherpaClears()
 }

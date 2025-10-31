@@ -1,4 +1,4 @@
-package refreshview
+package main
 
 import (
 	"context"
@@ -13,10 +13,10 @@ var logger = logging.NewLogger("REFRESH_VIEW_TOOL")
 
 // RefreshView is the command function for refreshing materialized views
 // Handles both regular views and leaderboard views (with cache management)
-// Usage: ./bin/tools refresh-view <view_name>
+// Usage: ./bin/refresh-view <view_name>
 func RefreshView() {
 	if flag.NArg() < 1 {
-		logger.Error("NO_VIEW_NAME", map[string]any{"message": "No view name provided. Usage: ./bin/tools refresh-view <view_name>"})
+		logger.Error("NO_VIEW_NAME", map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})
 		return
 	}
 
@@ -147,4 +147,9 @@ CREATE INDEX idx_raid_leaderboard_cache_time ON leaderboard._raid_leaderboard_ca
 	}
 
 	logger.Info("CACHE_CLEARED", map[string]any{"cache": cacheView, "duration": time.Since(start).String()})
+}
+
+func main() {
+	flag.Parse()
+	RefreshView()
 }

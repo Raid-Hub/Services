@@ -1,4 +1,4 @@
-package manifestdownloader
+package main
 
 import (
 	"archive/zip"
@@ -34,7 +34,7 @@ func sanitizeVersionForFilename(version string) string {
 }
 
 // DownloadManifest is the command function for downloading and processing Destiny 2 manifest
-// Usage: ./bin/tools manifest-downloader [--out=<directory>] [--force] [--disk]
+// Usage: ./bin/manifest-downloader [--out=<directory>] [--force] [--disk]
 func DownloadManifest() {
 	fs := flag.NewFlagSet("manifest-downloader", flag.ExitOnError)
 	out := fs.String("out", "", "where to store the sqlite (required)")
@@ -430,4 +430,9 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, db *sql.DB, de
 			logger.Warn("ERROR_INSERTING_FEAT_DEFINITION", map[string]any{logging.ERROR: err.Error()})
 		}
 	}
+}
+
+func main() {
+	flag.Parse()
+	DownloadManifest()
 }

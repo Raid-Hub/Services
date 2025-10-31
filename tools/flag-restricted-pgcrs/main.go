@@ -1,4 +1,4 @@
-package flagrestricted
+package main
 
 import (
 	"raidhub/lib/database/postgres"
@@ -77,4 +77,8 @@ func FlagRestrictedPGCRs() {
 	}
 
 	logger.Info("COMPLETED", map[string]any{"total_checked": total, "restricted_flagged": badApples})
+}
+
+func main() {
+	FlagRestrictedPGCRs()
 }

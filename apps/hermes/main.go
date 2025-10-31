@@ -10,10 +10,10 @@ import (
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/publishing"
+	qw "raidhub/lib/messaging/queue-workers"
 	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/monitoring"
 	"raidhub/lib/utils/logging"
-	qw "raidhub/queue-workers"
 	"sync"
 	"syscall"
 )

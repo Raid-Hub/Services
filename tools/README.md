@@ -1,17 +1,22 @@
 # Tools
 
-This directory contains utility scripts and tools for manual execution. All tools are consolidated into a single `tools` binary that dispatches commands.
+This directory contains utility scripts and tools for manual execution. Each tool is built as a separate binary.
 
 ## Available Tools
 
-Run any tool with:
+Each tool can be run directly:
 
 ```bash
-./bin/tools <command>
+./bin/<tool-name> [arguments]
 ```
 
-### Available Commands
+### Available Tools
 
+- `process-missed-pgcrs` - Processes missed PGCRs (runs every 15 minutes via cron)
+- `manifest-downloader` - Downloads Destiny 2 manifest (runs multiple times daily via cron)
+- `leaderboard-clan-crawl` - Crawls clans for top leaderboard players (runs weekly via cron)
+- `cheat-detection` - Cheat detection and account maintenance (runs 4 times daily via cron)
+- `refresh-view` - Refreshes materialized views (runs daily via cron)
 - `activity-history-update` - Updates activity history for players who haven't been crawled recently
 - `fix-sherpa-clears` - Rebuilds sherpa and first clear columns to fix race conditions
 - `flag-restricted-pgcrs` - Flags PGCRs as restricted based on various criteria
@@ -20,46 +25,40 @@ Run any tool with:
 
 ## Building
 
-Build the tools binary:
+Build all tools:
 
 ```bash
 make tools
 ```
 
-Or manually:
+This will build each tool as a separate binary in `./bin/<tool-name>`.
+
+Or build a specific tool manually:
 
 ```bash
-go build -o ./bin/tools ./tools
+go build -o ./bin/<tool-name> ./tools/<tool-name>
 ```
 
 ## Running
 
-Run any tool command:
+Run any tool directly:
 
 ```bash
-./bin/tools activity-history-update
-./bin/tools fix-sherpa-clears
-./bin/tools flag-restricted-pgcrs
-./bin/tools process-single-pgcr
-./bin/tools update-skull-hashes
-```
-
-To see all available commands:
-
-```bash
-./bin/tools
+./bin/process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
+./bin/manifest-downloader [--out=<dir>] [--force] [--disk]
+./bin/leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
+./bin/cheat-detection
+./bin/refresh-view <view_name>
+./bin/activity-history-update
+./bin/fix-sherpa-clears
+./bin/flag-restricted-pgcrs
+./bin/process-single-pgcr <instance_id>
+./bin/update-skull-hashes
 ```
 
 ## Structure
 
-The tools directory contains:
+Each tool is in its own directory under `tools/`:
+- `tools/<tool-name>/main.go` - The tool implementation
 
-- `main.go` - Command dispatcher and entry point
-- Individual tool subdirectories, each with its own package:
-  - `activity-history-update/` - Activity history updater
-  - `fix-sherpa-clears/` - Sherpa clears fixer
-  - `flag-restricted-pgcrs/` - PGCR flagger
-  - `process-single-pgcr/` - Single PGCR processor
-  - `update-skull-hashes/` - Skull hash updater
-
-Each tool is a separate package with an exported function that implements the tool logic.
+Each tool is a standalone binary with its own `main()` function.

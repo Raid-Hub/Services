@@ -9,7 +9,7 @@ RaidHub Services follows a microservices architecture with clear separation betw
 ### Main Components
 
 - **Apps** (`apps/`): Main application services (Atlas, Hermes, Zeus)
-- **Queue Workers** (`queue-workers/`): Background processing workers for async tasks
+- **Queue Workers** (`lib/messaging/queue-workers/`): Background processing workers for async tasks
 - **Tools** (`tools/`): Utility scripts and one-off tools
 - **Infrastructure** (`infrastructure/`): Database schemas, migrations, cron jobs, and service configs
 - **Libraries** (`lib/`): Shared libraries for database connections, messaging, monitoring
@@ -164,7 +164,7 @@ Utilities executed manually as needed:
 - **`process-single-pgcr`** - Processes a single PGCR
 - **`update-skull-hashes`** - Updates skull hashes
 
-Execute via: `./bin/tools <command>`
+Execute via: `./bin/<tool-name>`
 
 ## Running Services
 
@@ -210,21 +210,21 @@ make apps
 make cron
 
 # Or run manually
-./bin/tools process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
-./bin/tools manifest-downloader [--out=<dir>] [--force] [--disk]
-./bin/tools leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
-./bin/tools cheat-detection
-./bin/tools refresh-view <view_name>
+./bin/process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
+./bin/manifest-downloader [--out=<dir>] [--force] [--disk]
+./bin/leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
+./bin/cheat-detection
+./bin/refresh-view <view_name>
 ```
 
 **Manual tools:**
 
 ```bash
-./bin/tools activity-history-update
-./bin/tools fix-sherpa-clears
-./bin/tools flag-restricted-pgcrs
-./bin/tools process-single-pgcr
-./bin/tools update-skull-hashes
+./bin/activity-history-update
+./bin/fix-sherpa-clears
+./bin/flag-restricted-pgcrs
+./bin/process-single-pgcr
+./bin/update-skull-hashes
 ```
 
 ## Available Services
@@ -251,9 +251,10 @@ make cron
 ```
 RaidHub-Services/
 ├── apps/              # Main application services
-├── queue-workers/     # Background processing workers
-├── tools/             # Utility scripts
 ├── lib/               # Shared libraries and business logic
+│   └── messaging/     # Messaging infrastructure
+│       └── queue-workers/  # Background processing workers
+├── tools/             # Utility scripts
 ├── infrastructure/    # Infrastructure config (schemas, migrations, cron, etc.)
 ├── docs/              # Documentation
 ├── bin/               # Built binaries
@@ -329,7 +330,7 @@ HADES_WEBHOOK_URL=discord_webhook_url
 1. Create tool directory in `tools/`
 2. Add your tool logic (will be built as subcommand)
 3. Build with `make tools`
-4. Run with `./bin/tools <your-tool-name>`
+4. Run with `./bin/<your-tool-name>`
 
 ## Atlas Configuration
 

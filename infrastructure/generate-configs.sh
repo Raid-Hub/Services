@@ -51,26 +51,7 @@ replace_template() {
     local template_file=$1
     local output_file=$2
     
-    # Handle conditional sections for Prometheus
-    local temp_file=$(mktemp)
-    
-    # First, handle conditional sections
-    if [ -n "${PROMETHEUS_REMOTE_WRITE_URL}" ] && [ -n "${PROMETHEUS_REMOTE_WRITE_USERNAME}" ] && [ -n "${PROMETHEUS_REMOTE_WRITE_PASSWORD}" ]; then
-        # Include the remote_write section - remove the template tags
-        awk '
-            /{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{\/PROMETHEUS_REMOTE_WRITE_URL}}/ {
-                if (/{{#PROMETHEUS_REMOTE_WRITE_URL}}/ || /{{\/PROMETHEUS_REMOTE_WRITE_URL}}/) { next }
-                print
-                next
-            }
-            { print }
-        ' "$template_file" > "$temp_file"
-    else
-        # Remove the entire remote_write section
-        awk '/{{#PROMETHEUS_REMOTE_WRITE_URL}}/,/{{\/PROMETHEUS_REMOTE_WRITE_URL}}/ { next } { print }' "$template_file" > "$temp_file"
-    fi
-    
-    # Then replace all {{VAR}} placeholders with actual values (using | as delimiter to avoid conflicts with URLs)
+    # Replace all {{VAR}} placeholders with actual values (using | as delimiter to avoid conflicts with URLs)
     sed \
         -e "s|{{POSTGRES_USER}}|${POSTGRES_USER}|g" \
         -e "s|{{POSTGRES_PASSWORD}}|${POSTGRES_PASSWORD}|g" \
@@ -88,12 +69,7 @@ replace_template() {
         -e "s|{{ATLAS_METRICS_PORT}}|${ATLAS_METRICS_PORT}|g" \
         -e "s|{{HERMES_METRICS_PORT}}|${HERMES_METRICS_PORT}|g" \
         -e "s|{{ZEUS_METRICS_PORT}}|${ZEUS_METRICS_PORT}|g" \
-        -e "s|{{PROMETHEUS_REMOTE_WRITE_URL}}|${PROMETHEUS_REMOTE_WRITE_URL}|g" \
-        -e "s|{{PROMETHEUS_REMOTE_WRITE_USERNAME}}|${PROMETHEUS_REMOTE_WRITE_USERNAME}|g" \
-        -e "s|{{PROMETHEUS_REMOTE_WRITE_PASSWORD}}|${PROMETHEUS_REMOTE_WRITE_PASSWORD}|g" \
-        "$temp_file" > "$output_file"
-    
-    rm -f "$temp_file"
+        "$template_file" > "$output_file"
 }
 
 # Generate PostgreSQL init-users.sql

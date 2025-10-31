@@ -1,4 +1,4 @@
-package activityhistory
+package main
 
 import (
 	"context"
@@ -44,4 +44,8 @@ func ActivityHistoryUpdate() {
 	}
 
 	logger.Info("DONE", map[string]any{})
+}
+
+func main() {
+	ActivityHistoryUpdate()
 }

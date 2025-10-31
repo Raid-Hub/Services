@@ -1,26 +1,19 @@
 default: apps tools
 
-
+.PHONY: seed apps tools migrate
 # Go Binaries
 GO_BUILD = go build
-
-# Build from new locations (apps/)
 BIN_DIR = ./bin/
 APPS_DIR = ./apps/
 TOOLS_DIR = ./tools/
 
-.PHONY: seed apps tools
 apps:
-	@echo "Building all apps..."
-	@mkdir -p $(BIN_DIR)
-	@$(GO_BUILD) -o $(BIN_DIR) $(APPS_DIR)...
-	@echo "✅ All apps built"
+	mkdir -p $(BIN_DIR)
+	$(GO_BUILD) -o $(BIN_DIR) $(APPS_DIR)...
 
 tools:
-	@echo "Building tools..."
-	@mkdir -p $(BIN_DIR)
-	$(GO_BUILD) -o $(BIN_DIR) $(TOOLS_DIR)
-	@echo "✅ All tools built"
+	mkdir -p $(BIN_DIR)
+	$(GO_BUILD) -o $(BIN_DIR) $(TOOLS_DIR)...
 
 # Docker Services
 DOCKER_COMPOSE = docker-compose -f docker-compose.yml --env-file ./.env
@@ -31,17 +24,13 @@ dev:
 	@echo "This provides hot reload, service orchestration, and monitoring"
 	@echo "Access Tilt UI at: http://localhost:10350"
 	@echo "Press Ctrl+C to stop"
-	@tilt up
+	tilt up
 
 up:
 	$(DOCKER_COMPOSE) up -d
 
 down:
-	@echo "Stopping services..."
-	@$(DOCKER_COMPOSE) down
-	@echo "✅ All services stopped"
-
-build: apps
+	$(DOCKER_COMPOSE) down
 
 restart:
 	$(DOCKER_COMPOSE) restart
@@ -60,7 +49,7 @@ migrate-%:
 	@case "$*" in \
 		postgres) \
 			echo "Running PostgreSQL migrations..."; \
-			go run ./infrastructure/postgres/tools/migrate/; \
+			go run ./infrastructure/postgres/migrate/; \
 			;; \
 		clickhouse) \
 			echo "Running ClickHouse migrations..."; \
@@ -73,19 +62,18 @@ migrate-%:
 			;; \
 	esac
 
+
 seed:
-	go run ./infrastructure/postgres/tools/seed/
+	go run ./tools/seed/
 
-# Cron management
+
 cron:
-	@echo "Installing cron jobs..."
-	@crontab ./infrastructure/cron/prod.crontab
-	@echo "Cron jobs installed successfully"
+	crontab ./infrastructure/cron/prod.crontab
 
 
-# Configuration management
 config:
-	@echo "🔧 Generating service roles and permissions..."
 	./infrastructure/generate-configs.sh
-	@echo "✅ Database roles and permissions updated"
 
+clean:
+	rm -rf $(BIN_DIR)
+	rm -rf volumes/

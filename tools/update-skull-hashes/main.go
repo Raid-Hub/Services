@@ -1,4 +1,4 @@
-package updateskull
+package main
 
 import (
 	"encoding/json"
@@ -65,4 +65,8 @@ func UpdateSkullHashes() {
 			logger.Info("PROCESSED_INSTANCES", map[string]any{"percent": ratio * 100})
 		}
 	}
+}
+
+func main() {
+	UpdateSkullHashes()
 }

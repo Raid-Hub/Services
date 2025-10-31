@@ -12,21 +12,21 @@ RaidHub-Services/
 │   ├── atlas/                   # Intelligent PGCR crawler with adaptive scaling
 │   ├── zeus/                    # Bungie API reverse proxy with IPv6 load balancing
 │   └── hermes/                  # Queue worker manager with self-scaling topics
-├── queue-workers/               # Queue worker topic definitions
-│   ├── activity_history.go      # Player activity history processing
-│   ├── character_fill.go        # Character data completion
-│   ├── clan_crawl.go            # Clan information crawler
-│   ├── pgcr_blocked.go          # Retry mechanism for blocked PGCRs
-│   ├── instance_cheat_check.go  # Post-storage cheat detection
-│   ├── instance_store.go        # Primary PGCR data storage
-│   ├── pgcr_crawl.go            # General PGCR processing (legacy)
-│   └── player_crawl.go          # Player profile data crawler
 ├── lib/                         # Shared libraries and business logic
 │   ├── database/                # Database connection singletons
 │   │   ├── postgres/            # PostgreSQL connection management
 │   │   └── clickhouse/          # ClickHouse connection management
 │   ├── messaging/               # RabbitMQ messaging infrastructure
 │   │   ├── processing/          # Topic managers and workers
+│   │   ├── queue-workers/        # Queue worker topic definitions
+│   │   │   ├── activity_history.go      # Player activity history processing
+│   │   │   ├── character_fill.go        # Character data completion
+│   │   │   ├── clan_crawl.go            # Clan information crawler
+│   │   │   ├── pgcr_blocked_retry.go    # Retry mechanism for blocked PGCRs
+│   │   │   ├── instance_cheat_check.go  # Post-storage cheat detection
+│   │   │   ├── instance_store.go        # Primary PGCR data storage
+│   │   │   ├── pgcr_crawl.go            # General PGCR processing (legacy)
+│   │   │   └── player_crawl.go          # Player profile data crawler
 │   │   ├── routing/             # Queue routing constants
 │   │   ├── rabbit/              # RabbitMQ connection singleton
 │   │   └── messages/            # Message type definitions
@@ -42,7 +42,7 @@ RaidHub-Services/
 │   ├── web/                     # External API clients
 │   │   ├── bungie/              # Bungie.net API client
 │   │   ├── discord/             # Discord webhook client
-│   │   └── gm_report/           # Grandmaster reporting
+│   │   └── gm_report/           # gm report webhooks
 │   ├── monitoring/              # Prometheus metrics
 │   ├── utils/                   # Common utilities
 │   └── env/                     # Environment configuration
@@ -81,7 +81,7 @@ RaidHub-Services/
 ### 1. Microservices with Clear Boundaries
 
 - **`apps/`** - Long-running application services (hermes, atlas, zeus)
-- **`queue-workers/`** - Topic-based asynchronous processing definitions
+- **`lib/messaging/queue-workers/`** - Topic-based asynchronous processing definitions
 - **`lib/`** - Shared business logic and infrastructure libraries
 - **`tools/`** - Maintenance utilities and scheduled tasks (consolidated into single binary)
 - **`infrastructure/`** - Pure infrastructure configuration (NO application code)
@@ -196,8 +196,8 @@ These tools run on a schedule via system crontab but are part of the consolidate
 
 **Usage**:
 
-- `./bin/tools process-missed-pgcrs`: Process missed PGCRs
-- `./bin/tools process-missed-pgcrs --gap`: Process gaps in sequences
+- `./bin/process-missed-pgcrs`: Process missed PGCRs
+- `./bin/process-missed-pgcrs --gap`: Process gaps in sequences
 
 #### Leaderboard Clan Crawl
 
@@ -210,7 +210,7 @@ These tools run on a schedule via system crontab but are part of the consolidate
 - **Bulk Operations**: Efficient batch processing with configurable concurrency
 - **Member Validation**: Ensures discovered players exist in the system
 
-**Usage**: `./bin/tools leaderboard-clan-crawl -top 1500 -reqs 14`
+**Usage**: `./bin/leaderboard-clan-crawl -top 1500 -reqs 14`
 
 #### Cheat Detection
 
@@ -223,7 +223,7 @@ These tools run on a schedule via system crontab but are part of the consolidate
 - **Blacklist Management**: Automatically blacklists flagged instances and player instances
 - **Statistical Reporting**: Provides detailed cheat detection statistics
 
-**Usage**: `./bin/tools cheat-detection`
+**Usage**: `./bin/cheat-detection`
 
 #### Manifest Downloader
 
@@ -241,7 +241,7 @@ These tools run on a schedule via system crontab but are part of the consolidate
 - Weapon definitions (hash, name, icon, element, ammo type, slot, type, rarity)
 - Activity feat definitions (skulls/modifiers for raids)
 
-**Usage**: `./bin/tools manifest-downloader --out=<directory> [--force] [--disk]`
+**Usage**: `./bin/manifest-downloader --out=<directory> [--force] [--disk]`
 
 ## Queue Worker System
 

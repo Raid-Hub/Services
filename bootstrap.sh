@@ -294,7 +294,7 @@ fi
 # Run manifest downloader to populate definitions
 echo ""
 echo "🔮 Running manifest downloader to populate weapon and feat definitions..."
-if ./bin/tools manifest-downloader --out="./.raidhub/defs" -f; then
+if ./bin/manifest-downloader --out="./.raidhub/defs" -f; then
     echo "✅ Manifest downloader completed"
 else
     exit_code=$?

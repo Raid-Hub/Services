@@ -1,4 +1,4 @@
-package leaderboardclancrawl
+package main
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type PlayerTransport struct {
 var logger = logging.NewLogger("LEADERBOARD_CLAN_CRAWL")
 
 // LeaderboardClanCrawl is the command function for crawling clans for top leaderboard players
-// Usage: ./bin/tools leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
+// Usage: ./bin/leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
 func LeaderboardClanCrawl() {
 	fs := flag.NewFlagSet("leaderboard-clan-crawl", flag.ExitOnError)
 	topPlayers := fs.Int("top", 1500, "number of top players to get")
@@ -275,4 +275,9 @@ func LeaderboardClanCrawl() {
 	}
 
 	logger.Info("PROCESSING_COMPLETE", map[string]any{})
+}
+
+func main() {
+	flag.Parse()
+	LeaderboardClanCrawl()
 }

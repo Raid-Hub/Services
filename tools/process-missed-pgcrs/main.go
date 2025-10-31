@@ -1,4 +1,4 @@
-package missedpgcr
+package main
 
 import (
 	"bufio"
@@ -31,7 +31,6 @@ var (
 )
 
 // ProcessMissedPGCRs is the command function for processing missed PGCRs
-// Usage: ./bin/tools process-missed-pgcrs [--gap] [--force] [--workers=<number>] [--retries=<number>]
 func ProcessMissedPGCRs() {
 	fs := flag.NewFlagSet("process-missed-pgcrs", flag.ExitOnError)
 	gap := fs.Bool("gap", false, "process gaps in the missed log")
@@ -415,4 +414,9 @@ func findGaps(failed []int64) []Gap {
 	})
 
 	return gaps
+}
+
+func main() {
+	flag.Parse()
+	ProcessMissedPGCRs()
 }

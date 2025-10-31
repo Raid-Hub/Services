@@ -1,4 +1,4 @@
-package processpgcr
+package main
 
 import (
 	"flag"
@@ -82,4 +82,9 @@ func ProcessSinglePGCR() {
 	} else {
 		logger.Info("PGCR_ALREADY_EXISTS", summaryFields)
 	}
+}
+
+func main() {
+	flag.Parse()
+	ProcessSinglePGCR()
 }

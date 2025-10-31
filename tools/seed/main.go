@@ -5,52 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"raidhub/lib/env"
+	"raidhub/lib/database/postgres"
+	"raidhub/lib/utils/logging"
 
 	_ "github.com/lib/pq"
 )
 
-type DatabaseConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-}
-
-func loadConfig() (*DatabaseConfig, error) {
-	config := &DatabaseConfig{
-		Host:     "localhost",
-		Port:     env.PostgresPort,
-		User:     env.PostgresUser,
-		Password: env.PostgresPassword,
-		DBName:   env.PostgresDB,
-	}
-
-	return config, nil
-}
-
-func connectDB(config *DatabaseConfig) (*sql.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		config.Host, config.Port, config.User, config.Password, config.DBName)
-
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to connect to database: %v", err)
-	}
-
-	return db, nil
-}
+var logger = logging.NewLogger("SEED")
 
 func getSeedFiles(seedsDir string) ([]string, error) {
 	var seedFiles []string
@@ -79,7 +44,9 @@ type SeedFile struct {
 }
 
 func seedFile(db *sql.DB, filePath string) error {
-	log.Printf("  → Seeding from %s", filepath.Base(filePath))
+	logger.Info("SEEDING_FILE", map[string]any{
+		logging.FILENAME: filepath.Base(filePath),
+	})
 
 	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -93,15 +60,22 @@ func seedFile(db *sql.DB, filePath string) error {
 
 	totalInserted := 0
 	for _, step := range seedFile.Steps {
-		log.Printf("  Step %d:", step.Step)
+		logger.Info("SEEDING_STEP", map[string]any{
+			"step": step.Step,
+		})
 
 		for tableName, records := range step.Tables {
 			if len(records) == 0 {
-				log.Printf("    %s: No records to insert", tableName)
+				logger.Info("SKIPPING_EMPTY_TABLE", map[string]any{
+					logging.TABLE: tableName,
+				})
 				continue
 			}
 
-			log.Printf("    %s: %d records", tableName, len(records))
+			logger.Info("SEEDING_TABLE", map[string]any{
+				logging.TABLE: tableName,
+				logging.TOTAL: len(records),
+			})
 
 			// Get column names from first record
 			var columns []string
@@ -136,7 +110,10 @@ func seedFile(db *sql.DB, filePath string) error {
 
 				result, err := stmt.Exec(values...)
 				if err != nil {
-					log.Printf("      Warning: failed to insert record: %v", err)
+					logger.Warn("FAILED_TO_INSERT_RECORD", map[string]any{
+						logging.TABLE: tableName,
+						logging.ERROR: err.Error(),
+					})
 					continue
 				}
 
@@ -147,50 +124,63 @@ func seedFile(db *sql.DB, filePath string) error {
 			}
 
 			stmt.Close()
-			log.Printf("      Inserted %d/%d records", inserted, len(records))
+			logger.Info("RECORDS_INSERTED", map[string]any{
+				logging.TABLE: tableName,
+				logging.COUNT: inserted,
+				logging.TOTAL: len(records),
+			})
 			totalInserted += inserted
 		}
 	}
 
-	log.Printf("    Total inserted: %d records", totalInserted)
+	logger.Info("STEP_COMPLETE", map[string]any{
+		logging.COUNT: totalInserted,
+	})
 	return nil
 }
 
 func main() {
-	log.Println("PostgreSQL Seeding Tool")
-	log.Println("======================")
+	logger.Info("STARTING_SEED_TOOL", nil)
 
-	config, err := loadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
+	// Wait for PostgreSQL connection to be ready
+	postgres.Wait()
 
-	db, err := connectDB(config)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
+	db := postgres.DB
 
 	seedsDir := "infrastructure/postgres/seeds"
 	seedFiles, err := getSeedFiles(seedsDir)
 	if err != nil {
-		log.Fatalf("Failed to get seed files: %v", err)
-	}
-
-	if len(seedFiles) == 0 {
-		log.Println("No seed files found")
+		logger.Fatal("FAILED_TO_GET_SEED_FILES", map[string]any{
+			logging.DIRECTORY: seedsDir,
+			logging.ERROR:     err.Error(),
+		})
 		return
 	}
 
-	log.Printf("Found %d seed files in %s", len(seedFiles), seedsDir)
+	if len(seedFiles) == 0 {
+		logger.Info("NO_SEED_FILES_FOUND", map[string]any{
+			logging.DIRECTORY: seedsDir,
+		})
+		return
+	}
+
+	logger.Info("FOUND_SEED_FILES", map[string]any{
+		logging.COUNT:    len(seedFiles),
+		logging.DIRECTORY: seedsDir,
+	})
 
 	for _, seedFileName := range seedFiles {
 		filePath := filepath.Join(seedsDir, seedFileName)
 
 		if err := seedFile(db, filePath); err != nil {
-			log.Fatalf("Failed to seed %s: %v", seedFileName, err)
+			logger.Fatal("FAILED_TO_SEED_FILE", map[string]any{
+				logging.FILENAME: seedFileName,
+				logging.ERROR:    err.Error(),
+			})
+			return
 		}
 	}
 
-	log.Println("\n✅ Seeding completed successfully!")
+	logger.Info("SEEDING_COMPLETED", nil)
 }
+

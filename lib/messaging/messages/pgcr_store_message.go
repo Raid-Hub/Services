@@ -5,7 +5,7 @@ import (
 	"raidhub/lib/web/bungie"
 )
 
-// PGCRStoreMessage matches queue-workers/instance_store.go
+// PGCRStoreMessage matches lib/messaging/queue-workers/instance_store.go
 type PGCRStoreMessage struct {
 	Activity dto.Instance                        `json:"activity"`
 	Raw      bungie.DestinyPostGameCarnageReport `json:"raw"`

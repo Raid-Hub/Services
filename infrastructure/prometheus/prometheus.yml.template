@@ -12,10 +12,3 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:{{ZEUS_METRICS_PORT}}"]
 
-{{#PROMETHEUS_REMOTE_WRITE_URL}}
-remote_write:
-  - url: {{PROMETHEUS_REMOTE_WRITE_URL}}
-    basic_auth:
-      username: "{{PROMETHEUS_REMOTE_WRITE_USERNAME}}"
-      password: "{{PROMETHEUS_REMOTE_WRITE_PASSWORD}}"
-{{/PROMETHEUS_REMOTE_WRITE_URL}}

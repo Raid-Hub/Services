@@ -1,4 +1,4 @@
-package cheatdetection
+package main
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ type LevelsDTO struct {
 }
 
 // CheatDetection is the command function for cheat detection and player account maintenance
-// Usage: ./bin/tools cheat-detection
+// Usage: ./bin/cheat-detection
 func CheatDetection() {
 	logger.Info(SERVICE_STARTED, map[string]any{
 		logging.SERVICE: "cheat-detection",
@@ -237,4 +237,8 @@ func CheatDetection() {
 		logging.SERVICE: "cheat-detection",
 		logging.STATUS:  "complete",
 	})
+}
+
+func main() {
+	CheatDetection()
 }

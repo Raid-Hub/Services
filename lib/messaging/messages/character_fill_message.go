@@ -1,6 +1,6 @@
 package messages
 
-// CharacterFillMessage matches queue-workers/character_fill/main.go
+// CharacterFillMessage matches lib/messaging/queue-workers/character_fill.go
 type CharacterFillMessage struct {
 	MembershipId int64 `json:"membershipId,string"`
 	CharacterId  int64 `json:"characterId,string"`
