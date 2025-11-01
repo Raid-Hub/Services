@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/network"
 	"raidhub/lib/web/bungie"
-	"strings"
 	"time"
 )
 
@@ -13,8 +13,13 @@ import (
 func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageReport) {
 	start := time.Now()
 	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
-	if resp.BungieErrorCode > 0 {
-		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(float64(time.Since(start).Milliseconds()))
+	duration := float64(time.Since(start).Milliseconds())
+	
+	// Record metric for all responses
+	if resp.BungieErrorCode == bungie.Success {
+		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues("Success").Observe(duration)
+	} else if resp.BungieErrorCode > 0 {
+		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(duration)
 	}
 
 	if !resp.Success {
@@ -64,19 +69,19 @@ func logUnexpectedError(
 	fields map[string]any,
 	err error,
 ) {
-	errStr := err.Error()
+	netErr := network.CategorizeNetworkError(err)
+	
+	if netErr == nil {
+		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", fields)
+		return
+	}
 
-	isTimeout := strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded")
-	if isTimeout {
+	switch netErr.Type {
+	case network.ErrorTypeTimeout:
 		logger.Warn("PGCR_FETCH_TIMEOUT", fields)
-		return
+	case network.ErrorTypeConnection:
+		logger.Warn("PGCR_NETWORK_ERROR", fields)
+	case network.ErrorTypeUnknown:
+		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", fields)
 	}
-
-	isConnectionError := strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "connection reset")
-	if isConnectionError {
-		logger.Warn("PGCR_CONNECTION_ERROR", fields)
-		return
-	}
-
-	logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", fields)
 }

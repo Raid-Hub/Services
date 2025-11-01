@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/network"
 	"raidhub/lib/web/bungie"
 )
 
@@ -178,11 +179,8 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 			}
 		}
 	} else if err != nil {
-		// Network/request error, skip privacy check
-		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", map[string]any{
-			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
-		})
+		// Network/request error - handle gracefully
+		logNetworkError(membershipId, err)
 		return firstSeen, isPrivate
 	}
 
@@ -197,10 +195,37 @@ func needsUpdate(p Player) bool {
 	needs := p.HistoryLastCrawled.IsZero() ||
 		time.Since(p.HistoryLastCrawled) > 24*time.Hour
 	if needs {
-		logger.Info("PLAYER_NEEDS_UPDATE", map[string]any{
+		logger.Debug("PLAYER_NEEDS_UPDATE", map[string]any{
 			logging.MEMBERSHIP_ID:  p.MembershipId,
 			"history_last_crawled": p.HistoryLastCrawled,
 		})
 	}
 	return needs
+}
+
+// logNetworkError handles network errors gracefully using centralized network error handling
+func logNetworkError(membershipId int64, err error) {
+	netErr := network.CategorizeNetworkError(err)
+	
+	if netErr == nil {
+		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
+		return
+	}
+
+	logFields := map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+		logging.ERROR:         err.Error(),
+	}
+
+	switch netErr.Type {
+	case network.ErrorTypeTimeout:
+		logger.Warn("ACTIVITY_HISTORY_FETCH_TIMEOUT", logFields)
+	case network.ErrorTypeConnection:
+		logger.Warn("ACTIVITY_HISTORY_NETWORK_ERROR", logFields)
+	case network.ErrorTypeUnknown:
+		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", logFields)
+	}
 }

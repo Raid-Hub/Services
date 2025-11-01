@@ -162,6 +162,12 @@ func main() {
 					logging.METHOD:   r.Method,
 					logging.ENDPOINT: r.URL.String(),
 				})
+			} else if strings.Contains(err.Error(), "no such host") {
+				// DNS lookup errors are network issues that should be logged at info level
+				logger.Warn("PROXY_DNS_ERROR", map[string]any{
+					logging.METHOD:   r.Method,
+					logging.ENDPOINT: r.URL.String(),
+				})
 			} else {
 				logger.Warn("PROXY_ERROR", map[string]any{
 					logging.METHOD:   r.Method,
@@ -257,12 +263,19 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	resp, err := rt.RoundTrip(r)
 	duration := time.Since(startTime)
 
+	// Determine status code for metrics
+	status := "0" // Default for errors/no response
+	if err == nil && resp != nil {
+		status = strconv.Itoa(resp.StatusCode)
+	}
+
 	// Send metrics event to channel (non-blocking with buffered channel)
 	select {
 	case metricsChan <- metricsEvent{
 		endpointType:    endpointType,
 		duration:        duration,
 		rateLimiterWait: rateLimiterWait,
+		status:          status,
 	}:
 	default:
 		// Channel full, drop metric to avoid blocking (buffer should be large enough)

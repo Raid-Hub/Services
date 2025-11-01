@@ -1,6 +1,7 @@
 package bungie
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/network"
 )
 
 var clientLogger = logging.NewLogger("BUNGIE_CLIENT")
@@ -37,6 +39,17 @@ func makeNonStandardHttpResult[T any](statusCode int) BungieHttpResult[T] {
 }
 
 func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult[T], error) {
+	ctx := context.Background()
+	config := network.DefaultRetryConfig()
+	config.MaxAttempts = 2 // Quick retries for fast-fail
+	config.InitialDelay = 50 * time.Millisecond
+	
+	return network.WithRetryForResult(ctx, config, func() (BungieHttpResult[T], error) {
+		return getInternal[T](c, url, operation)
+	})
+}
+
+func getInternal[T any](c *BungieClient, url string, operation string) (BungieHttpResult[T], error) {
 	startTime := time.Now()
 
 	req, err := http.NewRequest("GET", url, nil)

@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // StructuredLogger is a simple logger implementation
@@ -74,8 +73,8 @@ func formatLogfmtValue(v any) string {
 }
 
 func (l *StructuredLogger) log(level string, key string, fields map[string]any) {
-	timestamp := time.Now().UTC().Format("2006-01-02 15:04:05.000")
-	prefix := fmt.Sprintf("%s [%s][%s] -- ", timestamp, level, l.prefix)
+	// timestamp := time.Now().UTC().Format("2006-01-02 15:04:05.000")
+	prefix := fmt.Sprintf("[%s][%s] -- ", level, l.prefix)
 
 	// Build structured log entry
 	var output = key

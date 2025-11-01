@@ -2,7 +2,6 @@ package instance_storage
 
 import (
 	"context"
-	"fmt"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/publishing"
@@ -21,10 +20,13 @@ var logger = logging.NewLogger("INSTANCE_STORAGE_SERVICE")
 // 2. instance domain (structured data storage)
 // 3. ClickHouse publishing (external, non-transactional)
 func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
+	startTime := time.Now()
+	
 	// Start transaction for atomic storage of pgcr + instance data
 	tx, err := postgres.DB.Begin()
 	if err != nil {
 		logger.Warn(FAILED_TO_INITIATE_TRANSACTION, map[string]any{logging.ERROR: err.Error()})
+		global_metrics.InstanceStorageOperations.WithLabelValues("begin_transaction", "error").Inc()
 		return nil, false, err
 	}
 	defer tx.Rollback()
@@ -60,27 +62,32 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 
 	// 3. Store to ClickHouse BEFORE committing Postgres transaction
 	// This ensures best-effort atomicity: if ClickHouse fails, we roll back everything
+	clickhouseStart := time.Now()
 	err = StoreToClickHouse(inst)
+	clickhouseDuration := time.Since(clickhouseStart)
 	if err != nil {
 		logger.Warn(FAILED_TO_STORE_TO_CLICKHOUSE, map[string]any{logging.ERROR: err.Error()})
+		global_metrics.InstanceStorageOperations.WithLabelValues("store_to_clickhouse", "error").Inc()
+		global_metrics.InstanceStorageOperationDuration.WithLabelValues("store_to_clickhouse", "error").Observe(clickhouseDuration.Seconds())
 		return nil, false, err // Roll back the entire transaction
 	}
+	global_metrics.InstanceStorageOperations.WithLabelValues("store_to_clickhouse", "success").Inc()
+	global_metrics.InstanceStorageOperationDuration.WithLabelValues("store_to_clickhouse", "success").Observe(clickhouseDuration.Seconds())
 
 	// 4. Commit transaction (only if ClickHouse succeeded)
 	err = tx.Commit()
 	if err != nil {
 		logger.Warn(FAILED_TO_COMMIT_TRANSACTION, map[string]any{logging.ERROR: err.Error()})
+		global_metrics.InstanceStorageOperations.WithLabelValues("commit_transaction", "error").Inc()
 		return nil, false, err
 	}
+	global_metrics.InstanceStorageOperations.WithLabelValues("commit_transaction", "success").Inc()
 
 	// Calculate lag using current time (after storage is complete)
 	lag := time.Since(inst.DateCompleted)
 
 	// 5. Get activity info for metrics and logging
 	activityInfo, err := getActivityInfo(inst.Hash)
-	if err == nil && inst.DateCompleted.After(time.Now().Add(-5*time.Hour)) {
-		global_metrics.PGCRStoreActivity.WithLabelValues(activityInfo.activityName, activityInfo.versionName, fmt.Sprintf("%v", inst.Completed)).Inc()
-	}
 
 	// Publish side effects (only if instance was new)
 	if instanceIsNew && sideEffects != nil {
@@ -96,6 +103,15 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 		}
 		publishing.PublishInt64Message(context.TODO(), routing.InstanceCheatCheck, inst.InstanceId)
 	}
+
+	// Track overall storage duration and success
+	totalDuration := time.Since(startTime)
+	status := "duplicate"
+	if isNew {
+		status = "success"
+	}
+	global_metrics.InstanceStorageOperations.WithLabelValues("store_pgcr", status).Inc()
+	global_metrics.InstanceStorageOperationDuration.WithLabelValues("store_pgcr", status).Observe(totalDuration.Seconds())
 
 	// Log successful storage
 	if isNew {

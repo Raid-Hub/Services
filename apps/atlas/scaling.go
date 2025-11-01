@@ -21,6 +21,12 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 
 	sendStartUpAlert()
 
+	// Initialize worker metric with initial worker count
+	if workers < minWorkers {
+		workers = minWorkers
+	}
+	atlas_metrics.ActiveWorkers.Set(float64(workers))
+
 	// Start a goroutine to offload malformed or slowly resolving PGCRs
 	go offloadWorker(&consumerConfig)
 
@@ -36,9 +42,10 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 			workers = minWorkers
 		}
 
-		spawnWorkers(workers, periodLength, &consumerConfig)
-
+		// Set metric before spawning workers so it shows the active count while workers are running
 		atlas_metrics.ActiveWorkers.Set(float64(workers))
+
+		spawnWorkers(workers, periodLength, &consumerConfig)
 
 		metrics, err := GetMetricsForScaling(time.Since(startTime))
 		if err != nil {

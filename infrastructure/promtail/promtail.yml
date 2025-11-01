@@ -18,22 +18,6 @@ clients:
   #   headers:
   #     X-Scope-OrgID: <tenant-id>  # Alternative to tenant_id
 
-# Reusable pipeline stages for parsing structured logs
-x-pipeline-stages: &pipeline-stages
-  - regex:
-      # Match log format: [LEVEL][LOGGER] -- EVENT >> key=value key2=value2
-      expression: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
-  - template:
-      source: level
-      template: "{{ ToLower .level }}"
-  - labels:
-      level:
-      logger:
-      event:
-  - logfmt:
-      mapping:
-        kv: .
-
 scrape_configs:
   # Scrape Docker container logs via Docker service discovery
   - job_name: docker
@@ -50,7 +34,22 @@ scrape_configs:
       # - source_labels:
       #     ["__meta_docker_container_label_com_docker_compose_project"]
       #   target_label: "project"
-    pipeline_stages: *pipeline-stages
+    pipeline_stages:
+      # Match log format: [LEVEL][LOGGER] -- EVENT >> key=value key2=value2
+      # Docker timestamp is automatically extracted by promtail
+      - regex:
+          expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+      - template:
+          source: level
+          template: "{{ ToLower .level }}"
+          output: level
+      - labels:
+          level:
+          logger:
+          event:
+      - logfmt:
+          mapping:
+            kv: .
 
   # Production mode: scrape log files from filesystem (when not using Docker)
   # Uncomment and configure paths when running services as native processes
@@ -60,7 +59,20 @@ scrape_configs:
   #       labels:
   #         job: file_logs
   #         __path__: /var/log/raidhub/**/*.log
-  #   pipeline_stages: *pipeline-stages
+  #   pipeline_stages:
+  #     - regex:
+  #         expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+  #     - template:
+  #         source: level
+  #         template: '{{ ToLower .level }}'
+  #         output: level
+  #     - labels:
+  #         level:
+  #         logger:
+  #         event:
+  #     - logfmt:
+  #         mapping:
+  #           kv: .
 
   # Scrape systemd journal logs (useful when services run as systemd units)
   # - job_name: journal
@@ -74,4 +86,17 @@ scrape_configs:
   #       target_label: "unit"
   #     - source_labels: ["__journal__hostname"]
   #       target_label: "hostname"
-  #   pipeline_stages: *pipeline-stages
+  #   pipeline_stages:
+  #     - regex:
+  #         expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+  #     - template:
+  #         source: level
+  #         template: '{{ ToLower .level }}'
+  #         output: level
+  #     - labels:
+  #         level:
+  #         logger:
+  #         event:
+  #     - logfmt:
+  #         mapping:
+  #           kv: .

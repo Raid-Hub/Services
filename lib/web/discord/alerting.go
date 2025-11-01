@@ -56,7 +56,7 @@ func NewDiscordAlerting(webhookURL string, logger logging.Logger) *DiscordAlerti
 func (da *DiscordAlerting) Send(webhook *Webhook, logKey string, logFields map[string]any) {
 	err := SendWebhook(da.webhookURL, webhook)
 	if err != nil && da.logger != nil {
-		da.logger.Error("DISCORD_WEBHOOK_SEND_FAILED", map[string]any{
+		da.logger.Warn("DISCORD_WEBHOOK_SEND_FAILED", map[string]any{
 			logging.ERROR: err.Error(),
 		})
 	}

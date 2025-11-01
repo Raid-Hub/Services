@@ -4,14 +4,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const ZEUS_ENDPOINT_TYPE_DIMENSION = "endpoint_type"
+const (
+	ZEUS_ENDPOINT_TYPE_DIMENSION = "endpoint_type"
+	ZEUS_STATUS_DIMENSION        = "status"
+)
 
 var RequestCount = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "zeus_requests_total",
 		Help: "Total number of HTTP requests proxied by Zeus",
 	},
-	[]string{ZEUS_ENDPOINT_TYPE_DIMENSION}, // endpoint_type: "stats", "www"
+	[]string{ZEUS_ENDPOINT_TYPE_DIMENSION, ZEUS_STATUS_DIMENSION}, // endpoint_type: "stats", "www"; status: HTTP status code as string
 )
 
 var RequestDuration = prometheus.NewHistogramVec(

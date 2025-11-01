@@ -5,13 +5,19 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+    uid: loki
     isDefault: true
     jsonData:
       maxLines: 5000
+      queryTimeout: 5m
+      maxConcurrentShardRequests: 128
+      incrementalQuerying: true
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
+    uid: prometheus
     isDefault: false
     jsonData:
       timeInterval: "15s"
+      queryTimeout: 5s
