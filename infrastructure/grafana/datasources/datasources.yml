@@ -1,6 +1,15 @@
 apiVersion: 1
 
 datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    uid: prometheus
+    isDefault: false
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: 5s
   - name: Loki
     type: loki
     access: proxy
@@ -12,12 +21,3 @@ datasources:
       queryTimeout: 5m
       maxConcurrentShardRequests: 128
       incrementalQuerying: true
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    uid: prometheus
-    isDefault: false
-    jsonData:
-      timeInterval: "15s"
-      queryTimeout: 5s
