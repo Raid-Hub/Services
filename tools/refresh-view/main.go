@@ -13,7 +13,6 @@ var logger = logging.NewLogger("REFRESH_VIEW_TOOL")
 
 // RefreshView is the command function for refreshing materialized views
 // Handles both regular views and leaderboard views (with cache management)
-// Usage: ./bin/refresh-view <view_name>
 func RefreshView() {
 	if flag.NArg() < 1 {
 		logger.Error("NO_VIEW_NAME", map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})

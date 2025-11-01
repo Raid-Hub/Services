@@ -52,11 +52,17 @@ func RegisterAtlasMetrics() {
 }
 
 // RegisterHermesMetrics registers Hermes-specific metrics and starts the metrics server
-func RegisterHermesMetrics() {
+func RegisterHermesMetrics(portOverride string) {
 	global_metrics.RegisterGlobalMetrics()
 	hermes_metrics.Register()
 
-	if metricsPort, ok := loadMetricsPort(env.HermesMetricsPort); ok {
+	// Use override port if provided, otherwise use env var
+	port := portOverride
+	if port == "" {
+		port = env.HermesMetricsPort
+	}
+
+	if metricsPort, ok := loadMetricsPort(port); ok {
 		serveMetrics(metricsPort)
 	}
 }

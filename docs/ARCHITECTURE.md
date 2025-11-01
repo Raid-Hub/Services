@@ -459,8 +459,10 @@ See `example.env` for all configuration options.
 ### Critical Variables
 
 - `BUNGIE_API_KEY`: Primary Bungie API authentication
+- `ZEUS_API_KEYS`: Comma-separated list of API keys for Zeus rotation
+- `ZEUS_IPV6`: Base IPv6 address for Zeus load balancing
 - Database credentials: `POSTGRES_*`, `CLICKHOUSE_*`, `RABBITMQ_*`
-- Webhook URLs
+- Webhook URLs: `ATLAS_WEBHOOK_URL`
 
 ## Deployment Architecture
 

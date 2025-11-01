@@ -11,7 +11,6 @@ import (
 
 // CheatDetection logging constants
 const (
-	SERVICE_STARTED              = "SERVICE_STARTED"
 	PROCESSING_COMPLETE          = "PROCESSING_COMPLETE"
 	BLACKLIST_UPDATE_ERROR       = "BLACKLIST_UPDATE_ERROR"
 	BLACKLIST_UPDATED            = "BLACKLIST_UPDATED"
@@ -33,11 +32,9 @@ type LevelsDTO struct {
 }
 
 // CheatDetection is the command function for cheat detection and player account maintenance
-// Usage: ./bin/cheat-detection
 func CheatDetection() {
-	logger.Info(SERVICE_STARTED, map[string]any{
+	logger.Info("JOB_STARTED", map[string]any{
 		logging.SERVICE: "cheat-detection",
-		"workers":       []string{"cheat_detection", "account_maintenance"},
 		logging.VERSION: versionPrefix,
 	})
 

@@ -17,7 +17,7 @@ dev:
 	@echo "This provides hot reload, service orchestration, and monitoring"
 	@echo "Access Tilt UI at: http://localhost:10350"
 	@echo "Press Ctrl+C to stop"
-	tilt up --watch
+	tilt up
 
 up:
 	$(DOCKER_COMPOSE) up -d

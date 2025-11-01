@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
@@ -37,7 +36,7 @@ func ActivityHistoryUpdate() {
 	logger.Info("SCANNING", map[string]any{})
 	for rows.Next() {
 		rows.Scan(&id)
-		err = publishing.PublishTextMessage(context.TODO(), routing.ActivityCrawl, fmt.Sprintf("%d", id))
+		err = publishing.PublishInt64Message(context.TODO(), routing.ActivityCrawl, id)
 		if err != nil {
 			panic(err)
 		}

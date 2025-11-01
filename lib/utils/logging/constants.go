@@ -21,6 +21,7 @@ const (
 	FORMAT  = "format"
 	SOURCE  = "source"
 	PATH    = "path"
+	JOB     = "job"
 
 	// Database fields
 	RETRIES   = "retries"

@@ -94,7 +94,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 				publishing.PublishJSONMessage(context.TODO(), routing.PlayerCrawl, playerCrawlRequest)
 			}
 		}
-		publishing.PublishTextMessage(context.TODO(), routing.InstanceCheatCheck, fmt.Sprintf("%d", inst.InstanceId))
+		publishing.PublishInt64Message(context.TODO(), routing.InstanceCheatCheck, inst.InstanceId)
 	}
 
 	// Log successful storage

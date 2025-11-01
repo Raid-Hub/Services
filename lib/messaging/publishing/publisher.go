@@ -48,3 +48,19 @@ func PublishTextMessage(ctx context.Context, queueName string, text string) erro
 		},
 	)
 }
+
+// PublishInt64Message publishes an int64 message to the specified queue
+func PublishInt64Message(ctx context.Context, queueName string, value int64) error {
+	return channel.PublishWithContext(
+		ctx,
+		"",        // default exchange
+		queueName, // routing key = queue name
+		false,     // mandatory
+		false,     // immediate
+		amqp.Publishing{
+			ContentType:  "text/plain",
+			Body:         []byte(fmt.Sprintf("%d", value)),
+			DeliveryMode: amqp.Persistent, // Make messages persistent
+		},
+	)
+}

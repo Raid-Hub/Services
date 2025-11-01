@@ -28,6 +28,7 @@ var HermesLogger = logging.NewLogger("hermes")
 
 func main() {
 	topicType := flag.String("topic", "", "Name of topic to run. If empty, starts all topics.")
+	metricsPort := flag.String("metrics-port", "", "Override metrics port (default: env HERMES_METRICS_PORT)")
 
 	flag.Parse()
 
@@ -51,7 +52,7 @@ func main() {
 		mutex.Unlock()
 	}()
 
-	monitoring.RegisterHermesMetrics()
+	monitoring.RegisterHermesMetrics(*metricsPort)
 
 	HermesLogger.Debug(logging.WAITING_ON_CONNECTIONS, map[string]any{
 		"services": []string{"postgres", "clickhouse", "rabbit", "publishing"},

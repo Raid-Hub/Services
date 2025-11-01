@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"fmt"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/rabbit"
@@ -17,34 +16,30 @@ import (
 	"time"
 )
 
+var logger = logging.NewLogger("LEADERBOARD_CLAN_CRAWL")
+
 type PlayerTransport struct {
 	membershipId   int64
 	membershipType int
 }
 
-var logger = logging.NewLogger("LEADERBOARD_CLAN_CRAWL")
-
-// LeaderboardClanCrawl is the command function for crawling clans for top leaderboard players
+// LeaderboardClanCrawl crawls clans for top leaderboard players
 // Usage: ./bin/leaderboard-clan-crawl [--top=<number>] [--reqs=<number>]
 func LeaderboardClanCrawl() {
 	fs := flag.NewFlagSet("leaderboard-clan-crawl", flag.ExitOnError)
 	topPlayers := fs.Int("top", 1500, "number of top players to get")
-	reqs := fs.Int("reqs", 14, "number of requests to make to bungie concurrently")
+	reqs := fs.Int("reqs", 14, "number of concurrent Bungie API requests")
 	fs.Parse(flag.Args())
 
 	logger.Info("SERVICE_STARTED", map[string]any{
 		logging.SERVICE: "leaderboard-clan-crawl",
 		"purpose":       "leaderboard_maintenance",
 	})
-	logger.Info("PLAYERS_SELECTED", map[string]any{
-		"top_players_count": *topPlayers,
-		logging.OPERATION:   "select_leaderboard_players",
-	})
 
-	// postgres.DB and rabbit.Conn are initialized in init()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	postgres.Wait()
 	rabbit.Wait()
 
 	ch, err := rabbit.Conn.Channel()
@@ -53,228 +48,353 @@ func LeaderboardClanCrawl() {
 	}
 	defer ch.Close()
 
-	postgres.Wait()
-
-	// Get all players who are in the top 1000 of individual leaderboard
-	rows, err := postgres.DB.QueryContext(ctx, `
-	SELECT DISTINCT ON (membership_id) membership_id, membership_type FROM (
-		SELECT membership_id FROM individual_global_leaderboard WHERE (
-			clears_rank <= $1 
-			OR fresh_clears_rank <= $1 
-			OR sherpas_rank <= $1
-			OR total_time_played_rank <= $1
-			OR speed_rank <= $1
-			OR wfr_score_rank <= $1
-		)
-		UNION
-		SELECT membership_id FROM individual_raid_leaderboard WHERE (
-			clears_rank <= $1 
-			OR fresh_clears_rank <= $1 
-			OR sherpas_rank <= $1
-			OR total_time_played_rank <= $1
-		)
-	) as ids
-	JOIN player USING (membership_id)
-	WHERE membership_type <> 0 AND membership_type <> 4`, *topPlayers)
-
+	// Query top players from leaderboards
+	players, err := queryTopPlayers(ctx, *topPlayers)
 	if err != nil {
 		logger.Fatal("ERROR_QUERYING_DATABASE", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	logger.Info("TOP_PLAYERS_SELECTED", map[string]any{})
+	logger.Info("PLAYERS_SELECTED", map[string]any{
+		"query_limit": *topPlayers,
+		logging.COUNT: len(players),
+	})
 
-	// Get all groups for each player
-	playerCountPointer := new(int32)
-	queue := make(chan PlayerTransport, 100)
+	if len(players) == 0 {
+		logger.Warn("NO_PLAYERS_FOUND", map[string]any{
+			"message": "No top players found in leaderboards. Views may need refreshing.",
+		})
+		return
+	}
 
-	groupSet := sync.Map{}
+	// Fetch clans for all players
+	startTime := time.Now()
+	clans, processedCount := fetchClansForPlayers(ctx, players, *reqs)
+	duration := time.Since(startTime)
+	logger.Info("CLANS_FETCHED", map[string]any{
+		logging.COUNT:            len(clans),
+		"players_processed_api": processedCount,
+		logging.DURATION:         duration.Milliseconds(),
+	})
 
-	wg := sync.WaitGroup{}
-	for i := 0; i < *reqs; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for player := range queue {
-				attempts := 0
-				for attempts < 4 {
-					result, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
-					if err != nil {
-						// retry
-						attempts++
-						time.Sleep(time.Second * time.Duration(attempts*2))
-						continue
-					}
-					if !result.Success || result.Data == nil {
-						break
-					}
-					res := result.Data
-					atomic.AddInt32(playerCountPointer, 1)
+	if len(clans) == 0 {
+		logger.Warn("NO_CLANS_FOUND", map[string]any{
+			"message": "No clans found for top players",
+		})
+		return
+	}
 
-					for _, group := range res.Results {
-						if !res.AreAllMembershipsInactive[group.Group.GroupId] {
-							groupSet.Store(group.Group.GroupId, group.Group)
-						}
-					}
-					break
-				}
-				if attempts >= 4 {
-					logger.Warn("PLAYER_GROUPS_FAILED", map[string]any{
-						logging.MEMBERSHIP_ID: player.membershipId,
-						logging.ATTEMPT:       4,
-					})
-				}
+	// Process clan members and update database
+	stats := processClanMembers(ctx, clans, *reqs)
+	logger.Info("PROCESSING_COMPLETE", map[string]any{
+		"clans_processed":        len(clans),
+		"members_successful":     stats.successful,
+		"members_total":          stats.total,
+		"members_failed":         stats.failed,
+		"members_queued_crawl":   stats.queuedForCrawl,
+	})
 
-			}
-		}()
+	// Refresh clan leaderboard
+	if err := refreshClanLeaderboard(ctx); err != nil {
+		logger.Warn("ERROR_REFRESHING_CLAN_LEADERBOARD", map[string]any{logging.ERROR: err.Error()})
+	}
+}
+
+func queryTopPlayers(ctx context.Context, limit int) ([]PlayerTransport, error) {
+	rows, err := postgres.DB.QueryContext(ctx, `
+		SELECT DISTINCT ON (p.membership_id) p.membership_id, p.membership_type
+		FROM (
+			SELECT membership_id 
+			FROM leaderboard.individual_global_leaderboard 
+			WHERE clears_rank <= $1 
+			   OR fresh_clears_rank <= $1 
+			   OR sherpas_rank <= $1
+			   OR total_time_played_rank <= $1
+			   OR speed_rank <= $1
+			   OR wfr_score_rank <= $1
+			UNION
+			SELECT membership_id 
+			FROM leaderboard.individual_raid_leaderboard 
+			WHERE clears_rank <= $1 
+			   OR fresh_clears_rank <= $1 
+			   OR sherpas_rank <= $1
+			   OR total_time_played_rank <= $1
+		) AS ids
+		JOIN core.player p ON p.membership_id = ids.membership_id
+		WHERE p.membership_type <> 0 AND p.membership_type <> 4`, limit)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 
-	logger.Info("GRABBING_GROUPS_FOR_PLAYERS", map[string]any{})
+	var players []PlayerTransport
 	for rows.Next() {
-		player := PlayerTransport{}
-		rows.Scan(&player.membershipId, &player.membershipType)
-		queue <- player
+		var p PlayerTransport
+		if err := rows.Scan(&p.membershipId, &p.membershipType); err != nil {
+			return nil, err
+		}
+		players = append(players, p)
 	}
+	return players, rows.Err()
+}
 
-	close(queue)
-	wg.Wait()
+func fetchClansForPlayers(ctx context.Context, players []PlayerTransport, concurrency int) (map[int64]bungie.GroupV2, int32) {
+	playerQueue := make(chan PlayerTransport, len(players))
+	clanMap := sync.Map{}
+	processedCount := new(int32)
 
-	count := 0
-	groupSet.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-
-	logger.Info("FOUND_CLANS_FROM_PLAYERS", map[string]any{logging.COUNT: count, logging.PLAYERS: *playerCountPointer})
-
-	groupChannel := make(chan bungie.GroupV2)
-
-	tx, err := postgres.DB.BeginTx(ctx, nil)
-	if err != nil {
-		logger.Warn("ERROR_BEGINNING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
-	}
-	defer tx.Rollback()
-	logger.Info("BEGINNING_TRANSACTION", map[string]any{})
-
-	_, err = tx.ExecContext(ctx, `TRUNCATE TABLE clan_members`)
-	if err != nil {
-		logger.Warn("ERROR_TRUNCATING_CLAN_MEMBERS", map[string]any{logging.ERROR: err.Error()})
-	}
-
-	logger.Info("TRUNCATED_CLAN_MEMBERS", map[string]any{})
-
-	upsertClan, err := tx.PrepareContext(ctx, `INSERT INTO clan (group_id, name, motto, call_sign, clan_banner_data, updated_at) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (group_id)
-		DO UPDATE SET name = $2, motto = $3, call_sign = $4, clan_banner_data = $5, updated_at = $6`)
-	if err != nil {
-		logger.Warn("ERROR_PREPARING_UPSERT_CLAN", map[string]any{logging.ERROR: err.Error()})
-	}
-	defer upsertClan.Close()
-
-	insertMember, err := tx.PrepareContext(ctx, `INSERT INTO clan_members (group_id, membership_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`)
-	if err != nil {
-		logger.Warn("ERROR_PREPARING_INSERT_MEMBER", map[string]any{logging.ERROR: err.Error()})
-	}
-	defer insertMember.Close()
-
-	logger.Info("PREPARED_STATEMENTS", map[string]any{})
-
-	memberFailurePointer := new(int32)
-	clanMemberCountPointer := new(int32)
-	for i := 0; i < *reqs; i++ {
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			for group := range groupChannel {
-				clanBannerData, clanName, callSign, motto, err := clan.ParseClanDetails(&group)
+			for player := range playerQueue {
+				groups, err := fetchPlayerGroups(ctx, player)
 				if err != nil {
-					logger.Warn("ERROR_PARSING_CLAN_DETAILS", map[string]any{logging.ERROR: err.Error()})
+					logger.Warn("PLAYER_GROUPS_FAILED", map[string]any{
+						logging.MEMBERSHIP_ID: player.membershipId,
+						logging.ERROR:         err.Error(),
+					})
+					continue
+				}
+				if groups == nil {
+					continue
 				}
 
-				_, err = upsertClan.ExecContext(ctx, group.GroupId, clanName, motto, callSign, clanBannerData, time.Now().UTC())
-				if err != nil {
-					logger.Warn("ERROR_UPSERTING_CLAN", map[string]any{logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
-				}
-
-				for page := 1; ; page++ {
-					var err error
-					var results *bungie.SearchResultOfGroupMember
-					attempts := 0
-					for attempts < 4 {
-						result, err := bungie.Client.GetMembersOfGroup(group.GroupId, page)
-						if result.BungieErrorCode == bungie.GroupNotFound {
-							break
-						} else if err != nil {
-							logger.Warn("ERROR_GETTING_MEMBERS_OF_GROUP", map[string]any{logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
-							attempts++
-							continue
-						}
-						if !result.Success || result.Data == nil {
-							break
-						}
-						results = result.Data
-
-						atomic.AddInt32(clanMemberCountPointer, int32(len(results.Results)))
-						for _, member := range results.Results {
-							var exists bool
-							err := postgres.DB.QueryRowContext(ctx, `SELECT true FROM player WHERE membership_id = $1`, member.DestinyUserInfo.MembershipId).Scan(&exists)
-							if err != nil {
-								atomic.AddInt32(memberFailurePointer, 1)
-								if err == sql.ErrNoRows {
-									publishing.PublishTextMessage(ctx, routing.PlayerCrawl, fmt.Sprintf("%d", member.DestinyUserInfo.MembershipId))
-									// if member.LastOnlineStatusChange != 0 {
-									// 	logger.InfoF("Player %d, last seen %s, is not in the database, sending to player_crawl", member.DestinyUserInfo.MembershipId, time.Unix(member.LastOnlineStatusChange, 0))
-									// }
-								} else {
-									logger.Warn("ERROR_CHECKING_PLAYER_EXISTS", map[string]any{logging.MEMBERSHIP_ID: member.DestinyUserInfo.MembershipId, logging.ERROR: err.Error()})
-								}
-							} else {
-								_, err := insertMember.ExecContext(ctx, group.GroupId, member.DestinyUserInfo.MembershipId)
-								if err != nil {
-									logger.Warn("ERROR_INSERTING_MEMBER_INTO_CLAN", map[string]any{logging.MEMBERSHIP_ID: member.DestinyUserInfo.MembershipId, logging.GROUP_ID: group.GroupId, logging.ERROR: err.Error()})
-
-								}
-							}
-
-						}
-						break
-					}
-
-					if err != nil || !results.HasMore {
-						break
-					}
+				atomic.AddInt32(processedCount, 1)
+				for groupId, group := range groups {
+					clanMap.Store(groupId, group)
 				}
 			}
 		}()
 	}
 
-	// Begin processing the clans
-	logger.Info("PROCESSING_CLANS", map[string]any{})
-	groupSet.Range(func(_, group any) bool {
-		groupChannel <- group.(bungie.GroupV2)
+	for _, player := range players {
+		playerQueue <- player
+	}
+	close(playerQueue)
+	wg.Wait()
+
+	result := make(map[int64]bungie.GroupV2)
+	clanMap.Range(func(key, value any) bool {
+		result[key.(int64)] = value.(bungie.GroupV2)
 		return true
 	})
-	close(groupChannel)
+
+	return result, *processedCount
+}
+
+func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]bungie.GroupV2, error) {
+	for attempt := 0; attempt < 4; attempt++ {
+		result, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
+		if err != nil {
+			logger.Warn("GET_GROUPS_ERROR", map[string]any{
+				logging.MEMBERSHIP_ID: player.membershipId,
+				"membership_type":     player.membershipType,
+				logging.ERROR:         err.Error(),
+			})
+			time.Sleep(time.Second * time.Duration((attempt+1)*2))
+			continue
+		}
+		if !result.Success || result.Data == nil {
+			return nil, nil
+		}
+		
+		groups := make(map[int64]bungie.GroupV2)
+		for _, g := range result.Data.Results {
+			// Only include active memberships
+			if !result.Data.AreAllMembershipsInactive[g.Group.GroupId] {
+				groups[g.Group.GroupId] = g.Group
+			}
+		}
+		return groups, nil
+	}
+	return nil, nil
+}
+
+type processingStats struct {
+	total         int32
+	successful    int32
+	failed        int32
+	queuedForCrawl int32
+}
+
+func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, concurrency int) processingStats {
+	tx, err := postgres.DB.BeginTx(ctx, nil)
+	if err != nil {
+		logger.Fatal("ERROR_BEGINNING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+	}
+	defer tx.Rollback()
+
+	// Truncate clan members table
+	if _, err := tx.ExecContext(ctx, `TRUNCATE TABLE clan.clan_members`); err != nil {
+		logger.Fatal("ERROR_TRUNCATING_CLAN_MEMBERS", map[string]any{logging.ERROR: err.Error()})
+	}
+
+	// Prepare statements
+	upsertClan, err := tx.PrepareContext(ctx, `
+		INSERT INTO clan.clan (group_id, name, motto, call_sign, clan_banner_data, updated_at) 
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (group_id)
+		DO UPDATE SET name = $2, motto = $3, call_sign = $4, clan_banner_data = $5, updated_at = $6`)
+	if err != nil {
+		logger.Fatal("ERROR_PREPARING_UPSERT_CLAN", map[string]any{logging.ERROR: err.Error()})
+	}
+	defer upsertClan.Close()
+
+	insertMember, err := tx.PrepareContext(ctx, `
+		INSERT INTO clan.clan_members (group_id, membership_id) 
+		VALUES ($1, $2) 
+		ON CONFLICT DO NOTHING`)
+	if err != nil {
+		logger.Fatal("ERROR_PREPARING_INSERT_MEMBER", map[string]any{logging.ERROR: err.Error()})
+	}
+	defer insertMember.Close()
+
+	// Process clans concurrently
+	clanQueue := make(chan bungie.GroupV2, len(clans))
+	stats := processingStats{}
+
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for group := range clanQueue {
+				clanStats := processClan(ctx, tx, upsertClan, insertMember, &group)
+				atomic.AddInt32(&stats.total, clanStats.total)
+				atomic.AddInt32(&stats.successful, clanStats.successful)
+				atomic.AddInt32(&stats.failed, clanStats.failed)
+				atomic.AddInt32(&stats.queuedForCrawl, clanStats.queuedForCrawl)
+			}
+		}()
+	}
+
+	for _, clan := range clans {
+		clanQueue <- clan
+	}
+	close(clanQueue)
 	wg.Wait()
 
 	if err := tx.Commit(); err != nil {
-		logger.Warn("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
 	}
 
-	logger.Info("INSERTED_CLAN_MEMBERS", map[string]any{
-		logging.SUCCESSFUL: *clanMemberCountPointer - *memberFailurePointer,
-		logging.TOTAL:      *clanMemberCountPointer,
-		logging.FAILED:     *memberFailurePointer,
-	})
+	return stats
+}
 
-	logger.Info("REFRESHING_LEADERBOARDS", map[string]any{})
-	_, err = postgres.DB.ExecContext(ctx, `REFRESH MATERIALIZED VIEW clan_leaderboard WITH DATA`)
+func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.Stmt, group *bungie.GroupV2) processingStats {
+	stats := processingStats{}
+
+	// Parse and upsert clan details
+	clanBannerData, clanName, callSign, motto, err := clan.ParseClanDetails(group)
 	if err != nil {
-		logger.Warn("ERROR_REFRESHING_CLAN_LEADERBOARD", map[string]any{logging.ERROR: err.Error()})
+		logger.Warn("ERROR_PARSING_CLAN_DETAILS", map[string]any{
+			logging.GROUP_ID: group.GroupId,
+			logging.ERROR:    err.Error(),
+		})
 	}
 
-	logger.Info("PROCESSING_COMPLETE", map[string]any{})
+	if _, err := upsertClan.ExecContext(ctx, group.GroupId, clanName, motto, callSign, clanBannerData, time.Now().UTC()); err != nil {
+		logger.Warn("ERROR_UPSERTING_CLAN", map[string]any{
+			logging.GROUP_ID: group.GroupId,
+			logging.ERROR:    err.Error(),
+		})
+	}
+
+	// Fetch and insert all clan members (with pagination)
+	queuedForCrawl := 0
+	for page := 1; ; page++ {
+		members, hasMore, err := fetchClanMembersPage(ctx, group.GroupId, page)
+		if err != nil {
+			logger.Warn("ERROR_FETCHING_CLAN_MEMBERS", map[string]any{
+				logging.GROUP_ID: group.GroupId,
+				"page":           page,
+				logging.ERROR:    err.Error(),
+			})
+			break
+		}
+		if members == nil {
+			break
+		}
+
+		for _, member := range members {
+			stats.total++
+			membershipId := member.DestinyUserInfo.MembershipId
+
+			// Check if player exists in database
+			var exists bool
+			err := postgres.DB.QueryRowContext(ctx, `SELECT true FROM core.player WHERE membership_id = $1`, membershipId).Scan(&exists)
+			if err != nil {
+				stats.failed++
+				if err == sql.ErrNoRows {
+					// Player doesn't exist, send to crawl queue
+					queuedForCrawl++
+					publishing.PublishInt64Message(ctx, routing.PlayerCrawl, membershipId)
+				} else {
+					logger.Warn("ERROR_CHECKING_PLAYER_EXISTS", map[string]any{
+						logging.MEMBERSHIP_ID: membershipId,
+						logging.ERROR:         err.Error(),
+					})
+				}
+				continue
+			}
+
+			// Insert clan member
+			if _, err := insertMember.ExecContext(ctx, group.GroupId, membershipId); err != nil {
+				logger.Warn("ERROR_INSERTING_MEMBER", map[string]any{
+					logging.MEMBERSHIP_ID: membershipId,
+					logging.GROUP_ID:      group.GroupId,
+					logging.ERROR:         err.Error(),
+				})
+				stats.failed++
+			} else {
+				stats.successful++
+			}
+		}
+
+		if !hasMore {
+			break
+		}
+	}
+
+	if queuedForCrawl > 0 {
+		logger.Debug("CLAN_MEMBERS_QUEUED_FOR_CRAWL", map[string]any{
+			logging.GROUP_ID: group.GroupId,
+			logging.COUNT:    queuedForCrawl,
+		})
+	}
+	
+	stats.queuedForCrawl = int32(queuedForCrawl)
+	return stats
+}
+
+func fetchClanMembersPage(ctx context.Context, groupId int64, page int) ([]bungie.GroupMember, bool, error) {
+	for attempt := 0; attempt < 4; attempt++ {
+		result, err := bungie.Client.GetMembersOfGroup(groupId, page)
+		if err != nil {
+			if attempt < 3 {
+				time.Sleep(time.Second * time.Duration((attempt+1)*2))
+			}
+			continue
+		}
+
+		if result.BungieErrorCode == bungie.GroupNotFound {
+			return nil, false, nil
+		}
+
+		if !result.Success || result.Data == nil {
+			return nil, false, nil
+		}
+
+		return result.Data.Results, result.Data.HasMore, nil
+	}
+	return nil, false, nil
+}
+
+func refreshClanLeaderboard(ctx context.Context) error {
+	logger.Debug("REFRESHING_LEADERBOARDS", map[string]any{})
+	_, err := postgres.DB.ExecContext(ctx, `REFRESH MATERIALIZED VIEW leaderboard.clan_leaderboard WITH DATA`)
+	return err
 }
 
 func main() {

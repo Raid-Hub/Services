@@ -11,8 +11,8 @@ var (
 	buffer           = flag.Int64("buffer", -1, "number of ids to start behind last added (-1 means auto: 10000 in prod, 0 in dev)")
 	targetInstanceId = flag.Int64("target", -1, "specific instance id to start at (optional)")
 	maxWorkersFlag   = flag.Int("max-workers", 0, "maximum number of workers (0 uses default constant, or 8 in dev mode)")
-	devFlag          = flag.Bool("dev", false, "enable dev mode (defaults: skip=5, max-workers=8, buffer=0)")
-	devSkip          = flag.Int("dev-skip", 0, "skip N instances between each processed instance (requires --dev flag, defaults to 5)")
+	devFlag          = flag.Bool("dev", false, "enable dev mode (defaults: skip=3, max-workers=8, buffer=0)")
+	devSkip          = flag.Int("dev-skip", 0, "skip N instances between each processed instance (requires --dev flag, defaults to 3)")
 )
 
 func parseConfig() AtlasConfig {
@@ -24,18 +24,18 @@ func parseConfig() AtlasConfig {
 	// Handle buffer default based on mode
 	if *buffer == -1 {
 		if *devFlag {
-			effectiveBuffer = 0
+			effectiveBuffer = 100
 		} else {
 			effectiveBuffer = 10_000
 		}
 	}
 
 	if *devFlag {
-		// Default dev-skip to 4 if not explicitly set (every 5 ids)
+		// Default dev-skip to 2 if not explicitly set (every 3 ids)
 		if *devSkip == 0 {
-			effectiveDevSkip = 4
+			effectiveDevSkip = 2
 		} else {
-			effectiveDevSkip = *devSkip
+			effectiveDevSkip = (*devSkip - 1)
 		}
 		// Default max-workers to 8 if not explicitly set
 		if *maxWorkersFlag == 0 {

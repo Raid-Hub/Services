@@ -36,7 +36,7 @@ func sanitizeVersionForFilename(version string) string {
 // DownloadManifest is the command function for downloading and processing Destiny 2 manifest
 // Usage: ./bin/manifest-downloader [-out=<directory>] [-f] [-disk]
 func DownloadManifest() string {
-	out := flag.String("out", "", "where to store the sqlite (required)")
+	out := flag.String("out", ".raidhub/defs", "where to store the sqlite (required)")
 	force := flag.Bool("f", false, "force the defs to be updated")
 	fromDisk := flag.Bool("disk", false, "read from disk, not bnet")
 

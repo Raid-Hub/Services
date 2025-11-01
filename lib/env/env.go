@@ -116,7 +116,7 @@ func init() {
 
 	// Metrics export ports (for Prometheus scraping)
 	AtlasMetricsPort = requireEnv("ATLAS_METRICS_PORT")
-	HermesMetricsPort = requireEnv("HERMES_METRICS_PORT")
+	HermesMetricsPort = getEnv("HERMES_METRICS_PORT") // Optional for individual topic runners
 	ZeusMetricsPort = getEnv("ZEUS_METRICS_PORT")
 
 	if len(envIssues) > 0 {

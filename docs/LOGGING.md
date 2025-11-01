@@ -64,7 +64,7 @@ func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInsta
 
   - `POSTGRES`
   - `MONITORING`
-  - `MIGRATIONS` (in database migrations package)
+  - `MIGRATIONS` (in lib/migrations) or `Migrations` (in lib/database/migrations)
 
 - **Applications** (`apps/`): Use Greek mythology names (matching app names)
 
@@ -74,20 +74,20 @@ func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInsta
   - `hermes`
   - `zeus`
 
-- **Tools** (`tools/`): Use tool-specific names
+- **Tools** (`tools/`): Use tool-specific names (SCREAMING_SNAKE_CASE)
 
-  - `missed_pgcr`
-  - `manifest_downloader`
-  - `leaderboard_clan_crawl`
-  - `cheat_detection`
-  - `refresh_view`
-  - `tools` (for general tool logging)
-  - `flag_restricted`
-  - `process_pgcr`
-  - `fix_sherpa`
-  - `update_skull`
-  - `seed`
-  - `migrations`
+  - `MISSED_PGCR`
+  - `MANIFEST_DOWNLOADER`
+  - `LEADERBOARD_CLAN_CRAWL`
+  - `CHEAT_DETECTION`
+  - `REFRESH_VIEW_TOOL`
+  - `TOOLS` (for general tool logging)
+  - `FLAG_RESTRICTED_TOOL`
+  - `PROCESS_PGCR_TOOL`
+  - `FIX_SHERPA_TOOL`
+  - `UPDATE_SKULL_TOOL`
+  - `SEED`
+  - `MIGRATIONS` or `Migrations` (depending on package)
 
 - **Web Clients** (`lib/web/`): Use service name with `_CLIENT`
   - `BUNGIE_CLIENT`
