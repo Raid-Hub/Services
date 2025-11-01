@@ -1,15 +1,15 @@
 package bungie
 
-// ResolveMembershipType tries a known membership type first (if provided),
+// ResolveProfile tries a known membership type first (if provided),
 // then iterates common types until a valid profile is found.
 // Returns the resolved membership type and the successful profile result.
-func ResolveMembershipType(membershipId int64, knownType *int) (int, BungieHttpResult[DestinyProfileResponse], error) {
+func ResolveProfile(membershipId int64, knownType *int) (int, BungieHttpResult[DestinyProfileResponse], error) {
 	var result BungieHttpResult[DestinyProfileResponse]
 	var err error
 
 	// If we have a known membership type, try it first
 	if knownType != nil {
-		result, err = Client.GetProfile(*knownType, membershipId, []int{100})
+		result, err = Client.GetProfile(*knownType, membershipId, []int{100, 200})
 		if err == nil && result.Success && result.Data != nil {
 			return *knownType, result, nil
 		}
@@ -20,7 +20,7 @@ func ResolveMembershipType(membershipId int64, knownType *int) (int, BungieHttpR
 		if knownType != nil && mt == *knownType {
 			continue
 		}
-		result, err = Client.GetProfile(mt, membershipId, []int{100})
+		result, err = Client.GetProfile(mt, membershipId, []int{100, 200})
 		if err == nil && result.Success && result.Data != nil {
 			return mt, result, nil
 		}

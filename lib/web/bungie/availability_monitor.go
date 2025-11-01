@@ -16,18 +16,20 @@ var (
 
 // globalAPIMonitor manages a single polling goroutine for all systems
 type globalAPIMonitor struct {
-	systems   map[string]*systemMonitor
-	mu        sync.RWMutex
-	stopChan  chan struct{}
-	updateChan chan string // Channel to signal immediate system updates
+	systems       map[string]*systemMonitor
+	mu            sync.RWMutex
+	stopChan      chan struct{}
+	updateChan    chan string   // Channel to signal immediate system updates
+	newSystemChan chan struct{} // Channel to signal that a new system was registered
+	updateMutex   sync.Mutex    // Mutex to ensure only one API request at a time
 }
 
 // systemMonitor tracks availability for a specific system
 type systemMonitor struct {
-	systemName  string
-	monitorWG   sync.WaitGroup
-	available   bool
-	mu          sync.RWMutex
+	systemName string
+	monitorWG  sync.WaitGroup
+	available  bool
+	mu         sync.RWMutex
 }
 
 // getGlobalMonitor returns the singleton global monitor
@@ -35,9 +37,10 @@ func getGlobalMonitor() *globalAPIMonitor {
 	globalMonitorLock.Do(func() {
 		globalMonitorLogger = logging.NewLogger("BUNGIE_API_MONITOR")
 		globalMonitor = &globalAPIMonitor{
-			systems:    make(map[string]*systemMonitor),
-			stopChan:   make(chan struct{}),
-			updateChan: make(chan string, 100), // Buffered channel for immediate signals
+			systems:       make(map[string]*systemMonitor),
+			stopChan:      make(chan struct{}),
+			updateChan:    make(chan string, 100),  // Buffered channel for immediate signals
+			newSystemChan: make(chan struct{}, 10), // Buffered channel for new system registrations
 		}
 		go globalMonitor.monitor()
 	})
@@ -58,11 +61,11 @@ type APIAvailabilityMonitor struct {
 func (gm *globalAPIMonitor) getSystemMonitor(systemName string) *APIAvailabilityMonitor {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
-	
+
 	if monitor, exists := gm.systems[systemName]; exists {
 		return &APIAvailabilityMonitor{system: monitor}
 	}
-	
+
 	// Create new system monitor
 	monitor := &systemMonitor{
 		systemName: systemName,
@@ -70,8 +73,17 @@ func (gm *globalAPIMonitor) getSystemMonitor(systemName string) *APIAvailability
 	}
 	// Start with workers blocked
 	monitor.monitorWG.Add(1)
-	
+
 	gm.systems[systemName] = monitor
+
+	// Signal that a new system was registered so it can be checked immediately
+	// This prevents workers that register late from missing the first cycle
+	select {
+	case gm.newSystemChan <- struct{}{}:
+	default:
+		// Channel full, will be caught on next poll
+	}
+
 	return &APIAvailabilityMonitor{system: monitor}
 }
 
@@ -90,6 +102,19 @@ func (gm *globalAPIMonitor) monitor() {
 		case systemName := <-gm.updateChan:
 			// Immediate block requested for specific system (no API call needed)
 			gm.blockSystemImmediately(systemName)
+		case <-gm.newSystemChan:
+			// New system registered, immediately check API status for all systems
+			// Drain any additional pending signals to avoid redundant API calls
+			drained := true
+			for drained {
+				select {
+				case <-gm.newSystemChan:
+					// Drain additional signals
+				default:
+					drained = false
+				}
+			}
+			gm.updateAllSystems()
 		case <-gm.stopChan:
 			return
 		}
@@ -97,7 +122,11 @@ func (gm *globalAPIMonitor) monitor() {
 }
 
 // updateAllSystems checks API availability for all systems from a single settings call
+// Only one API request will be made at a time, even if called concurrently
 func (gm *globalAPIMonitor) updateAllSystems() {
+	gm.updateMutex.Lock()
+	defer gm.updateMutex.Unlock()
+
 	result, err := Client.GetCommonSettings()
 	if err != nil {
 		globalMonitorLogger.Error("BUNGIE_SETTINGS_CHECK_ERROR", map[string]any{
@@ -111,11 +140,11 @@ func (gm *globalAPIMonitor) updateAllSystems() {
 		})
 		return
 	}
-	
+
 	// Update all registered systems
 	gm.mu.RLock()
 	defer gm.mu.RUnlock()
-	
+
 	for _, monitor := range gm.systems {
 		gm.updateSystemState(monitor, result.Data.Systems)
 	}
@@ -127,16 +156,16 @@ func (gm *globalAPIMonitor) blockSystemImmediately(systemName string) {
 	gm.mu.RLock()
 	monitor, exists := gm.systems[systemName]
 	gm.mu.RUnlock()
-	
+
 	if !exists {
 		return
 	}
-	
+
 	monitor.mu.Lock()
 	wasAvailable := monitor.available
 	monitor.available = false // Block the system
 	monitor.mu.Unlock()
-	
+
 	// Only update wait group if transitioning from available to disabled
 	if wasAvailable {
 		globalMonitorLogger.Info("BUNGIE_API_DISABLED", map[string]any{
@@ -154,7 +183,7 @@ func (gm *globalAPIMonitor) updateSystemState(monitor *systemMonitor, systems ma
 	if system, exists := systems[monitor.systemName]; exists {
 		isAPIDisabled = !system.Enabled
 	}
-	
+
 	monitor.mu.Lock()
 	wasAvailable := monitor.available
 	monitor.available = !isAPIDisabled
@@ -211,20 +240,19 @@ func GetCompositeAPIAvailabilityMonitor(systemNames []string) *utils.ReadOnlyWai
 	if len(systemNames) == 0 {
 		return nil
 	}
-	
+
 	if len(systemNames) == 1 {
 		monitor := GetAPIAvailabilityMonitor(systemNames[0])
 		return monitor.GetReadOnlyWaitGroup()
 	}
-	
+
 	// Get monitors for each system
 	var wgs []*utils.ReadOnlyWaitGroup
 	for _, systemName := range systemNames {
 		monitor := GetAPIAvailabilityMonitor(systemName)
 		wgs = append(wgs, monitor.GetReadOnlyWaitGroup())
 	}
-	
+
 	// Create a composite wait group
 	return utils.NewReadOnlyWaitGroupMulti(wgs)
 }
-

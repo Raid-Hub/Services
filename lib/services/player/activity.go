@@ -24,7 +24,7 @@ func UpdateActivityHistory(membershipIdStr string) error {
 		logging.MEMBERSHIP_ID: membershipId,
 	})
 
-	// Get player
+	// Get player to check current privacy status
 	p, err := GetPlayer(membershipId)
 	if err != nil {
 		logger.Error("PLAYER_GET_ERROR", map[string]any{
@@ -50,33 +50,43 @@ func UpdateActivityHistory(membershipIdStr string) error {
 		return err
 	}
 
-	// Fetch activity history for each character
+	// Fetch activity history for each character concurrently
 	var wg sync.WaitGroup
 	instanceIds := make(chan int64, 100)
+	hasPrivacyError := false
+	var privacyErrorMu sync.Mutex
 
 	wg.Add(len(characters))
 	for _, char := range characters {
 		go func(characterId int64) {
 			defer wg.Done()
-			// Fetch activity history for this character (membershipType 2 = Xbox, mode 4 = All)
-			err := bungie.Client.GetActivityHistoryInChannel(2, membershipId, characterId, 5, instanceIds)
-			if err != nil {
+			// Fetch activity history for this character
+			result := bungie.Client.GetActivityHistoryInChannel(2, membershipId, characterId, 5, instanceIds)
+
+			if result.Error != nil {
 				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", map[string]any{
 					logging.MEMBERSHIP_ID: membershipId,
 					"character_id":        characterId,
-					logging.ERROR:         err.Error(),
+					logging.ERROR:         result.Error.Error(),
 				})
+			}
+
+			// Check for privacy restriction
+			if result.PrivacyErrorCode == bungie.DestinyPrivacyRestriction {
+				privacyErrorMu.Lock()
+				hasPrivacyError = true
+				privacyErrorMu.Unlock()
 			}
 		}(char.CharacterID)
 	}
 
-	// Close channel when all fetches are done
+	// Close instanceIds channel when all fetches are done
 	go func() {
 		wg.Wait()
 		close(instanceIds)
 	}()
 
-	// Store activities to database
+	// Collect instance IDs
 	activityCount := 0
 	for range instanceIds {
 		activityCount++
@@ -85,6 +95,9 @@ func UpdateActivityHistory(membershipIdStr string) error {
 		logging.MEMBERSHIP_ID: membershipId,
 		logging.COUNT:         activityCount,
 	})
+
+	// Update privacy status if it changed
+	checkAndUpdatePrivacy(membershipId, hasPrivacyError)
 
 	// Update the last crawled timestamp
 	err = UpdateHistoryLastCrawled(membershipId)

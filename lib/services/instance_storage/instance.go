@@ -21,7 +21,7 @@ type StoreSideEffects struct {
 // Store stores instance data to the database within a transaction
 // Returns (sideEffects, isNew, error) - isNew indicates if this was a new instance (not duplicate)
 func Store(tx *sql.Tx, inst *dto.Instance) (*StoreSideEffects, bool, error) {
-	sideEffects := &StoreSideEffects{}	
+	sideEffects := &StoreSideEffects{}
 
 	activityInfo, err := getActivityInfo(inst.Hash)
 	if err != nil {

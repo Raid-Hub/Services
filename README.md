@@ -123,7 +123,6 @@ make seed         # Populate seed data
 ### Configuration
 
 ```bash
-make config       # Generate service configurations and database roles
 make cron         # Install cron jobs from infrastructure/cron/prod.crontab
 ```
 

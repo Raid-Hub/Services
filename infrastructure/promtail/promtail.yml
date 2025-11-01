@@ -6,7 +6,33 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
+  # Local Loki (Docker Compose)
   - url: http://loki:3100/loki/api/v1/push
+
+  # Remote Loki (uncomment and configure for remote/Grafana Cloud)
+  # - url: https://<user-id>:<api-key>@logs-prod-XXX.grafana.net/loki/api/v1/push
+  #   tenant_id: <tenant-id>  # Optional: for multi-tenant setups
+  #   basic_auth:
+  #     username: <user-id>
+  #     password: <api-key>
+  #   headers:
+  #     X-Scope-OrgID: <tenant-id>  # Alternative to tenant_id
+
+# Reusable pipeline stages for parsing structured logs
+x-pipeline-stages: &pipeline-stages
+  - regex:
+      # Match log format: [LEVEL][LOGGER] -- EVENT >> key=value key2=value2
+      expression: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+  - template:
+      source: level
+      template: "{{ ToLower .level }}"
+  - labels:
+      level:
+      logger:
+      event:
+  - logfmt:
+      mapping:
+        kv: .
 
 scrape_configs:
   # Scrape Docker container logs via Docker service discovery
@@ -24,26 +50,28 @@ scrape_configs:
       # - source_labels:
       #     ["__meta_docker_container_label_com_docker_compose_project"]
       #   target_label: "project"
-    pipeline_stages:
-      - regex:
-          # Match log format: [LEVEL][LOGGER] -- EVENT >> key=value key2=value2
-          # Timestamp is handled automatically by Loki/Promtail from Docker logs
-          expression: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
-      - template:
-          source: level
-          template: "{{ ToLower .level }}"
-      - labels:
-          level:
-          logger:
-          event:
-      - logfmt:
-          mapping:
-            kv: .
+    pipeline_stages: *pipeline-stages
 
-  # Optional: scrape host-mapped log files (e.g., ClickHouse logs under volumes/logs)
-  # - job_name: host_logs
+  # Production mode: scrape log files from filesystem (when not using Docker)
+  # Uncomment and configure paths when running services as native processes
+  # - job_name: file_logs
   #   static_configs:
   #     - targets: [localhost]
   #       labels:
-  #         job: host_logs
-  #         __path__: /host/logs/**/*
+  #         job: file_logs
+  #         __path__: /var/log/raidhub/**/*.log
+  #   pipeline_stages: *pipeline-stages
+
+  # Scrape systemd journal logs (useful when services run as systemd units)
+  # - job_name: journal
+  #   journal:
+  #     max_age: 12h
+  #     path: /var/log/journal
+  #     labels:
+  #       job: systemd-journal
+  #   relabel_configs:
+  #     - source_labels: ["__journal__systemd_unit"]
+  #       target_label: "unit"
+  #     - source_labels: ["__journal__hostname"]
+  #       target_label: "hostname"
+  #   pipeline_stages: *pipeline-stages

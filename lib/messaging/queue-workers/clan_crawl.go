@@ -23,7 +23,7 @@ func ClanCrawlTopic() processing.Topic {
 		ScaleDownThreshold:    10,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
-		BungieSystemDeps:         []string{"Groups", "Clans", "Destiny2"},
+		BungieSystemDeps:      []string{"Groups", "Clans", "Destiny2"},
 	}, processClanCrawl)
 }
 

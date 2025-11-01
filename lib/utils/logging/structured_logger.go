@@ -92,31 +92,40 @@ func (l *StructuredLogger) log(level string, key string, fields map[string]any) 
 
 	switch level {
 	case info, debug:
-		fmt.Fprintf(os.Stdout, "%s%s\n", prefix, output)
+		fmt.Fprintf(stdoutWriter, "%s%s\n", prefix, output)
 	case warn, error, fatal:
-		fmt.Fprintf(os.Stderr, "%s%s\n", prefix, output)
+		fmt.Fprintf(stderrWriter, "%s%s\n", prefix, output)
 	}
 }
 
 func (l *StructuredLogger) Info(key string, fields map[string]any) {
-	l.log(info, key, fields)
+	if ShouldLog(LevelInfo) {
+		l.log(info, key, fields)
+	}
 }
 
 func (l *StructuredLogger) Warn(key string, fields map[string]any) {
-	l.log(warn, key, fields)
+	if ShouldLog(LevelWarn) {
+		l.log(warn, key, fields)
+	}
 }
 
 func (l *StructuredLogger) Error(key string, fields map[string]any) {
-	l.log(error, key, fields)
+	if ShouldLog(LevelError) {
+		l.log(error, key, fields)
+	}
 }
 
 func (l *StructuredLogger) Debug(key string, fields map[string]any) {
-	if IsVerbose() {
+	if ShouldLog(LevelDebug) {
 		l.log(debug, key, fields)
 	}
 }
 
 func (l *StructuredLogger) Fatal(key string, fields map[string]any) {
-	l.log(fatal, key, fields)
+	// Fatal logs are always shown when error level is enabled (fatal is not a separate configurable level)
+	if ShouldLog(LevelError) {
+		l.log(fatal, key, fields)
+	}
 	os.Exit(1)
 }

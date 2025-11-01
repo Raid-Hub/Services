@@ -47,7 +47,8 @@ func GetPlayer(membershipId int64) (*Player, error) {
 }
 
 // CreateOrUpdatePlayer creates or updates a player
-func CreateOrUpdatePlayer(p *Player) error {
+// Returns the saved player DTO, whether it was updated (not created), and any error
+func CreateOrUpdatePlayer(p *Player) (*Player, bool, error) {
 	now := time.Now()
 
 	// Set default values for required fields if not provided
@@ -58,6 +59,13 @@ func CreateOrUpdatePlayer(p *Player) error {
 	firstSeen := p.FirstSeen
 	if firstSeen.IsZero() {
 		firstSeen = now
+	}
+
+	// Check if player exists
+	var exists bool
+	err := postgres.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM player WHERE membership_id = $1)", p.MembershipId).Scan(&exists)
+	if err != nil {
+		return nil, false, err
 	}
 
 	query := `
@@ -83,6 +91,16 @@ func CreateOrUpdatePlayer(p *Player) error {
 			last_seen = GREATEST(player.last_seen, EXCLUDED.last_seen),
 			first_seen = LEAST(player.first_seen, EXCLUDED.first_seen),
 			updated_at = NOW()
+		RETURNING 
+			membership_id,
+			membership_type,
+			display_name,
+			icon_path,
+			bungie_global_display_name,
+			bungie_global_display_name_code,
+			last_seen,
+			first_seen,
+			updated_at
 	`
 
 	var membershipType *int
@@ -90,7 +108,10 @@ func CreateOrUpdatePlayer(p *Player) error {
 		membershipType = p.MembershipType
 	}
 
-	_, err := postgres.DB.Exec(
+	var savedPlayer Player
+	var savedMembershipType *int
+	var updatedAt time.Time
+	err = postgres.DB.QueryRow(
 		query,
 		p.MembershipId,
 		membershipType,
@@ -100,8 +121,27 @@ func CreateOrUpdatePlayer(p *Player) error {
 		p.BungieGlobalDisplayNameCode,
 		lastSeen,
 		firstSeen,
+	).Scan(
+		&savedPlayer.MembershipId,
+		&savedMembershipType,
+		&savedPlayer.DisplayName,
+		&savedPlayer.IconPath,
+		&savedPlayer.BungieGlobalDisplayName,
+		&savedPlayer.BungieGlobalDisplayNameCode,
+		&savedPlayer.LastSeen,
+		&savedPlayer.FirstSeen,
+		&updatedAt,
 	)
-	return err
+	if err != nil {
+		return nil, false, err
+	}
+
+	if savedMembershipType != nil {
+		savedPlayer.MembershipType = savedMembershipType
+	}
+
+	// Return the saved player, whether it was updated (not created), and nil error
+	return &savedPlayer, exists, nil
 }
 
 // UpdateHistoryLastCrawled updates the timestamp when player history was last crawled
@@ -114,6 +154,41 @@ func UpdateHistoryLastCrawled(membershipId int64) error {
 
 	_, err := postgres.DB.Exec(query, membershipId)
 	return err
+}
+
+// checkAndUpdatePrivacy checks the current privacy status and updates it if it changed
+// Returns true if the privacy status was updated
+func checkAndUpdatePrivacy(membershipId int64, isPrivate bool) (bool, error) {
+	// Get current privacy status
+	var currentIsPrivate bool
+	err := postgres.DB.QueryRow("SELECT is_private FROM player WHERE membership_id = $1", membershipId).Scan(&currentIsPrivate)
+	if err != nil {
+		logger.Warn("ERROR_GETTING_PRIVACY_STATUS", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.ERROR:         err.Error(),
+		})
+		return false, err
+	}
+
+	// Update privacy status if it changed
+	if isPrivate != currentIsPrivate {
+		_, err = postgres.DB.Exec("UPDATE player SET is_private = $1 WHERE membership_id = $2", isPrivate, membershipId)
+		if err != nil {
+			logger.Warn("ERROR_UPDATING_PRIVACY_STATUS", map[string]any{
+				logging.MEMBERSHIP_ID: membershipId,
+				logging.ERROR:         err.Error(),
+			})
+			return false, err
+		}
+		logger.Info("HISTORY_PRIVACY_UPDATED", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			"is_private":          isPrivate,
+			"was_private":         currentIsPrivate,
+		})
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // GetPlayersNeedingHistoryUpdate gets players that need their history updated

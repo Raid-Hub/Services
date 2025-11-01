@@ -21,15 +21,15 @@ const (
 // Worker represents a message processing worker with structured logging
 type Worker struct {
 	// Public fields (accessed by processors)
-	ID            int
-	QueueName     string
-	Topic         processing.Topic
-	logger        logging.Logger
+	ID        int
+	QueueName string
+	Topic     processing.Topic
+	logger    logging.Logger
 
 	// Private fields (internal worker state)
-	ctx         context.Context         // Worker context that cancels on shutdown or autoscale
-	cancel      context.CancelCauseFunc // Cancel function for worker context (with cause)
-	amqpChannel *amqp.Channel           // RabbitMQ channel for this worker
+	ctx         context.Context          // Worker context that cancels on shutdown or autoscale
+	cancel      context.CancelCauseFunc  // Cancel function for worker context (with cause)
+	amqpChannel *amqp.Channel            // RabbitMQ channel for this worker
 	wg          *utils.ReadOnlyWaitGroup // API availability wait group
 	channel     <-chan amqp.Delivery
 	processor   processing.ProcessorFunc

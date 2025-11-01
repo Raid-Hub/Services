@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cron Manager</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <h1>Cron Manager</h1>
+    <div id="status"></div>
+
+    <h2>Most Recent Trigger</h2>
+    <div id="recentTrigger" style="margin-bottom: 20px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span id="triggerSpinner" class="spinner" style="display: none"></span>
+        <span
+          id="triggerCheckmark"
+          style="
+            display: none;
+            color: #6a9955;
+            font-size: 1.2em;
+            font-weight: bold;
+          "
+          >&check;</span
+        >
+        <span
+          id="triggerError"
+          style="
+            display: none;
+            color: #f48771;
+            font-size: 1.2em;
+            font-weight: bold;
+          "
+          >&times;</span
+        >
+        <div id="triggerStatus" style="color: #808080">No recent triggers</div>
+        <button id="killButton" style="display: none" onclick="killJob()">
+          Kill
+        </button>
+      </div>
+      <div
+        id="triggerLogs"
+        class="log-viewer empty"
+        style="max-height: 400px; margin-top: 10px"
+      ></div>
+      <button
+        id="retryButton"
+        class="retry"
+        style="display: none"
+        onclick="retryJob()"
+      >
+        Retry
+      </button>
+    </div>
+
+    <h2>Environment Variables</h2>
+    <div id="envVars"></div>
+
+    <h2>Jobs</h2>
+    <table id="jobsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Trigger</th>
+          <th>Schedule</th>
+          <th>Command</th>
+          <th>Comment</th>
+        </tr>
+      </thead>
+      <tbody id="jobsBody"></tbody>
+    </table>
+
+    <h2>Logs</h2>
+    <div>
+      <select id="jobSelect">
+        <option value="">Select a job...</option>
+        <option value="ALL">ALL</option>
+      </select>
+      <select id="logType">
+        <option value="stdout">Stdout</option>
+        <option value="stderr">Stderr</option>
+        <option value="both" selected>Both (Combined)</option>
+      </select>
+    </div>
+    <div id="logViewer" class="log-viewer empty">
+      Select a job to see its log output.
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

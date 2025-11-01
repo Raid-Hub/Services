@@ -13,58 +13,91 @@ const (
 
 var logger = logging.NewLogger("BUNGIE_CLIENT")
 
-func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) error {
-	ch := make(chan int)
+// ActivityHistoryResult contains the result of fetching activity history
+type ActivityHistoryResult struct {
+	Error            error
+	PrivacyErrorCode int // Non-zero if privacy restriction detected
+}
 
-	// Fetch first page
+// GetActivityHistoryInChannel fetches activity history pages and sends instance IDs to the output channel.
+// Returns an ActivityHistoryResult indicating if a privacy error occurred.
+func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) ActivityHistoryResult {
+	// Fetch first page to check for privacy errors
 	result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, 0, 4)
 	if err != nil {
-		return err
-	}
-	if !result.Success || result.Data == nil {
-		return fmt.Errorf("failed to fetch first page of activity history")
+		return ActivityHistoryResult{Error: err}
 	}
 
+	// Check for privacy restriction on first page
+	if !result.Success || result.Data == nil {
+		if result.BungieErrorCode == DestinyPrivacyRestriction {
+			return ActivityHistoryResult{PrivacyErrorCode: result.BungieErrorCode}
+		}
+		return ActivityHistoryResult{Error: fmt.Errorf("failed to fetch first page of activity history: %s [%d]", result.BungieErrorStatus, result.BungieErrorCode)}
+	}
+
+	// Send first page activities
 	for _, activity := range result.Data.Activities {
 		out <- activity.ActivityDetails.InstanceId
 	}
 
-	open := true
-	go func() {
-		i := 1
-		for open {
-			ch <- i
-			i++
-		}
-	}()
-
+	// Fetch remaining pages concurrently
+	pageChan := make(chan int, concurrentPages)
+	done := make(chan bool, 1)
 	var wg sync.WaitGroup
-	for j := 0; j < concurrentPages; j++ {
+
+	// Start worker goroutines
+	for i := 0; i < concurrentPages; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			for {
+				select {
+				case page := <-pageChan:
+					result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
+					if err != nil {
+						logger.Warn(API_ERROR, map[string]any{
+							logging.OPERATION: "fetch_activity_history",
+							logging.ERROR:     err.Error(),
+						})
+						continue
+					}
 
-			for page := range ch {
-				result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
-				if err != nil {
-					logger.Warn(API_ERROR, map[string]any{
-						logging.OPERATION: "fetch_activity_history",
-						logging.ERROR:     err.Error(),
-					})
-				}
+					// Stop if no success, no data, or no activities
+					if !result.Success || result.Data == nil || len(result.Data.Activities) == 0 {
+						select {
+						case done <- true:
+						default:
+						}
+						return
+					}
 
-				if !result.Success || result.Data == nil || len(result.Data.Activities) == 0 {
-					break
-				}
-
-				for _, activity := range result.Data.Activities {
-					out <- activity.ActivityDetails.InstanceId
+					// Send activities to output channel
+					for _, activity := range result.Data.Activities {
+						out <- activity.ActivityDetails.InstanceId
+					}
+				case <-done:
+					return
 				}
 			}
 		}()
 	}
 
+	// Send page numbers to workers, starting from page 1
+	go func() {
+		page := 1
+		for {
+			select {
+			case pageChan <- page:
+				page++
+			case <-done:
+				close(pageChan)
+				return
+			}
+		}
+	}()
+
 	wg.Wait()
-	open = false
-	return nil
+	close(done)
+	return ActivityHistoryResult{}
 }

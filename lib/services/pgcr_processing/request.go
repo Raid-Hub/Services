@@ -57,7 +57,6 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 		return ExternalError, nil
 	}
 
-
 	return Success, resp.Data
 }
 

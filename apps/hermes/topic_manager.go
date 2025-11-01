@@ -30,10 +30,10 @@ type scalingState struct {
 
 // TopicManager manages a single topic with self-scaling worker goroutines
 type TopicManager struct {
-	topic         processing.Topic
-	config        processing.TopicConfig
-	ctx context.Context
-	apiWG *utils.ReadOnlyWaitGroup
+	topic  processing.Topic
+	config processing.TopicConfig
+	ctx    context.Context
+	apiWG  *utils.ReadOnlyWaitGroup
 
 	// All fields are private to encapsulate the manager's internal state
 	activeWorkers int
@@ -161,7 +161,7 @@ func startTopicManager(topic processing.Topic, ctx context.Context) (*TopicManag
 		scalingState: scalingState{
 			lastScaleDirection: "none",
 		},
-		ctx: ctx,
+		ctx:   ctx,
 		apiWG: apiWG,
 	}
 
@@ -319,17 +319,17 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 	// Use the managerConfig which already has the API availability wait group if enabled
 
 	worker := &Worker{
-		ID:            workerID,
-		QueueName:     tm.config.QueueName,
-		wg:            tm.apiWG,
-		Topic:         tm.topic,
-		logger:        HermesLogger,
-		ctx:           workerCtx,
-		cancel:        workerCancel,
-		amqpChannel:   ch,
-		channel:       msgs,
-		processor:     tm.topic.Processor,
-		done:          make(chan struct{}),
+		ID:          workerID,
+		QueueName:   tm.config.QueueName,
+		wg:          tm.apiWG,
+		Topic:       tm.topic,
+		logger:      HermesLogger,
+		ctx:         workerCtx,
+		cancel:      workerCancel,
+		amqpChannel: ch,
+		channel:     msgs,
+		processor:   tm.topic.Processor,
+		done:        make(chan struct{}),
 	}
 
 	go worker.Run()
@@ -415,7 +415,6 @@ func (tm *TopicManager) monitorSelfScaling() {
 		}
 	}
 }
-
 
 // shouldScaleWorkers determines if scaling should happen based on dead zone, hysteresis, and cooldown
 func (tm *TopicManager) shouldScaleWorkers(queueDepth, currentWorkers int) (bool, string, int) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"flag"
+	"fmt"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/rabbit"
@@ -68,12 +69,16 @@ func LeaderboardClanCrawl() {
 
 	// Fetch clans for all players
 	startTime := time.Now()
+	logger.Info("FETCHING_CLANS_STARTED", map[string]any{
+		"total_players": len(players),
+		"concurrency":   *reqs,
+	})
 	clans, processedCount := fetchClansForPlayers(ctx, players, *reqs)
 	duration := time.Since(startTime)
 	logger.Info("CLANS_FETCHED", map[string]any{
-		logging.COUNT:            len(clans),
+		logging.COUNT:           len(clans),
 		"players_processed_api": processedCount,
-		logging.DURATION:         duration.Milliseconds(),
+		logging.DURATION:        duration.String(),
 	})
 
 	if len(clans) == 0 {
@@ -84,13 +89,17 @@ func LeaderboardClanCrawl() {
 	}
 
 	// Process clan members and update database
+	logger.Info("PROCESSING_CLANS_STARTED", map[string]any{
+		"total_clans": len(clans),
+		"concurrency": *reqs,
+	})
 	stats := processClanMembers(ctx, clans, *reqs)
 	logger.Info("PROCESSING_COMPLETE", map[string]any{
-		"clans_processed":        len(clans),
-		"members_successful":     stats.successful,
-		"members_total":          stats.total,
-		"members_failed":         stats.failed,
-		"members_queued_crawl":   stats.queuedForCrawl,
+		"clans_processed":      len(clans),
+		"members_successful":   stats.successful,
+		"members_total":        stats.total,
+		"members_failed":       stats.failed,
+		"members_queued_crawl": stats.queuedForCrawl,
 	})
 
 	// Refresh clan leaderboard
@@ -141,8 +150,37 @@ func fetchClansForPlayers(ctx context.Context, players []PlayerTransport, concur
 	playerQueue := make(chan PlayerTransport, len(players))
 	clanMap := sync.Map{}
 	processedCount := new(int32)
+	totalPlayers := int32(len(players))
+	startTime := time.Now()
+	done := make(chan bool)
+
+	// Progress logging ticker
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
 	var wg sync.WaitGroup
+
+	// Progress logger goroutine
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				count := atomic.LoadInt32(processedCount)
+				percent := float64(count) / float64(totalPlayers) * 100
+				elapsed := time.Since(startTime)
+				logger.Info("FETCHING_CLANS_PROGRESS", map[string]any{
+					"processed": count,
+					"total":     totalPlayers,
+					"percent":   fmt.Sprintf("%.1f%%", percent),
+					"elapsed":   elapsed.String(),
+				})
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// Worker goroutines
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
@@ -173,6 +211,21 @@ func fetchClansForPlayers(ctx context.Context, players []PlayerTransport, concur
 	}
 	close(playerQueue)
 	wg.Wait()
+	ticker.Stop()
+	close(done)
+
+	// Final progress log
+	finalCount := atomic.LoadInt32(processedCount)
+	if finalCount > 0 {
+		percent := float64(finalCount) / float64(totalPlayers) * 100
+		elapsed := time.Since(startTime)
+		logger.Info("FETCHING_CLANS_PROGRESS", map[string]any{
+			"processed": finalCount,
+			"total":     totalPlayers,
+			"percent":   fmt.Sprintf("%.1f%%", percent),
+			"elapsed":   elapsed.String(),
+		})
+	}
 
 	result := make(map[int64]bungie.GroupV2)
 	clanMap.Range(func(key, value any) bool {
@@ -198,7 +251,7 @@ func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]b
 		if !result.Success || result.Data == nil {
 			return nil, nil
 		}
-		
+
 		groups := make(map[int64]bungie.GroupV2)
 		for _, g := range result.Data.Results {
 			// Only include active memberships
@@ -212,9 +265,9 @@ func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]b
 }
 
 type processingStats struct {
-	total         int32
-	successful    int32
-	failed        int32
+	total          int32
+	successful     int32
+	failed         int32
 	queuedForCrawl int32
 }
 
@@ -253,8 +306,42 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 	// Process clans concurrently
 	clanQueue := make(chan bungie.GroupV2, len(clans))
 	stats := processingStats{}
+	totalClans := int32(len(clans))
+	processedClans := new(int32)
+	startTime := time.Now()
+	done := make(chan bool)
+
+	// Progress logging ticker
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
 	var wg sync.WaitGroup
+
+	// Progress logger goroutine
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				count := atomic.LoadInt32(processedClans)
+				total := atomic.LoadInt32(&stats.total)
+				successful := atomic.LoadInt32(&stats.successful)
+				percent := float64(count) / float64(totalClans) * 100
+				elapsed := time.Since(startTime)
+				logger.Info("PROCESSING_CLANS_PROGRESS", map[string]any{
+					"processed":     count,
+					"total":         totalClans,
+					"percent":       fmt.Sprintf("%.1f%%", percent),
+					"elapsed":       elapsed.String(),
+					"members_total": total,
+					"members_ok":    successful,
+				})
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// Worker goroutines
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
@@ -265,6 +352,7 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 				atomic.AddInt32(&stats.successful, clanStats.successful)
 				atomic.AddInt32(&stats.failed, clanStats.failed)
 				atomic.AddInt32(&stats.queuedForCrawl, clanStats.queuedForCrawl)
+				atomic.AddInt32(processedClans, 1)
 			}
 		}()
 	}
@@ -274,6 +362,25 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 	}
 	close(clanQueue)
 	wg.Wait()
+	ticker.Stop()
+	close(done)
+
+	// Final progress log
+	finalCount := atomic.LoadInt32(processedClans)
+	if finalCount > 0 {
+		percent := float64(finalCount) / float64(totalClans) * 100
+		elapsed := time.Since(startTime)
+		total := atomic.LoadInt32(&stats.total)
+		successful := atomic.LoadInt32(&stats.successful)
+		logger.Info("PROCESSING_CLANS_PROGRESS", map[string]any{
+			"processed":     finalCount,
+			"total":         totalClans,
+			"percent":       fmt.Sprintf("%.1f%%", percent),
+			"elapsed":       elapsed.String(),
+			"members_total": total,
+			"members_ok":    successful,
+		})
+	}
 
 	if err := tx.Commit(); err != nil {
 		logger.Fatal("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
@@ -363,7 +470,7 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 			logging.COUNT:    queuedForCrawl,
 		})
 	}
-	
+
 	stats.queuedForCrawl = int32(queuedForCrawl)
 	return stats
 }

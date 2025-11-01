@@ -45,7 +45,7 @@ func ProcessSinglePGCR() {
 
 	// Prepare summary fields
 	summaryFields := map[string]any{
-			logging.INSTANCE_ID: instance.InstanceId,
+		logging.INSTANCE_ID: instance.InstanceId,
 		logging.HASH:        instance.Hash,
 		"date_started":      instance.DateStarted,
 		"date_completed":    instance.DateCompleted,

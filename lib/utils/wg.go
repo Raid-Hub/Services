@@ -3,7 +3,7 @@ package utils
 import "sync"
 
 type ReadOnlyWaitGroup struct {
-	wg  *sync.WaitGroup // For single wait group
+	wg  *sync.WaitGroup      // For single wait group
 	wgs []*ReadOnlyWaitGroup // For multiple wait groups
 }
 

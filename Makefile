@@ -34,26 +34,41 @@ stop:
 ps:
 	$(DOCKER_COMPOSE) ps
 
-atlas:
-	$(DOCKER_COMPOSE) build atlas
-	$(DOCKER_COMPOSE) up -d --force-recreate atlas
+infra:
+	$(DOCKER_COMPOSE) up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
 
-hermes:
-	$(DOCKER_COMPOSE) build hermes
-	$(DOCKER_COMPOSE) up -d --force-recreate hermes
-
-zeus:
-	$(DOCKER_COMPOSE) build zeus
-	$(DOCKER_COMPOSE) up -d --force-recreate zeus
-
-# Rebuild and recreate app containers
-apps:
+apps-dev:
 	$(DOCKER_COMPOSE) build hermes atlas zeus
 	$(DOCKER_COMPOSE) up -d --force-recreate hermes atlas zeus
 
-infra:
-	$(DOCKER_COMPOSE) up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
-	
+atlas-dev:
+	$(DOCKER_COMPOSE) build atlas
+	$(DOCKER_COMPOSE) up -d --force-recreate atlas
+
+atlas:
+	go build -o ./bin/atlas ./apps/atlas/
+
+hermes-dev:
+	$(DOCKER_COMPOSE) build hermes
+	$(DOCKER_COMPOSE) up -d --force-recreate hermes
+
+hermes:
+	go build -o ./bin/hermes ./apps/hermes/
+
+zeus-dev:
+	$(DOCKER_COMPOSE) build zeus
+	$(DOCKER_COMPOSE) up -d --force-recreate zeus
+
+zeus:
+	go build -o ./bin/zeus ./apps/zeus/
+
+cron-dev:
+	$(DOCKER_COMPOSE) build cron
+	$(DOCKER_COMPOSE) up -d --force-recreate cron
+
+cron:
+	crontab ./infrastructure/cron/jobs.crontab
+
 # Database management
 migrate: migrate-postgres migrate-clickhouse
 	@echo "✓ All migrations complete"
@@ -78,10 +93,6 @@ migrate-%:
 
 seed:
 	go run ./tools/seed/
-
-
-cron:
-	crontab ./infrastructure/cron/prod.crontab
 
 
 config:

@@ -1,21 +1,8 @@
 -- RaidHub Services - Core Schema Migration
 -- Core game data: players, instances, participation
 
--- =============================================================================
--- SCHEMA CREATION
--- =============================================================================
-
--- Create schemas
-CREATE SCHEMA IF NOT EXISTS "core";
-CREATE SCHEMA IF NOT EXISTS "definitions";
-CREATE SCHEMA IF NOT EXISTS "clan";
-CREATE SCHEMA IF NOT EXISTS "flagging";
-CREATE SCHEMA IF NOT EXISTS "leaderboard";
-CREATE SCHEMA IF NOT EXISTS "extended";
-CREATE SCHEMA IF NOT EXISTS "raw";
-
 -- Set search path to include all schemas
-SET search_path TO "core", "definitions", "clan", "flagging", "leaderboard", "extended", "raw", public;
+SET search_path TO "core", "definitions", "clan", "flagging", "leaderboard", "extended", "raw", "cache", "public";
 
 -- =============================================================================
 -- CORE TABLES
@@ -48,6 +35,7 @@ CREATE TABLE "core"."player" (
     "wfr_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "cheat_level" SMALLINT NOT NULL DEFAULT 0,
     "is_private" BOOLEAN NOT NULL DEFAULT false,
+    "is_whitelisted" BOOLEAN NOT NULL DEFAULT false,
     "history_last_crawled" TIMESTAMPTZ(3),
     "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     "_search_score" NUMERIC(14, 4) GENERATED ALWAYS AS (sqrt("clears" + 1) * power(2, GREATEST(0, EXTRACT(EPOCH FROM ("last_seen" - TIMESTAMPTZ '2017-08-27')) / 20000000)) * sqrt("wfr_score" + 1)) STORED
@@ -69,7 +57,7 @@ CREATE TABLE "core"."instance" (
     "duration" INTEGER NOT NULL,
     "platform_type" INTEGER NOT NULL,
     "season_id" INTEGER,
-    "cheat_override" BOOLEAN NOT NULL DEFAULT False,
+    "is_whitelisted" BOOLEAN NOT NULL DEFAULT false,
     "skull_hashes" BIGINT[]
 );
 

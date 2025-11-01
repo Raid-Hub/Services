@@ -88,45 +88,22 @@ func CheatDetection() {
 	close(flags)
 	wg.Wait()
 
-	// calculate average of each flag type, total flags, and flag count
-	logger.Info("CHEAT_LEVEL_STATS", nil)
-	for i, levelStats := range stats {
-		logger.Info("CHEAT_LEVEL_COUNT", map[string]any{
-			"level":        i,
-			"player_count": len(levelStats),
-		})
-		if len(levelStats) == 0 {
-			continue
-		}
-		var totalFlagsA, totalFlagsB, totalFlagsC, totalFlagsD, totalFlags int
-		var totalCheaterProbability float64
-		for _, stat := range levelStats {
-			totalFlagsA += stat.Flag.FlagsA
-			totalFlagsB += stat.Flag.FlagsB
-			totalFlagsC += stat.Flag.FlagsC
-			totalFlagsD += stat.Flag.FlagsD
-			totalFlags += stat.Flag.FlaggedCount
-			totalCheaterProbability += stat.CheaterAccountProbability
-		}
-		avgFlagsA := float64(totalFlagsA) / float64(len(levelStats))
-		avgFlagsB := float64(totalFlagsB) / float64(len(levelStats))
-		avgFlagsC := float64(totalFlagsC) / float64(len(levelStats))
-		avgFlagsD := float64(totalFlagsD) / float64(len(levelStats))
-		avgTotalFlags := float64(totalFlags) / float64(len(levelStats))
-		avgCheaterProbability := totalCheaterProbability / float64(len(levelStats))
-
-		logger.Info("AVERAGE_FLAGS", map[string]any{
-			"flags_a":           avgFlagsA,
-			"flags_b":           avgFlagsB,
-			"flags_c":           avgFlagsC,
-			"flags_d":           avgFlagsD,
-			"total_flags":       avgTotalFlags,
-			"cheat_probability": avgCheaterProbability,
-		})
+	// Calculate and log cheat level summary
+	var levelCounts []int
+	var totalPlayers int
+	for _, levelStats := range stats {
+		playerCount := len(levelStats)
+		levelCounts = append(levelCounts, playerCount)
+		totalPlayers += playerCount
 	}
-
-	logger.Info(PROCESSING_COMPLETE, map[string]any{
-		logging.OPERATION: "all_flags",
+	
+	logger.Info("CHEAT_LEVEL_SUMMARY", map[string]any{
+		"total_players": totalPlayers,
+		"level_0":       levelCounts[0],
+		"level_1":       levelCounts[1],
+		"level_2":       levelCounts[2],
+		"level_3":       levelCounts[3],
+		"level_4":       levelCounts[4],
 	})
 
 	// step 2: re-cheat check all level 3+ player instances. can remove this step later.
@@ -171,11 +148,6 @@ func CheatDetection() {
 	close(instanceIds)
 	wg.Wait()
 
-	logger.Info(PROCESSING_COMPLETE, map[string]any{
-		logging.OPERATION: "re-check_blacklisted_instances",
-		logging.STATUS:    "complete",
-	})
-
 	// step 3: upgrade high flagged instances to blacklisted
 	countBlacklisted, err := cheat_detection.BlacklistFlaggedInstances()
 	if err != nil {
@@ -184,10 +156,6 @@ func CheatDetection() {
 			logging.ERROR:     err.Error(),
 		})
 	}
-	logger.Info(BLACKLIST_UPDATED, map[string]any{
-		"type":        "flagged_instances",
-		logging.COUNT: countBlacklisted,
-	})
 
 	// step 4: select players with cheat level 4 and mark their instances as blacklisted
 	now := time.Now()
@@ -199,10 +167,6 @@ func CheatDetection() {
 		})
 	}
 
-	logger.Info("BLACKLISTED_PLAYERS_FOUND", map[string]any{
-		logging.COUNT: len(players),
-		"criteria":    "recently_played",
-	})
 	var totalBlacklistedCount int64
 	var totalElligibleCount int64
 	for _, player := range players {
@@ -216,18 +180,13 @@ func CheatDetection() {
 		}
 		totalBlacklistedCount += count
 		totalElligibleCount += elligible
-		if count > 0 {
-			logger.Info(PLAYER_INSTANCES_BLACKLISTED, map[string]any{
-				"membership_id": player.MembershipId,
-				logging.COUNT:   count,
-				"type":          "recent_instances",
-			})
-		}
 	}
+
 	logger.Info("BLACKLIST_SUMMARY", map[string]any{
-		"total_blacklisted": totalBlacklistedCount,
-		"total_eligible":    totalElligibleCount,
-		"scope":             "all_players",
+		"flagged_instances": countBlacklisted,
+		"recent_blacklisted": totalBlacklistedCount,
+		"total_eligible":     totalElligibleCount,
+		"players_processed":  len(players),
 	})
 
 	logger.Info(PROCESSING_COMPLETE, map[string]any{

@@ -222,11 +222,6 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	// Forward API key if security key is provided
 	if securityKey != "" && r.Header.Get("x-api-key") == securityKey {
-		logger.Debug("SECURITY_KEY_PROVIDED", map[string]any{
-			"host":   r.Host,
-			"path":   r.URL.Path,
-			"method": r.Method,
-		})
 		r.Header.Set("x-api-key", securityKey)
 		r.Header.Add("x-forwarded-for", securityKey)
 	} else if securityKey != "" {

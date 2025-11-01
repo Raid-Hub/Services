@@ -52,6 +52,8 @@ var (
 	// Other
 	IsContestWeekend      bool
 	MissedPGCRLogFilePath string
+	EnvPath               string
+	LogLevel              string
 
 	// Prometheus API (for querying metrics, not the exporter)
 	PrometheusPort string
@@ -60,13 +62,35 @@ var (
 	AtlasMetricsPort  string
 	HermesMetricsPort string
 	ZeusMetricsPort   string
+
+	// Logging file descriptors
+	StdoutPath string
+	StderrPath string
+
+	// Cron Manager
+	CronManagerPort string
 )
 
 var envIssues []string
 
 func init() {
-	// Load .env file (ignore error - variables may be set via environment)
-	godotenv.Load()
+
+	envPaths := []string{".env"}
+	if envPath := getEnv("ENV_PATH"); envPath != "" {
+		envPaths = append(envPaths, envPath)
+	}
+
+	// Load .env files separately - ignore errors for missing files
+	// godotenv.Load() stops on first error, so we need to load each file individually
+	for _, envPath := range envPaths {
+		if err := godotenv.Load(envPath); err != nil {
+			// Ignore "file not found" errors - file might not exist
+			if !os.IsNotExist(err) {
+				// Log non-existent file errors, but continue
+				_ = err
+			}
+		}
+	}
 
 	// Database (defaults: user=postgres, password="", db=raidhub)
 	PostgresHost = getHostEnv("POSTGRES_HOST")
@@ -109,15 +133,21 @@ func init() {
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
 	MissedPGCRLogFilePath = requireEnv("MISSED_PGCR_LOG_FILE_PATH")
-
+	LogLevel = getEnv("LOG_LEVEL")
 	// Prometheus API (required)
-	PrometheusHost = getHostEnv("PROMETHEUS_HOST")
+	PrometheusHost = getEnv("PROMETHEUS_HOST")
 	PrometheusPort = requireEnv("PROMETHEUS_PORT")
 
 	// Metrics export ports (for Prometheus scraping)
 	AtlasMetricsPort = requireEnv("ATLAS_METRICS_PORT")
 	HermesMetricsPort = getEnv("HERMES_METRICS_PORT") // Optional for individual topic runners
-	ZeusMetricsPort = getEnv("ZEUS_METRICS_PORT")
+	ZeusMetricsPort = requireEnv("ZEUS_METRICS_PORT")
+
+	// Initialize stdout/stderr file descriptors
+	StdoutPath = getEnv("STDOUT")
+	StderrPath = getEnv("STDERR")
+
+	CronManagerPort = getEnv("CRON_MANAGER_PORT")
 
 	if len(envIssues) > 0 {
 		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))
@@ -127,7 +157,6 @@ func init() {
 func getEnv(key string) string {
 	return os.Getenv(key)
 }
-
 
 func requireEnv(key string) string {
 	val := os.Getenv(key)
@@ -143,7 +172,6 @@ func getEnvWithDefault(key string, defaultValue string) string {
 	}
 	return defaultValue
 }
-
 
 func getHostEnv(key string) string {
 	return getEnvWithDefault(key, "localhost")

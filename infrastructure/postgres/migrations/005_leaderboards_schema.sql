@@ -6,7 +6,7 @@
 -- =============================================================================
 
 -- Cache for global leaderboard (filters once, reused by individual_global_leaderboard)
-CREATE MATERIALIZED VIEW "leaderboard"."_global_leaderboard_cache" AS
+CREATE MATERIALIZED VIEW "cache"."_global_leaderboard_cache" AS
 SELECT
   membership_id,
   clears,
@@ -19,16 +19,16 @@ SELECT
 FROM "core"."player"
 WHERE clears > 0 AND NOT is_private AND cheat_level < 2;
 
-CREATE UNIQUE INDEX idx_global_leaderboard_cache_membership_id ON "leaderboard"."_global_leaderboard_cache" (membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_clears ON "leaderboard"."_global_leaderboard_cache" (clears DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_fresh_clears ON "leaderboard"."_global_leaderboard_cache" (fresh_clears DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_sherpas ON "leaderboard"."_global_leaderboard_cache" (sherpas DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_speed ON "leaderboard"."_global_leaderboard_cache" (sum_of_best ASC NULLS LAST, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_time ON "leaderboard"."_global_leaderboard_cache" (total_time_played_seconds DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_wfr ON "leaderboard"."_global_leaderboard_cache" (wfr_score DESC, membership_id ASC);
+CREATE UNIQUE INDEX idx_global_leaderboard_cache_membership_id ON "cache"."_global_leaderboard_cache" (membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_clears ON "cache"."_global_leaderboard_cache" (clears DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_fresh_clears ON "cache"."_global_leaderboard_cache" (fresh_clears DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_sherpas ON "cache"."_global_leaderboard_cache" (sherpas DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_speed ON "cache"."_global_leaderboard_cache" (sum_of_best ASC NULLS LAST, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_time ON "cache"."_global_leaderboard_cache" (total_time_played_seconds DESC, membership_id ASC);
+CREATE INDEX idx_global_leaderboard_cache_wfr ON "cache"."_global_leaderboard_cache" (wfr_score DESC, membership_id ASC);
 
 -- Cache for raid leaderboard (filters once, reused by individual_raid_leaderboard)
-CREATE MATERIALIZED VIEW "leaderboard"."_raid_leaderboard_cache" AS
+CREATE MATERIALIZED VIEW "cache"."_raid_leaderboard_cache" AS
 SELECT
   ps.activity_id,
   ps.membership_id,
@@ -43,11 +43,11 @@ WHERE ps.clears > 0
   AND NOT p.is_private
   AND p.cheat_level < 2;
 
-CREATE UNIQUE INDEX idx_raid_leaderboard_cache_activity_membership ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, membership_id ASC);
-CREATE INDEX idx_raid_leaderboard_cache_clears ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, clears DESC, membership_id ASC);
-CREATE INDEX idx_raid_leaderboard_cache_fresh_clears ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, fresh_clears DESC, membership_id ASC);
-CREATE INDEX idx_raid_leaderboard_cache_sherpas ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, sherpas DESC, membership_id ASC);
-CREATE INDEX idx_raid_leaderboard_cache_time ON "leaderboard"."_raid_leaderboard_cache" (activity_id ASC, total_time_played_seconds DESC, membership_id ASC);
+CREATE UNIQUE INDEX idx_raid_leaderboard_cache_activity_membership ON "cache"."_raid_leaderboard_cache" (activity_id ASC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_clears ON "cache"."_raid_leaderboard_cache" (activity_id ASC, clears DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_fresh_clears ON "cache"."_raid_leaderboard_cache" (activity_id ASC, fresh_clears DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_sherpas ON "cache"."_raid_leaderboard_cache" (activity_id ASC, sherpas DESC, membership_id ASC);
+CREATE INDEX idx_raid_leaderboard_cache_time ON "cache"."_raid_leaderboard_cache" (activity_id ASC, total_time_played_seconds DESC, membership_id ASC);
 
 -- =============================================================================
 -- LEADERBOARD VIEWS
@@ -186,7 +186,7 @@ WITH base AS (
     total_time_played_seconds,
     wfr_score,
     total_count
-  FROM "leaderboard"."_global_leaderboard_cache"
+  FROM "cache"."_global_leaderboard_cache"
 ),
 total_count AS (
   SELECT DISTINCT total_count::numeric AS cnt FROM base LIMIT 1
@@ -298,7 +298,7 @@ WITH base AS (
     sherpas,
     total_time_played_seconds,
     total_count
-  FROM "leaderboard"."_raid_leaderboard_cache"
+  FROM "cache"."_raid_leaderboard_cache"
 ),
 clears_ranked AS (
   SELECT

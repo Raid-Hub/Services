@@ -47,4 +47,3 @@ compactor:
   compactor_ring:
     kvstore:
       store: inmemory
-

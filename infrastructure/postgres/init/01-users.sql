@@ -11,16 +11,19 @@ GRANT ALL PRIVILEGES ON DATABASE raidhub TO postgres;
 -- Grant schema usage
 \c raidhub
 
--- Create schemas
+-- Create public schemas
 CREATE SCHEMA IF NOT EXISTS "core";
 CREATE SCHEMA IF NOT EXISTS "definitions";
 CREATE SCHEMA IF NOT EXISTS "clan";
-CREATE SCHEMA IF NOT EXISTS "flagging";
 CREATE SCHEMA IF NOT EXISTS "leaderboard";
 CREATE SCHEMA IF NOT EXISTS "extended";
 CREATE SCHEMA IF NOT EXISTS "raw";
 
--- Create readonly user (ignore if already exists) - hardcoded as readonly with no password
+-- Cache other schemas
+CREATE SCHEMA IF NOT EXISTS "flagging";
+CREATE SCHEMA IF NOT EXISTS "cache";
+
+-- Create readonly user (ignore if already exists) - hardcoded as readonly with password 'password'
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'readonly') THEN

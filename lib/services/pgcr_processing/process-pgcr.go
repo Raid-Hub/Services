@@ -13,8 +13,6 @@ var logger = logging.NewLogger("PGCR_PROCESSING_SERVICE")
 
 type PGCRResult int
 
-const RAID_ACTIVITY_MODE = 4
-
 // PGCRResult is the result of the PGCR processing
 const (
 	Success                PGCRResult = 1
@@ -37,7 +35,7 @@ func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.D
 	}
 
 	// Check if this is a raid activity
-	if rawPGCR.ActivityDetails.Mode != RAID_ACTIVITY_MODE {
+	if rawPGCR.ActivityDetails.Mode != bungie.ModeRaid {
 		return NonRaid, nil, rawPGCR
 	}
 

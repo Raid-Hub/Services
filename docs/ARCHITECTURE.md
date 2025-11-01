@@ -97,7 +97,7 @@ RaidHub-Services/
 
 - **`infrastructure/`** contains ONLY configuration and tooling:
   - Database schemas, migrations, and views
-  - Service configuration templates
+  - Service configuration files
   - Cron job definitions
   - Migration and deployment tools
 - **`lib/`** contains ONLY application logic:

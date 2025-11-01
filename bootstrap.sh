@@ -174,15 +174,15 @@ echo ""
 # Start infrastructure services (postgres, clickhouse, rabbitmq, prometheus, loki, promtail, grafana)
 # Exclude app services (atlas, hermes, zeus)
 echo "🐳 Starting containerized infrastructure services..."
-$DOCKER_COMPOSE_CMD --env-file ./.env up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
+$DOCKER_COMPOSE_CMD --env-file ./.env up -d --force-recreate postgres rabbitmq clickhouse prometheus loki promtail grafana cron
 echo "✅ Infrastructure services started"
 echo ""
 
 # Build app services (but don't start them)
-echo "🔨 Building app services (atlas, hermes)..."
-$DOCKER_COMPOSE_CMD --env-file ./.env build atlas hermes
+echo "🔨 Building app services (atlas, hermes, zeus)..."
+$DOCKER_COMPOSE_CMD --env-file ./.env build atlas hermes zeus
 echo "✅ App services built (not started)"
-echo "ℹ️  App services (atlas, hermes) can be started with 'make dev' or manually."
+echo "ℹ️  Apps (atlas, hermes, zeus) can be started with 'make dev' or manually."
 echo ""
 
 # Wait for databases to be ready
@@ -273,20 +273,16 @@ echo ""
 echo "🚀 Development (Recommended):"
 echo "   ▶️  Start all services:    make dev        (Tilt UI at http://localhost:10350)"
 echo "                              This starts infrastructure + apps with hot reload"
-echo "   🛑 Stop all services:      make down"
+echo "   🛑  Stop all services:     make down"
 echo ""
 echo "🐳 Manual Docker Compose:"
+echo "   ▶️  Start Zeus:            make zeus-dev"
+echo "   ▶️  Start cralwer:         make atlas-dev"
+echo "   ▶️  Start queue workers:   make hermes-dev"
+echo "   ▶️  Start cron UI:         make cron-dev"
 echo "   ▶️  Start infrastructure:  make infra"
-echo "   ▶️  Start Zeus:            docker compose up -d zeus"
-echo "   ▶️  Start apps:            docker compose up -d atlas hermes"
 echo "   ▶️  Start everything:      make up"
-echo "   🛑 Stop everything:        make down"
-echo ""
-echo "🔧 Individual Services (Built Binaries):"
-echo "   🗺️  Run Atlas Crawler:           ./bin/atlas --workers 10"
-echo "   🗺️  Run Async Queue Worker:      ./bin/hermes"
-echo "   ⚡ Run Zeus API Proxy:           ./bin/zeus"
-echo ""
+echo "   🛑  Stop everything:       make down"
 echo "🗄️  Database:"
 echo "   🔄 Run migrations:    make migrate"
 echo "   🌱 Seed database:     make seed"

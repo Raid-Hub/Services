@@ -1,4 +1,4 @@
-FROM golang:1.21 AS build
+FROM golang:1.21-alpine AS build
 
 # Build arg to select which app to build, e.g. hermes, atlas, zeus
 ARG APP_NAME

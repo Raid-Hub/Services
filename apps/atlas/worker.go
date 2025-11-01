@@ -23,7 +23,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 	defer wg.Done()
 
 	randomVariation := retryDelayTime / 3
-	
+
 	// Get API availability monitor for Destiny2
 	destiny2Monitor := bungie.GetAPIAvailabilityMonitor("Destiny2")
 	apiWG := destiny2Monitor.GetReadOnlyWaitGroup()
@@ -33,12 +33,12 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 		if apiWG != nil {
 			apiWG.Wait()
 		}
-		
+
 		startTime := time.Now()
 		notFoundCount := 0
 		errCount := 0
 		i := 0
-		
+
 		for {
 			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
 

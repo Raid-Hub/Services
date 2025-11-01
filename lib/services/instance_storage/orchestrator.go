@@ -102,8 +102,8 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 		logFields := map[string]any{
 			logging.INSTANCE_ID: inst.InstanceId,
 			logging.LAG:         lag,
-			"activity":     activityInfo.activityName,
-			"version":      activityInfo.versionName,
+			"activity":          activityInfo.activityName,
+			"version":           activityInfo.versionName,
 		}
 		logger.Info(STORED_NEW_INSTANCE, logFields)
 	} else {

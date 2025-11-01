@@ -24,7 +24,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	_ = postgres.DB.QueryRow("SELECT membership_type FROM player WHERE membership_id = $1", membershipId).Scan(&known)
 	if known == 0 {
 		// Resolve membership type using shared helper (tries known then all viable types)
-		resolvedType, _, err := bungie.ResolveMembershipType(membershipId, nil)
+		resolvedType, _, err := bungie.ResolveProfile(membershipId, nil)
 		if err != nil || resolvedType == 0 {
 			// fail here
 			logger.Error("COULD_NOT_DETERMINE_MEMBERSHIP_TYPE", map[string]any{

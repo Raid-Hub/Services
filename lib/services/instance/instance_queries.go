@@ -67,29 +67,29 @@ func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
 	// Instance IDs increment over time. Start from a high estimate and search backwards
 	upperBound := int64(1_000_000_000_000) // 1 trillion
 	lowerBound := int64(1)
-	
+
 	// Binary search to find the highest valid instance ID
 	left := lowerBound
 	right := upperBound
 	latestFound := int64(0)
-	
+
 	maxIterations := 50
 	iterations := 0
-	
+
 	for left <= right && iterations < maxIterations {
 		iterations++
 		mid := (left + right) / 2
-		
+
 		logger.Debug("BINARY_SEARCH_ITERATION", map[string]any{
 			"iteration": iterations,
 			"left":      left,
 			"right":     right,
 			"mid":       mid,
 		})
-		
+
 		// Try to fetch PGCR at mid point
 		result, _ := bungie.Client.GetPGCR(mid)
-		
+
 		if result.Success {
 			// PGCR exists, this is a valid instance ID
 			latestFound = mid
@@ -104,19 +104,19 @@ func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
 			time.Sleep(500 * time.Millisecond) // Brief delay to avoid rate limits
 		}
 	}
-	
+
 	if latestFound == 0 {
 		logger.Warn("NO_LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{
 			"iterations": iterations,
 		})
 		return 0, errors.New("no valid PGCR found in search range")
 	}
-	
+
 	logger.Info("LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{
 		"instance_id": latestFound,
 		"iterations":  iterations,
 		"buffer":      buffer,
 	})
-	
+
 	return latestFound - buffer, nil
 }

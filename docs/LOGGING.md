@@ -93,13 +93,79 @@ func ProcessPGCR(pgcr *bungie.DestinyPostGameCarnageReport) (*dto.ProcessedInsta
   - `BUNGIE_CLIENT`
   - `PROMETHEUS_API_CLIENT`
 
+## Configuration
+
+### Log Level
+
+The logging system supports configurable log levels to control verbosity. Log levels can be set via:
+
+1. **Environment Variable**: `LOG_LEVEL` (recommended for production)
+
+   ```bash
+   export LOG_LEVEL=warn  # Only show warnings and errors
+   ```
+
+2. **CLI Flags**: `-log-level` or `-log` (for tools and services)
+
+   ```bash
+   ./bin/hermes --log-level=debug
+   ./bin/atlas --log debug
+   ```
+
+3. **Verbose Flag**: `-v` or `-verbose` (equivalent to `debug` level)
+   ```bash
+   ./bin/hermes --verbose
+   ```
+
+**Available Log Levels** (in order of severity):
+
+- `debug` - Most verbose, includes all DEBUG logs
+- `info` - Default level, shows operational information
+- `warn` - Only warnings and errors
+- `error` - Only errors (includes FATAL logs)
+
+When a log level is set, only logs at that level or higher will be output. For example, setting `LOG_LEVEL=warn` will show WARN and ERROR logs (including FATAL), but hide INFO and DEBUG logs.
+
+**Note**: `Fatal` is not a separate configurable log level - fatal logs are always shown when `error` level is enabled. The `Fatal()` method will always exit the application after logging.
+
+### Output Redirection
+
+Logs can be redirected to files while still maintaining console output. This is useful for:
+
+- Log aggregation and analysis
+- Long-term log storage
+- Separating logs from application output
+
+**Environment Variables**:
+
+- `STDOUT` - Redirects INFO and DEBUG logs to a file (in addition to console)
+- `STDERR` - Redirects WARN, ERROR, and FATAL logs to a file (in addition to console)
+
+**Behavior**:
+When `STDOUT` or `STDERR` environment variables are set, logs are written to **both** the file and the original console output. This ensures logs are always visible in the console while also being persisted to files.
+
+```bash
+# Write logs to files while keeping console output
+export STDOUT=./logs/app.log
+export STDERR=./logs/errors.log
+./bin/hermes
+
+# Logs appear both in console and in files
+```
+
+**File Handling**:
+
+- Files are created automatically if they don't exist
+- Logs are appended to existing files (no truncation)
+- If file creation fails, the application will panic on startup
+
 ## Log Levels
 
 ### DEBUG
 
 - **Purpose**: Detailed information for debugging and troubleshooting
-- **Usage**: Only logged when verbose flag is explicitly passed (`--verbose`, `-v`, etc.)
-- **Persistence**: **NOT** persisted by default - only shown when debugging
+- **Usage**: Only logged when log level is set to `debug` (via `LOG_LEVEL=debug`, `--verbose`, `-v`, `--log-level=debug`, or `--log debug`)
+- **Persistence**: Only shown when debugging - hidden by default
 - **Examples**:
   - Variable values during processing
   - Detailed API request/response data
@@ -201,7 +267,8 @@ logger.Error("DATA_CORRUPTION_DETECTED", map[string]any{
 
 - **Purpose**: Unrecoverable errors that require the application to crash
 - **Usage**: Critical system failures where the app cannot continue safely
-- **Persistence**: **PERSISTED** and **ALERTED** - logs then **CRASHES** with panic
+- **Log Level**: Treated as `error` level for filtering purposes
+- **Persistence**: **PERSISTED** and **ALERTED** - logs then **CRASHES** with `os.Exit(1)`
 - **Examples**:
   - Database connection failures during startup
   - Critical configuration missing
@@ -220,6 +287,8 @@ logger.Fatal("CONFIGURATION_MISSING", map[string]any{
     "severity": "critical",
 })
 ```
+
+**Note**: `Fatal` is not a separate configurable log level. Fatal logs are always shown when the log level is set to `error` or lower. The `Fatal()` method will always exit the application after logging, regardless of log level configuration.
 
 ## Error Handling Philosophy
 
@@ -290,13 +359,20 @@ if err := database.Connect(); err != nil {
 
 ## Interface Reference
 
-| Method    | Signature                                  | Usage                    | Output |
-| --------- | ------------------------------------------ | ------------------------ | ------ |
-| `Info()`  | `Info(key string, fields map[string]any)`  | Operational information  | stdout |
-| `Warn()`  | `Warn(key string, fields map[string]any)`  | Issues needing attention | stderr |
-| `Error()` | `Error(key string, fields map[string]any)` | Sentry alerts            | stderr |
-| `Debug()` | `Debug(key string, fields map[string]any)` | Verbose flag only        | stdout |
-| `Fatal()` | `Fatal(key string, fields map[string]any)` | Logs then crashes        | stderr |
+| Method    | Signature                                  | Usage                    | Output | Respects Log Level           |
+| --------- | ------------------------------------------ | ------------------------ | ------ | ---------------------------- |
+| `Info()`  | `Info(key string, fields map[string]any)`  | Operational information  | stdout | Yes                          |
+| `Warn()`  | `Warn(key string, fields map[string]any)`  | Issues needing attention | stderr | Yes                          |
+| `Error()` | `Error(key string, fields map[string]any)` | Sentry alerts            | stderr | Yes                          |
+| `Debug()` | `Debug(key string, fields map[string]any)` | Verbose flag only        | stdout | Yes                          |
+| `Fatal()` | `Fatal(key string, fields map[string]any)` | Logs then crashes        | stderr | Yes (treated as error level) |
+
+**Output Behavior**:
+
+- INFO and DEBUG logs are written to stdout (or both stdout and file if `STDOUT` is set)
+- WARN, ERROR, and FATAL logs are written to stderr (or both stderr and file if `STDERR` is set)
+- All logging methods respect the configured log level - logs below the current level are not output
+- `Fatal` logs are shown when log level is `error` or lower (fatal is not a separate configurable level)
 
 - **Message**: SCREAMING_UPPER_CASE string for the event
 - **Fields**: Structured key-value pairs using `map[string]any{}`
@@ -398,35 +474,52 @@ var logger = logging.NewLogger("SERVICE_NAME")
 
 ## Monitoring & Alerting
 
-- **DEBUG**: Only shown with verbose flag, not persisted
-- **INFO**: Persisted for operational visibility
-- **WARN**: Persisted for monitoring and analysis
-- **ERROR**: Persisted and triggers Sentry alerts
-- **FATAL**: Persisted, triggers alerts, then crashes app
+- **DEBUG**: Only shown when log level is `debug` (via `LOG_LEVEL` or `--verbose` flag)
+- **INFO**: Shown at default `info` level or higher, persisted for operational visibility
+- **WARN**: Shown at `warn` level or higher, persisted for monitoring and analysis
+- **ERROR**: Shown at `error` level, persisted and triggers Sentry alerts
+- **FATAL**: Shown at `error` level (not a separate configurable level), persisted, triggers alerts, then crashes app
 
-All logs are structured JSON for easy querying and analysis.
+All logs are structured using logfmt format for easy querying and analysis. Logs respect the configured log level and can be redirected to files via `STDOUT` and `STDERR` environment variables.
 
-## Loki / Promtail / Grafana (Local Dev)
+## Loki / Promtail / Grafana
 
-### Startup
+### Local Development (Docker)
 
-1. Generate configs:
+By default, Promtail is configured to scrape logs from Docker containers via Docker service discovery.
 
-```
-make config
-```
+Start via Tilt (recommended):
 
-2. Start via Tilt (recommended):
-
-```
+```bash
 tilt up
 ```
 
-3. Or start via Docker Compose only:
+Or start via Docker Compose only:
 
-```
+```bash
 docker-compose up -d
 ```
+
+### Production (Undockerized)
+
+When running services as native processes (not in Docker), Promtail won't collect logs by default because it's configured for Docker service discovery.
+
+**To enable log collection in production:**
+
+1. **Configure services to write logs to files** using `STDOUT` and `STDERR` environment variables:
+
+   ```bash
+   export STDOUT=/var/log/raidhub/app.log
+   export STDERR=/var/log/raidhub/errors.log
+   ```
+
+2. **Update Promtail configuration** (`infrastructure/promtail/promtail.yml`) to read from filesystem instead of Docker:
+
+   - Comment out the `docker_sd_configs` section
+   - Uncomment and configure the `file_logs` job to point to your log file paths
+   - Ensure Promtail has read access to the log files
+
+3. **Deploy Loki and Promtail** separately (as systemd services, Kubernetes DaemonSet, or standalone processes)
 
 ### Access
 
