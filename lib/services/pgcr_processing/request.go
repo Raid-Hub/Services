@@ -32,6 +32,8 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 			return NotFound, nil
 		case bungie.SystemDisabled:
 			logger.Info("BUNGIE_SYSTEM_DISABLED", fields)
+			// Signal immediate check for Destiny2 system availability
+			bungie.SignalSystemDisabled("Destiny2")
 			return SystemDisabled, nil
 		case bungie.InsufficientPrivileges:
 			logger.Info("PGCR_INSUFFICIENT_PRIVILEGES", fields)

@@ -14,6 +14,7 @@ import (
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/web/bungie"
 	"raidhub/lib/web/discord"
 )
 
@@ -22,8 +23,17 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 	defer wg.Done()
 
 	randomVariation := retryDelayTime / 3
+	
+	// Get API availability monitor for Destiny2
+	destiny2Monitor := bungie.GetAPIAvailabilityMonitor("Destiny2")
+	apiWG := destiny2Monitor.GetReadOnlyWaitGroup()
 
 	for instanceID := range ch {
+		// Wait for API availability if needed
+		if apiWG != nil {
+			apiWG.Wait()
+		}
+		
 		startTime := time.Now()
 		notFoundCount := 0
 		errCount := 0
@@ -82,7 +92,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				notFoundCount++
 			} else if result == pgcr_processing.SystemDisabled {
 				atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
-				time.Sleep(45 * time.Second)
+				time.Sleep(60 * time.Second)
 				continue
 			} else if result == pgcr_processing.InsufficientPrivileges {
 				publishing.PublishJSONMessage(context.Background(), routing.PGCRRetry, fmt.Sprintf("%d", instanceID))

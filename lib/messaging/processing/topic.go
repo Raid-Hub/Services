@@ -87,6 +87,7 @@ type TopicConfig struct {
 	MinWorkersPerStep     int           // Minimum workers to add/remove per scaling action
 	ConsecutiveChecksUp   int           // Consecutive checks above threshold before scaling up
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
+	BungieSystemDeps         []string    // Which API systems must be available for the topic to scale
 }
 
 // NewTopic creates a new topic with the given config and processor

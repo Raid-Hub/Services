@@ -32,7 +32,8 @@ type scalingState struct {
 type TopicManager struct {
 	topic         processing.Topic
 	config        processing.TopicConfig
-	managerConfig topicManagerConfig
+	ctx context.Context
+	apiWG *utils.ReadOnlyWaitGroup
 
 	// All fields are private to encapsulate the manager's internal state
 	activeWorkers int
@@ -47,11 +48,6 @@ type TopicManager struct {
 	// Dedicated channel for queue depth checks (reused, thread-safe)
 	depthCheckChannel *amqp.Channel
 	depthChannelMutex sync.RWMutex
-
-	// API availability wait group - used to block workers when API is disabled
-	apiAvailabilityWG sync.WaitGroup
-	apiAvailable       bool // Track if API is currently available
-	apiMutex           sync.RWMutex
 }
 
 func (tm *TopicManager) addTopicFields(fields map[string]any) map[string]any {
@@ -87,13 +83,8 @@ func (tm *TopicManager) GetInitialWorkers() int {
 	return tm.config.DesiredWorkers
 }
 
-type topicManagerConfig struct {
-	context context.Context
-	wg      *utils.ReadOnlyWaitGroup
-}
-
 func (tm *TopicManager) Context() context.Context {
-	return tm.managerConfig.context
+	return tm.ctx
 }
 
 // Stop gracefully stops all workers and waits for them to finish
@@ -111,7 +102,7 @@ func (tm *TopicManager) WaitForWorkersToFinish() {
 }
 
 // startTopicManager starts a TopicManager with self-scaling worker goroutines
-func startTopicManager(topic processing.Topic, managerConfig topicManagerConfig) (*TopicManager, error) {
+func startTopicManager(topic processing.Topic, ctx context.Context) (*TopicManager, error) {
 	// Get the topic config directly from the topic
 	topicConfig := topic.Config
 
@@ -155,17 +146,23 @@ func startTopicManager(topic processing.Topic, managerConfig topicManagerConfig)
 		topicConfig.ConsecutiveChecksDown = 3 // Require 3 checks (15 minutes) before scaling down (more conservative)
 	}
 
+	// Get API availability monitor if needed
+	var apiWG *utils.ReadOnlyWaitGroup
+	if len(topicConfig.BungieSystemDeps) > 0 {
+		apiWG = bungie.GetCompositeAPIAvailabilityMonitor(topicConfig.BungieSystemDeps)
+	}
+
 	topicManager := &TopicManager{
 		topic:         topic,
 		activeWorkers: 0,
 		workers:       make(map[int]*Worker),
 		config:        topicConfig,
-		managerConfig: managerConfig,
 		logger:        HermesLogger,
 		scalingState: scalingState{
 			lastScaleDirection: "none",
 		},
-		apiAvailable: true, // Assume API is available on startup
+		ctx: ctx,
+		apiWG: apiWG,
 	}
 
 	// Check if this is a contest weekend
@@ -191,7 +188,6 @@ func startTopicManager(topic processing.Topic, managerConfig topicManagerConfig)
 	go topicManager.handleShutdown()
 
 	// Start self-scaling monitor
-
 	// Skip autoscaling during contest weekends
 	if !env.IsContestWeekend {
 		go func() {
@@ -320,17 +316,12 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 	workerCtx, workerCancel := context.WithCancelCause(context.Background())
 
 	// Create Worker struct for this goroutine
-	// Inject the internal API availability wait group into worker config
-	apiWG := utils.NewReadOnlyWaitGroup(&tm.apiAvailabilityWG)
-	workerManagerConfig := topicManagerConfig{
-		context: tm.managerConfig.context,
-		wg:      &apiWG,
-	}
+	// Use the managerConfig which already has the API availability wait group if enabled
 
 	worker := &Worker{
 		ID:            workerID,
 		QueueName:     tm.config.QueueName,
-		managerConfig: workerManagerConfig,
+		wg:            tm.apiWG,
 		Topic:         tm.topic,
 		logger:        HermesLogger,
 		ctx:           workerCtx,
@@ -352,35 +343,6 @@ func (tm *TopicManager) monitorSelfScaling() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		// Check if Bungie API is enabled
-		isAPIDisabled, err := tm.checkBungieAPIDisabled()
-		if err != nil {
-			tm.logger.Error("BUNGIE_SETTINGS_CHECK_ERROR", map[string]any{
-				logging.ERROR: err.Error(),
-			})
-			// On error, continue with normal scaling logic
-		} else {
-			tm.apiMutex.Lock()
-			wasAvailable := tm.apiAvailable
-			tm.apiAvailable = !isAPIDisabled
-			tm.apiMutex.Unlock()
-
-			// If API status changed, update the wait group
-			if wasAvailable && isAPIDisabled {
-				// API was enabled, now disabled - block workers by keeping WG waiting
-				tm.Info("BUNGIE_API_DISABLED", map[string]any{
-					"action": "blocking_workers",
-				})
-				tm.apiAvailabilityWG.Add(1)
-			} else if !wasAvailable && !isAPIDisabled {
-				// API was disabled, now enabled - unblock workers
-				tm.Info("BUNGIE_API_ENABLED", map[string]any{
-					"action": "unblocking_workers",
-				})
-				tm.apiAvailabilityWG.Done()
-			}
-		}
-
 		queueDepth, err := tm.getQueueDepthWithRetry()
 		if err != nil {
 			tm.logger.Error("QUEUE_DEPTH_ERROR", map[string]any{
@@ -454,24 +416,6 @@ func (tm *TopicManager) monitorSelfScaling() {
 	}
 }
 
-// checkBungieAPIDisabled checks if the Bungie API is disabled via the Settings API
-func (tm *TopicManager) checkBungieAPIDisabled() (bool, error) {
-	result, err := bungie.Client.GetCommonSettings()
-	if err != nil {
-		return false, err
-	}
-	if !result.Success || result.Data == nil {
-		return false, fmt.Errorf("failed to get settings: Success=%t", result.Success)
-	}
-	
-	// Check if D2Core is disabled
-	if system, exists := result.Data.Systems["Destiny2"]; exists {
-		return !system.Enabled, nil
-	}
-	
-	// System not found, assume enabled
-	return false, nil
-}
 
 // shouldScaleWorkers determines if scaling should happen based on dead zone, hysteresis, and cooldown
 func (tm *TopicManager) shouldScaleWorkers(queueDepth, currentWorkers int) (bool, string, int) {

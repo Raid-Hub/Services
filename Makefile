@@ -1,4 +1,4 @@
-.PHONY: seed tools migrate compose env rebuild-apps rebuild-app recreate-apps recreate-app apps config sync-dashboards infra
+.PHONY: seed tools migrate compose env rebuild-apps rebuild-app recreate-apps recreate-app atlas hermes zeus apps config sync-dashboards infra
 # Go Binaries (optional - for production tool binaries)
 GO_BUILD = go build
 BIN_DIR = ./bin/
@@ -22,10 +22,6 @@ dev:
 up:
 	$(DOCKER_COMPOSE) up -d
 
-infra:
-	@echo "Starting infrastructure services..."
-	$(DOCKER_COMPOSE) up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
-
 down:
 	$(DOCKER_COMPOSE) down
 
@@ -38,11 +34,26 @@ stop:
 ps:
 	$(DOCKER_COMPOSE) ps
 
+atlas:
+	$(DOCKER_COMPOSE) build atlas
+	$(DOCKER_COMPOSE) up -d --force-recreate atlas
+
+hermes:
+	$(DOCKER_COMPOSE) build hermes
+	$(DOCKER_COMPOSE) up -d --force-recreate hermes
+
+zeus:
+	$(DOCKER_COMPOSE) build zeus
+	$(DOCKER_COMPOSE) up -d --force-recreate zeus
+
 # Rebuild and recreate app containers
 apps:
 	$(DOCKER_COMPOSE) build hermes atlas zeus
 	$(DOCKER_COMPOSE) up -d --force-recreate hermes atlas zeus
 
+infra:
+	$(DOCKER_COMPOSE) up -d postgres rabbitmq clickhouse prometheus loki promtail grafana
+	
 # Database management
 migrate: migrate-postgres migrate-clickhouse
 	@echo "✓ All migrations complete"

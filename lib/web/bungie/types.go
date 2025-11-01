@@ -47,7 +47,7 @@ type DestinyCharacterComponent struct {
 	EmblemPath     string    `json:"emblemPath"`
 	EmblemHash     uint32    `json:"emblemHash"`
 	ClassHash      uint32    `json:"classHash"`
-	DateLastPlayed time.Time `json:"dateLastPlayed,string"`
+	DateLastPlayed time.Time `json:"dateLastPlayed"`
 }
 
 type DestinyPostGameCarnageReport struct {

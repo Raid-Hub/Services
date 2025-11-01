@@ -7,6 +7,7 @@ import (
 
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/monitoring/hermes_metrics"
+	"raidhub/lib/utils"
 	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -22,7 +23,6 @@ type Worker struct {
 	// Public fields (accessed by processors)
 	ID            int
 	QueueName     string
-	managerConfig topicManagerConfig
 	Topic         processing.Topic
 	logger        logging.Logger
 
@@ -30,6 +30,7 @@ type Worker struct {
 	ctx         context.Context         // Worker context that cancels on shutdown or autoscale
 	cancel      context.CancelCauseFunc // Cancel function for worker context (with cause)
 	amqpChannel *amqp.Channel           // RabbitMQ channel for this worker
+	wg          *utils.ReadOnlyWaitGroup // API availability wait group
 	channel     <-chan amqp.Delivery
 	processor   processing.ProcessorFunc
 	done        chan struct{} // Channel that closes when worker is finished
@@ -61,8 +62,8 @@ func (w *Worker) Run() {
 			}
 
 			// Wait for API availability if needed
-			if w.managerConfig.wg != nil {
-				w.managerConfig.wg.Wait()
+			if w.wg != nil {
+				w.wg.Wait()
 			}
 
 			err := w.ProcessMessage(msg)

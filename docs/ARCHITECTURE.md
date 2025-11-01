@@ -165,8 +165,9 @@ These services run continuously and are started with `make up`:
 **Key Features**:
 
 - **Topic Management**: Coordinates multiple queue types with independent scaling
-- **Contest Mode Support**: Higher worker counts during contest weekends
+- **Contest Mode Support**: Higher worker counts during contest weekends (disabled autoscaling)
 - **Dynamic Scaling**: Scales workers up/down based on queue depth and processing metrics
+- **Bungie API Availability Monitoring**: Polls Bungie Settings API and blocks workers when API is disabled
 - **Graceful Shutdown**: Proper cleanup and resource management
 
 **Managed Topics**:
@@ -251,8 +252,9 @@ These tools run on a schedule via system crontab:
 The system uses RabbitMQ with a topic-based architecture where each queue type is managed as a "topic" with:
 
 - **Self-Scaling Workers**: Automatically scales based on queue depth and processing metrics
-- **Contest Mode Support**: Higher worker counts during contest periods
-- **Configurable Parameters**: Min/max workers, scale thresholds, prefetch counts
+- **Bungie API Availability**: Workers are blocked when Bungie API is disabled (monitored via Settings API)
+- **Contest Mode Support**: Higher worker counts during contest periods (autoscaling disabled)
+- **Configurable Parameters**: Min/max workers, scale thresholds, prefetch counts, check intervals
 - **Failure Handling**: Built-in retry mechanisms and error handling
 
 ### Queue Types
@@ -310,6 +312,8 @@ Each topic has configurable scaling parameters:
 - **ScaleUpThreshold**: Queue depth that triggers scaling up
 - **ScaleDownThreshold**: Queue depth that triggers scaling down
 - **ScaleUpPercent/ScaleDownPercent**: Rate of scaling changes
+- **ScaleCheckInterval**: How often to check queue depth and Bungie API availability (default: 5 min)
+- **API Availability Monitoring**: Workers are blocked (not scaled down) when Bungie API is disabled
 
 ## Data Flow Architecture
 

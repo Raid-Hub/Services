@@ -93,10 +93,7 @@ func main() {
 				"topic": t.Config.QueueName,
 				"mode":  "all",
 			})
-			tm, err := startTopicManager(t, topicManagerConfig{
-				context: ctx,
-				wg:      nil,
-			})
+			tm, err := startTopicManager(t, ctx)
 			if err != nil {
 				HermesLogger.Error(FAILED_TO_START_TOPIC, map[string]any{
 					logging.ERROR: err.Error(),
@@ -139,9 +136,7 @@ func main() {
 			"topic": topicInstance.Config.QueueName,
 			"mode":  "individual",
 		})
-		tm, err := startTopicManager(topicInstance, topicManagerConfig{
-			context: ctx,
-		})
+		tm, err := startTopicManager(topicInstance, ctx)
 		if err != nil {
 			HermesLogger.Fatal(FAILED_TO_START_TOPIC, map[string]any{
 				"topic": topicInstance.Config.QueueName,

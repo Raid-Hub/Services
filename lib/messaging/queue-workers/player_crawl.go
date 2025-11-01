@@ -23,6 +23,7 @@ func PlayerCrawlTopic() processing.Topic {
 		ScaleDownThreshold:    10,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
+		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
 	}, processPlayerCrawl)
 }
 
