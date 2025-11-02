@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: seed tools migrate compose env rebuild-apps rebuild-app recreate-apps recreate-app atlas hermes zeus apps config sync-dashboards infra
 # Go Binaries (optional - for production tool binaries)
 GO_BUILD = go build

@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -120,11 +121,9 @@ func withRetryAttemptsForResult[T any](ctx context.Context, config RetryConfig, 
 }
 
 // calculateDelay computes exponential backoff delay
+// For attempt=0, returns initial delay. For attempt=n, returns initial * multiplier^n
 func calculateDelay(initial time.Duration, multiplier float64, attempt int) time.Duration {
-	delay := float64(initial) * multiplier
-	for i := 0; i < attempt; i++ {
-		delay *= multiplier
-	}
+	delay := float64(initial) * math.Pow(multiplier, float64(attempt))
 	return time.Duration(delay)
 }
 
