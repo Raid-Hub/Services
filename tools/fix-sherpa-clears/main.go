@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var logger = logging.NewLogger("FIX_SHERPA_TOOL")
+var logger = logging.NewLogger("fix-sherpa-clears")
 
 // FixSherpaClears is the command function
 // This script is used to rebuild the sherpa and first clear columns in the instance_player table
@@ -197,5 +197,8 @@ func FixSherpaClears() {
 }
 
 func main() {
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	FixSherpaClears()
 }

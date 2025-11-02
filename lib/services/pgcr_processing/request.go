@@ -14,7 +14,7 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 	start := time.Now()
 	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
 	duration := float64(time.Since(start).Milliseconds())
-	
+
 	// Record metric for all responses
 	if resp.BungieErrorCode == bungie.Success {
 		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues("Success").Observe(duration)
@@ -69,7 +69,7 @@ func logUnexpectedError(
 	err error,
 ) {
 	netErr := network.CategorizeNetworkError(err)
-	
+
 	if netErr == nil {
 		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", err, fields)
 		return

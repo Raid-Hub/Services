@@ -12,7 +12,6 @@ import (
 	"raidhub/lib/utils/network"
 )
 
-
 var clientLogger = logging.NewLogger("BUNGIE_CLIENT")
 
 type BungieHttpResult[T any] struct {
@@ -44,7 +43,7 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 	config := network.DefaultRetryConfig()
 	config.MaxAttempts = 2 // Quick retries for fast-fail
 	config.InitialDelay = 50 * time.Millisecond
-	
+
 	return network.WithRetryForResult(ctx, config, func() (BungieHttpResult[T], error) {
 		return getInternal[T](c, url, operation)
 	})

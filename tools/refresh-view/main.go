@@ -10,11 +10,42 @@ import (
 	"time"
 )
 
-var logger = logging.NewLogger("REFRESH_VIEW_TOOL")
+var logger = logging.NewLogger("refresh-view")
 
-// RefreshView is the command function for refreshing materialized views
-// Handles both regular views and leaderboard views (with cache management)
-func RefreshView() {
+func refreshCache(ctx context.Context, cacheView string) bool {
+	logger.Info("REFRESHING_CACHE", map[string]any{logging.CACHE: cacheView})
+	start := time.Now()
+
+	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", cacheView))
+	if err != nil {
+		logger.Error("ERROR_REFRESHING_CACHE", err, map[string]any{logging.CACHE: cacheView})
+		return false
+	}
+
+	logger.Info("CACHE_REFRESHED", map[string]any{logging.CACHE: cacheView, "duration": time.Since(start).String()})
+	return true
+}
+
+func refreshView(ctx context.Context, viewName string) bool {
+	logger.Info("REFRESHING_VIEW", map[string]any{logging.VIEW: viewName})
+	start := time.Now()
+
+	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", viewName))
+	if err != nil {
+		logger.Error("ERROR_REFRESHING_VIEW", err, map[string]any{logging.VIEW: viewName})
+		return false
+	}
+
+	logger.Info("VIEW_REFRESHED", map[string]any{logging.VIEW: viewName, "duration": time.Since(start).String()})
+	return true
+}
+
+func main() {
+	flag.Parse()
+
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	if flag.NArg() < 1 {
 		logger.Error("NO_VIEW_NAME", nil, map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})
 		os.Exit(1)
@@ -51,37 +82,4 @@ func RefreshView() {
 	if hasError {
 		os.Exit(1)
 	}
-}
-
-func refreshCache(ctx context.Context, cacheView string) bool {
-	logger.Info("REFRESHING_CACHE", map[string]any{logging.CACHE: cacheView})
-	start := time.Now()
-
-	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", cacheView))
-	if err != nil {
-		logger.Error("ERROR_REFRESHING_CACHE", err, map[string]any{logging.CACHE: cacheView})
-		return false
-	}
-
-	logger.Info("CACHE_REFRESHED", map[string]any{logging.CACHE: cacheView, "duration": time.Since(start).String()})
-	return true
-}
-
-func refreshView(ctx context.Context, viewName string) bool {
-	logger.Info("REFRESHING_VIEW", map[string]any{logging.VIEW: viewName})
-	start := time.Now()
-
-	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", viewName))
-	if err != nil {
-		logger.Error("ERROR_REFRESHING_VIEW", err, map[string]any{logging.VIEW: viewName})
-		return false
-	}
-
-	logger.Info("VIEW_REFRESHED", map[string]any{logging.VIEW: viewName, "duration": time.Since(start).String()})
-	return true
-}
-
-func main() {
-	flag.Parse()
-	RefreshView()
 }

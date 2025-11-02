@@ -164,9 +164,9 @@ func logHigh404Rate(count int, rate float64) {
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
 	AtlasLogger.Warn("HIGH_404_RATE_DETECTED", nil, map[string]any{
-		logging.RATE:    rate,
-		logging.COUNT:   count,
-		logging.ACTION:  "gap_supercharge_initiated",
+		logging.RATE:   rate,
+		logging.COUNT:  count,
+		logging.ACTION: "gap_supercharge_initiated",
 	})
 }
 

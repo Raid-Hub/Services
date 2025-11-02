@@ -14,9 +14,9 @@ type NetworkError struct {
 type NetworkErrorType string
 
 const (
-	ErrorTypeTimeout       NetworkErrorType = "timeout"
-	ErrorTypeConnection    NetworkErrorType = "connection"
-	ErrorTypeUnknown       NetworkErrorType = "unknown"
+	ErrorTypeTimeout    NetworkErrorType = "timeout"
+	ErrorTypeConnection NetworkErrorType = "connection"
+	ErrorTypeUnknown    NetworkErrorType = "unknown"
 )
 
 // CategorizeNetworkError analyzes an error and returns a NetworkError with appropriate category
@@ -26,7 +26,7 @@ func CategorizeNetworkError(err error) *NetworkError {
 	}
 
 	errStr := strings.ToLower(err.Error())
-	
+
 	// Check for timeout errors
 	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded") {
 		return &NetworkError{
@@ -99,4 +99,3 @@ func ShouldLogAsError(err error) bool {
 	netErr := CategorizeNetworkError(err)
 	return netErr.Type == ErrorTypeUnknown
 }
-

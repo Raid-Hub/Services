@@ -54,13 +54,13 @@ func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershi
 			for {
 				select {
 				case page := <-pageChan:
-				result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
-				if err != nil {
-					logger.Warn(API_ERROR, err, map[string]any{
-						logging.OPERATION: "fetch_activity_history",
-					})
-					continue
-				}
+					result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
+					if err != nil {
+						logger.Warn(API_ERROR, err, map[string]any{
+							logging.OPERATION: "fetch_activity_history",
+						})
+						continue
+					}
 
 					// Stop if no success, no data, or no activities
 					if !result.Success || result.Data == nil || len(result.Data.Activities) == 0 {

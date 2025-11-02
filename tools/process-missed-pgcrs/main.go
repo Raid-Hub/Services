@@ -21,7 +21,7 @@ import (
 	"slices"
 )
 
-var logger = logging.NewLogger("MISSED_PGCR")
+var logger = logging.NewLogger("process-missed-pgcrs")
 
 // Global worker state
 var (
@@ -416,5 +416,9 @@ func findGaps(failed []int64) []Gap {
 
 func main() {
 	flag.Parse()
+
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	ProcessMissedPGCRs()
 }

@@ -81,7 +81,7 @@ migrate-%:
 			;; \
 		clickhouse) \
 			echo "Running ClickHouse migrations..."; \
-			go run ./infrastructure/clickhouse/tools/migrate/; \
+			go run ./infrastructure/clickhouse/migrate/; \
 			;; \
 		*) \
 			echo "Unknown database: $*"; \

@@ -50,6 +50,9 @@ var proxyTransport = &transport{}
 func main() {
 	flag.Parse()
 
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	// Use env port if flag not provided
 	if *port == 0 {
 		if env.ZeusPort != "" {
@@ -223,7 +226,7 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 			logging.HOST:   r.Host,
 			logging.PATH:   r.URL.Path,
 			logging.METHOD: r.Method,
-			"x_api_key": r.Header.Get("x-api-key"),
+			"x_api_key":    r.Header.Get("x-api-key"),
 		})
 	}
 

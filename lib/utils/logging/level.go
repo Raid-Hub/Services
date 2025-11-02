@@ -6,6 +6,7 @@ import (
 	"raidhub/lib/env"
 	"strings"
 )
+
 var (
 	verbose      bool
 	logLevel     string

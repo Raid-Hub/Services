@@ -203,7 +203,7 @@ func needsUpdate(p Player) bool {
 // logNetworkError handles network errors gracefully using centralized network error handling
 func logNetworkError(membershipId int64, err error) {
 	netErr := network.CategorizeNetworkError(err)
-	
+
 	if netErr == nil {
 		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,

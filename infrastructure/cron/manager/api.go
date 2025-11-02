@@ -396,7 +396,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug("LOG_REQUEST", map[string]any{
-		logging.JOB_ID:  jobID,
+		logging.JOB_ID:   jobID,
 		logging.LOG_TYPE: logType,
 	})
 
@@ -492,7 +492,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	bytesCopied, err := io.Copy(w, file)
 	fields := map[string]any{
-		logging.JOB_ID: jobID,	
+		logging.JOB_ID: jobID,
 		logging.PATH:   logPath,
 		"bytes_copied": bytesCopied,
 	}

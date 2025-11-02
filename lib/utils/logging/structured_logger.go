@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"raidhub/lib/utils/sentry"
 )
 
 // StructuredLogger is a simple logger implementation
@@ -13,7 +15,7 @@ type StructuredLogger struct {
 }
 
 // NewLogger creates a new logger with the given prefix
-func NewLogger(prefix string) Logger {
+func NewLogger(prefix string) *StructuredLogger {
 	return &StructuredLogger{prefix: prefix}
 }
 
@@ -90,22 +92,22 @@ func (l *StructuredLogger) log(level string, key string, fields map[string]any) 
 	}
 
 	switch level {
-	case Info, Debug:
+	case INFO, DEBUG:
 		fmt.Fprintf(stdoutWriter, "%s%s\n", prefix, output)
-	case Warn, Error, Fatal:
+	case WARN, ERROR, FATAL:
 		fmt.Fprintf(stderrWriter, "%s%s\n", prefix, output)
 	}
 }
 
 func (l *StructuredLogger) Debug(key string, fields map[string]any) {
 	if ShouldLog(Debug) {
-		l.log(Debug, key, fields)
+		l.log(DEBUG, key, fields)
 	}
 }
 
 func (l *StructuredLogger) Info(key string, fields map[string]any) {
 	if ShouldLog(Info) {
-		l.log(Info, key, fields)
+		l.log(INFO, key, fields)
 	}
 }
 
@@ -114,36 +116,68 @@ func (l *StructuredLogger) Warn(key string, err error, fields map[string]any) {
 		if fields == nil {
 			fields = make(map[string]any)
 		}
-		if err != nil {
-			fields[ERROR] = err.Error()
-		}
-		l.log(Warn, key, fields)
+		fields["error"] = err.Error()
+		l.log(WARN, key, fields)
 	}
 }
 
 func (l *StructuredLogger) Error(key string, err error, fields map[string]any) {
-	if ShouldLog(Error) {
-		if fields == nil {
-			fields = make(map[string]any)
-		}
-		if err != nil {
-			fields[ERROR] = err.Error()
-		}
-		l.log(Error, key, fields)
+	if fields == nil {
+		fields = make(map[string]any)
 	}
+	fields["error"] = err.Error()
+	if ShouldLog(Error) {
+		l.log(ERROR, key, fields)
+	}
+
+	sentry.CaptureError(Error, key, err, fields)
 }
 
-
 func (l *StructuredLogger) Fatal(key string, err error, fields map[string]any) {
-	// Fatal logs are always shown when error level is enabled (fatal is not a separate configurable level)
-	if ShouldLog(Error) {
-		if fields == nil {
-			fields = make(map[string]any)
-		}
-		if err != nil {
-			fields[ERROR] = err.Error()
-		}
-		l.log(Fatal, key, fields)
+	if fields == nil {
+		fields = make(map[string]any)
 	}
+	fields["error"] = err.Error()
+	if ShouldLog(Error) {
+		l.log(FATAL, key, fields)
+	}
+	sentry.CaptureError(Fatal, key, err, fields)
+
+	sentry.Flush()
 	os.Exit(1)
+}
+
+// InitSentry initializes Sentry error tracking using the logger's prefix as the app name.
+// Sentry will only be initialized if SENTRY_DSN environment variable is set.
+//
+// Returns a cleanup function that should be deferred in main() to:
+//   - Capture any panics and send them to Sentry
+//   - Flush pending Sentry events before program exit
+//
+// Example usage:
+//
+//	func main() {
+//		logger := logging.NewLogger("my-service")
+//		cleanup := logger.InitSentry()
+//		defer cleanup()
+//
+//		// Your application code here
+//	}
+func (l *StructuredLogger) InitSentry() func() {
+	sentryInitialized := sentry.Init(l.prefix)
+	if !sentryInitialized {
+		l.Debug("SENTRY_NOT_INITIALIZED", map[string]any{
+			"app": l.prefix,
+		})
+	} else {
+		l.Debug("SENTRY_INITIALIZED", map[string]any{
+			"app": l.prefix,
+		})
+	}
+	return func() {
+		if sentryInitialized {
+			sentry.Recover()
+			sentry.Flush()
+		}
+	}
 }

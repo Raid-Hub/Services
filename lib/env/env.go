@@ -69,6 +69,11 @@ var (
 
 	// Cron Manager
 	CronManagerPort string
+
+	// Sentry
+	SentryDSN   string
+	Environment string
+	Release     string
 )
 
 var envIssues []string
@@ -148,6 +153,11 @@ func init() {
 	StderrPath = getEnv("STDERR")
 
 	CronManagerPort = getEnv("CRON_MANAGER_PORT")
+
+	// Sentry (optional)
+	SentryDSN = getEnv("SENTRY_DSN")
+	Environment = getEnvWithDefault("ENVIRONMENT", "production")
+	Release = getEnv("RELEASE")
 
 	if len(envIssues) > 0 {
 		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))

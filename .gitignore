@@ -9,17 +9,6 @@ volumes/
 # Binaries
 bin/
 
-# Root-level binaries (also marked as binary in .gitattributes)
-/atlas
-/hermes
-/zeus
-/migrate
-/seed
-/athena
-/nemesis
-/hades
-/main
-
 # Logs
 *.log
 tilt.log

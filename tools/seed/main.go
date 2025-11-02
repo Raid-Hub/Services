@@ -15,7 +15,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var logger = logging.NewLogger("SEED")
+var logger = logging.NewLogger("seed")
 
 func getSeedFiles(seedsDir string) ([]string, error) {
 	var seedFiles []string
@@ -139,6 +139,9 @@ func seedFile(db *sql.DB, filePath string) error {
 }
 
 func main() {
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	logger.Info("STARTING_SEED_TOOL", nil)
 
 	// Wait for PostgreSQL connection to be ready

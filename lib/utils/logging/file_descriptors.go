@@ -20,7 +20,7 @@ func init() {
 		if err := os.MkdirAll(filepath.Dir(env.StdoutPath), 0755); err != nil {
 			panic(fmt.Errorf("failed to create stdout directory: %v", err))
 		}
-		
+
 		file, err := os.OpenFile(env.StdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err == nil {
 			// Use MultiWriter to write to both file and stdout
@@ -36,7 +36,7 @@ func init() {
 		if err := os.MkdirAll(filepath.Dir(env.StderrPath), 0755); err != nil {
 			panic(fmt.Errorf("failed to create stderr directory: %v", err))
 		}
-		
+
 		file, err := os.OpenFile(env.StderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err == nil {
 			// Use MultiWriter to write to both file and stderr

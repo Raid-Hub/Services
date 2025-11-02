@@ -8,17 +8,22 @@ import (
 	"strconv"
 )
 
-var logger = logging.NewLogger("PROCESS_PGCR_TOOL")
+var logger = logging.NewLogger("process-single-pgcr")
 
-func ProcessSinglePGCR() {
-	// 1. Parse the instance ID from command line args
-	// Since main.go uses flag.Parse(), the actual arguments start from flag.Arg(1)
-	if flag.NArg() < 2 {
+func main() {
+	flag.Parse()
+
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
+	// Parse the instance ID from command line args
+	// Since flag.Parse() is used, the actual arguments start from flag.Arg(0)
+	if flag.NArg() < 1 {
 		logger.Error("USAGE_ERROR", nil, map[string]any{"message": "Usage: scripts process-single-pgcr <instance_id>"})
 		return
 	}
 
-	instanceId, err := strconv.ParseInt(flag.Arg(1), 10, 64)
+	instanceId, err := strconv.ParseInt(flag.Arg(0), 10, 64)
 	if err != nil {
 		logger.Error("INVALID_INSTANCE_ID", err, map[string]any{})
 		return
@@ -26,7 +31,7 @@ func ProcessSinglePGCR() {
 
 	logger.Info("PROCESSING_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
-	// 2. Fetch and process the PGCR
+	// Fetch and process the PGCR
 	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
 
 	if result != pgcr_processing.Success {
@@ -36,7 +41,7 @@ func ProcessSinglePGCR() {
 
 	logger.Info("SUCCESSFULLY_FETCHED_AND_PROCESSED_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
-	// 3. Store the PGCR
+	// Store the PGCR
 	lag, committed, err := instance_storage.StorePGCR(instance, pgcr)
 	if err != nil {
 		logger.Error("FAILED_TO_STORE_PGCR", err, map[string]any{logging.INSTANCE_ID: instanceId})
@@ -68,9 +73,4 @@ func ProcessSinglePGCR() {
 	} else {
 		logger.Info("PGCR_ALREADY_EXISTS", summaryFields)
 	}
-}
-
-func main() {
-	flag.Parse()
-	ProcessSinglePGCR()
 }

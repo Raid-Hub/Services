@@ -27,10 +27,14 @@ const (
 var HermesLogger = logging.NewLogger("hermes")
 
 func main() {
+
 	topicType := flag.String("topic", "", "Name of topic to run. If empty, starts all topics.")
 	metricsPort := flag.String("metrics-port", "", "Override metrics port (default: env HERMES_METRICS_PORT)")
 
 	flag.Parse()
+
+	sentryCleanup := HermesLogger.InitSentry()
+	defer sentryCleanup()
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancelCause(context.Background())

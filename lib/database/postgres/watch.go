@@ -84,12 +84,12 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 				case progress.PartitionsDone != progress.PartitionsTotal:
 					percent = float64(progress.PartitionsDone) / float64(progress.PartitionsTotal) * 100
 					logger.Info(QUERY_PROGRESS, map[string]any{
-						logging.OPERATION:   label,
-						logging.PHASE:       progress.Phase,
-						"progress_percent":  percent,
-						"partitions_done":   progress.PartitionsDone,
-						"partitions_total":  progress.PartitionsTotal,
-						"unit":              "partitions",
+						logging.OPERATION:  label,
+						logging.PHASE:      progress.Phase,
+						"progress_percent": percent,
+						"partitions_done":  progress.PartitionsDone,
+						"partitions_total": progress.PartitionsTotal,
+						"unit":             "partitions",
 					})
 				default:
 					logger.Info(QUERY_PROGRESS, map[string]any{

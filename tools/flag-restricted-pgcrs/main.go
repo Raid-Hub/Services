@@ -11,7 +11,10 @@ const cheatCheckVersion = ""
 
 var logger = logging.NewLogger("FLAG_RESTRICTED_TOOL")
 
-func FlagRestrictedPGCRs() {
+func main() {
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
 	if err != nil {
 		logger.Error("ERROR_QUERYING_INSTANCE_TABLE", err, map[string]any{})
@@ -77,8 +80,4 @@ func FlagRestrictedPGCRs() {
 	}
 
 	logger.Info("COMPLETED", map[string]any{"total_checked": total, "restricted_flagged": badApples})
-}
-
-func main() {
-	FlagRestrictedPGCRs()
 }

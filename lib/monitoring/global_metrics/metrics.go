@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	StatusDimension  = "status"
+	StatusDimension    = "status"
 	OperationDimension = "operation"
 )
 

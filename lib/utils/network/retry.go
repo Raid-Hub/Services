@@ -40,7 +40,7 @@ func WithRetry(ctx context.Context, config RetryConfig, fn func() error) error {
 
 func withRetryAttempts(ctx context.Context, config RetryConfig, fn func() error, currentAttempt int) error {
 	err := fn()
-	
+
 	// Success or not retryable
 	if err == nil || !ShouldRetry(err) {
 		return err
@@ -83,7 +83,7 @@ func WithRetryForResult[T any](ctx context.Context, config RetryConfig, fn func(
 
 func withRetryAttemptsForResult[T any](ctx context.Context, config RetryConfig, fn func() (T, error), currentAttempt int) (T, error) {
 	result, err := fn()
-	
+
 	// Success or not retryable
 	if err == nil || !ShouldRetry(err) {
 		return result, err
@@ -143,4 +143,3 @@ func QuickRetryForResult[T any](fn func() (T, error)) (T, error) {
 	config := DefaultRetryConfig()
 	return WithRetryForResult(ctx, config, fn)
 }
-

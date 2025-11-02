@@ -2,38 +2,45 @@ package logging
 
 // Log levels
 const (
-	Debug = "DEBUG" // Diagnostic information for IT/sysadmins when verbose flag is passed
-	Info  = "INFO"  // Generally useful information (service start/stop, configuration assumptions)
-	Warn  = "WARN"  // Recoverable issues (failover, retries, missing secondary data) - no alerts
-	Error = "ERROR" // Operation-fatal errors requiring user intervention - triggers alerts/Sentry
-	Fatal = "FATAL" // Service-fatal errors that crash the application to prevent data loss
+	DEBUG = "DEBUG" // Diagnostic information for IT/sysadmins when verbose flag is passed
+	INFO  = "INFO"  // Generally useful information (service start/stop, configuration assumptions)
+	WARN  = "WARN"  // Recoverable issues (failover, retries, missing secondary data) - no alerts
+	ERROR = "ERROR" // Operation-fatal errors requiring user intervention - triggers alerts/Sentry
+	FATAL = "FATAL" // Service-fatal errors that crash the application to prevent data loss
+)
+
+const (
+	Error = "error"
+	Fatal = "fatal"
+	Warn  = "warn"
+	Info  = "info"
+	Debug = "debug"
 )
 
 // Standard logging field keys - use constants to ensure consistency
 const (
 	// Core fields - most commonly used generic fields
-	ACTION   = "action"
-	CACHE    = "cache"
-	COUNT    = "count"
-	ERROR    = "error" // Field key for error messages
-	KEY      = "key"
-	NAME     = "name"
-	PATH     = "path"
-	PHASE    = "phase"
-	REASON   = "reason"
-	SIZE     = "size"
-	STATUS   = "status"
-	TYPE     = "type"
-	VALUE    = "value"
-	VERSION  = "version"
+	ACTION  = "action"
+	CACHE   = "cache"
+	COUNT   = "count"
+	KEY     = "key"
+	NAME    = "name"
+	PATH    = "path"
+	PHASE   = "phase"
+	REASON  = "reason"
+	SIZE    = "size"
+	STATUS  = "status"
+	TYPE    = "type"
+	VALUE   = "value"
+	VERSION = "version"
 
 	// Infrastructure fields - host, port, network components
-	HOST     = "host"
-	PORT     = "port"
-	QUEUE    = "queue"
-	SYSTEM   = "system"
-	SERVICE  = "service"
-	SOURCE   = "source"
+	HOST    = "host"
+	PORT    = "port"
+	QUEUE   = "queue"
+	SYSTEM  = "system"
+	SERVICE = "service"
+	SOURCE  = "source"
 
 	// Network/HTTP fields
 	ENDPOINT          = "endpoint"

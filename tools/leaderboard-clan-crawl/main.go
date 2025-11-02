@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var logger = logging.NewLogger("LEADERBOARD_CLAN_CRAWL")
+var logger = logging.NewLogger("leaderboard-clan-crawl")
 
 type PlayerTransport struct {
 	membershipId   int64
@@ -499,5 +499,9 @@ func refreshClanLeaderboard(ctx context.Context) error {
 
 func main() {
 	flag.Parse()
+
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	LeaderboardClanCrawl()
 }

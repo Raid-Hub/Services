@@ -86,18 +86,3 @@ local_resource(
     auto_init=False,
     labels=["database"],
 )
-# =============================================================================
-# DEVELOPMENT NOTES
-# =============================================================================
-
-# Behavior:
-# - Run 'tilt up' to automatically start Docker infrastructure (postgres, rabbitmq, clickhouse, prometheus)
-# - Go services (hermes, atlas, zeus, etc.) are available but don't auto-start - manually start via Tilt UI
-# - All Go services use 'go run' for hot reloading
-# - Run 'tilt down' to stop all services
-#
-# Prerequisites:
-# - Docker and Docker Compose installed
-# - Go 1.21+ installed
-# - .env file configured
-

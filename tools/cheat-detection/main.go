@@ -17,7 +17,7 @@ const (
 	PLAYER_INSTANCES_BLACKLISTED = "PLAYER_INSTANCES_BLACKLISTED"
 )
 
-var logger = logging.NewLogger("CHEAT_DETECTION")
+var logger = logging.NewLogger("cheat-detection")
 
 const (
 	numBungieWorkers     = 15
@@ -31,8 +31,10 @@ type LevelsDTO struct {
 	CheaterAccountFlags       uint64
 }
 
-// CheatDetection is the command function for cheat detection and player account maintenance
-func CheatDetection() {
+func main() {
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	logger.Info("JOB_STARTED", map[string]any{
 		logging.SERVICE: "cheat-detection",
 		logging.VERSION: versionPrefix,
@@ -94,7 +96,7 @@ func CheatDetection() {
 		levelCounts = append(levelCounts, playerCount)
 		totalPlayers += playerCount
 	}
-	
+
 	logger.Info("CHEAT_LEVEL_SUMMARY", map[string]any{
 		"total_players": totalPlayers,
 		"level_0":       levelCounts[0],
@@ -165,8 +167,8 @@ func CheatDetection() {
 		count, elligible, err := cheat_detection.BlacklistRecentInstances(player)
 		if err != nil {
 			logger.Warn(BLACKLIST_UPDATE_ERROR, err, map[string]any{
-				logging.MEMBERSHIP_ID:   player.MembershipId,
-				logging.OPERATION: "blacklist_player_instances",
+				logging.MEMBERSHIP_ID: player.MembershipId,
+				logging.OPERATION:     "blacklist_player_instances",
 			})
 		}
 		totalBlacklistedCount += count
@@ -174,7 +176,7 @@ func CheatDetection() {
 	}
 
 	logger.Info("BLACKLIST_SUMMARY", map[string]any{
-		"flagged_instances": countBlacklisted,
+		"flagged_instances":  countBlacklisted,
 		"recent_blacklisted": totalBlacklistedCount,
 		"total_eligible":     totalElligibleCount,
 		"players_processed":  len(players),
@@ -184,8 +186,4 @@ func CheatDetection() {
 		logging.SERVICE: "cheat-detection",
 		logging.STATUS:  "complete",
 	})
-}
-
-func main() {
-	CheatDetection()
 }

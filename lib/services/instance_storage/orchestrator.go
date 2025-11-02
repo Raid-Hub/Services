@@ -21,7 +21,7 @@ var logger = logging.NewLogger("INSTANCE_STORAGE_SERVICE")
 // 3. ClickHouse publishing (external, non-transactional)
 func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
 	startTime := time.Now()
-	
+
 	// Start transaction for atomic storage of pgcr + instance data
 	tx, err := postgres.DB.Begin()
 	if err != nil {

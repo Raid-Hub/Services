@@ -1,5 +1,5 @@
 # Build stage: Build all cron tool binaries and cron manager
-FROM golang:1.21-alpine AS build
+FROM golang:1.25-alpine AS build
 
 # Install sqlite3 development libraries and build tools for manifest-downloader (requires CGO)
 RUN apk add --no-cache \

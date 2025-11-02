@@ -21,7 +21,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var logger = logging.NewLogger("MANIFEST_DOWNLOADER")
+var logger = logging.NewLogger("manifest-downloader")
 
 // sanitizeVersionForFilename replaces filesystem-unsafe characters in version strings
 func sanitizeVersionForFilename(version string) string {
@@ -408,6 +408,9 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, definitions *s
 }
 
 func main() {
+	sentryCleanup := logger.InitSentry()
+	defer sentryCleanup()
+
 	path := DownloadManifest()
 	definitions, err := sql.Open("sqlite3", path)
 	if err != nil {

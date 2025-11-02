@@ -25,7 +25,7 @@ RaidHub Services follows a microservices architecture with clear separation betw
 ### Prerequisites
 
 - Docker Desktop
-- Go 1.21+
+- Go 1.25+
 - Make
 - **Tilt** (for development) - Install from https://docs.tilt.dev/install.html
 
