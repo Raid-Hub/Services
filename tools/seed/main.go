@@ -110,9 +110,8 @@ func seedFile(db *sql.DB, filePath string) error {
 
 				result, err := stmt.Exec(values...)
 				if err != nil {
-					logger.Warn("FAILED_TO_INSERT_RECORD", map[string]any{
+					logger.Warn("FAILED_TO_INSERT_RECORD", err, map[string]any{
 						logging.TABLE: tableName,
-						logging.ERROR: err.Error(),
 					})
 					continue
 				}
@@ -150,9 +149,8 @@ func main() {
 	seedsDir := "infrastructure/postgres/seeds"
 	seedFiles, err := getSeedFiles(seedsDir)
 	if err != nil {
-		logger.Fatal("FAILED_TO_GET_SEED_FILES", map[string]any{
+		logger.Fatal("FAILED_TO_GET_SEED_FILES", err, map[string]any{
 			logging.DIRECTORY: seedsDir,
-			logging.ERROR:     err.Error(),
 		})
 		return
 	}
@@ -173,9 +171,8 @@ func main() {
 		filePath := filepath.Join(seedsDir, seedFileName)
 
 		if err := seedFile(db, filePath); err != nil {
-			logger.Fatal("FAILED_TO_SEED_FILE", map[string]any{
+			logger.Fatal("FAILED_TO_SEED_FILE", err, map[string]any{
 				logging.FILENAME: seedFileName,
-				logging.ERROR:    err.Error(),
 			})
 			return
 		}

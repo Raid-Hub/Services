@@ -38,9 +38,8 @@ func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery
 	err = player.Crawl(worker.Context(), membershipId)
 
 	if err != nil {
-		worker.Warn("PLAYER_CRAWL_ERROR", map[string]any{
+		worker.Warn("PLAYER_CRAWL_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}

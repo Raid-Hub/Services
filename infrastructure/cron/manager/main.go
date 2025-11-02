@@ -56,18 +56,14 @@ func setupFileWatcher() error {
 					})
 					time.Sleep(100 * time.Millisecond) // Small delay to ensure file is fully written
 					if err := reloadCrontab(); err != nil {
-						logger.Error("CRONTAB_RELOAD_ERROR", map[string]any{
-							logging.ERROR: err.Error(),
-						})
+						logger.Error("CRONTAB_RELOAD_ERROR", err, nil)
 					}
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				logger.Error("FILE_WATCHER_ERROR", map[string]any{
-					logging.ERROR: err.Error(),
-				})
+				logger.Error("FILE_WATCHER_ERROR", err, nil)
 			}
 		}
 	}()
@@ -84,20 +80,16 @@ func setupFileWatcher() error {
 func main() {
 	// Initial parse
 	if err := reloadCrontab(); err != nil {
-		logger.Fatal("CRONTAB_PARSE_FAILED", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Fatal("CRONTAB_PARSE_FAILED", err, nil)
 	}
 
 	// Setup file watcher
 	if err := setupFileWatcher(); err != nil {
-		logger.Warn("FILE_WATCHER_SETUP_FAILED", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Warn("FILE_WATCHER_SETUP_FAILED", err, nil)
 	}
 
 	if port == "" {
-		logger.Fatal("CRON_MANAGER_PORT_NOT_SET", map[string]any{})
+		logger.Fatal("CRON_MANAGER_PORT_NOT_SET", nil, nil)
 	}
 
 	// Setup HTTP routes
@@ -118,7 +110,6 @@ func main() {
 	logger.Info("CRON_MANAGER_STARTING", map[string]any{
 		"port": port,
 	})
-	logger.Fatal("HTTP_SERVER_ERROR", map[string]any{
-		logging.ERROR: http.ListenAndServe(":"+port, nil).Error(),
-	})
+	httpErr := http.ListenAndServe(":"+port, nil)
+	logger.Fatal("HTTP_SERVER_ERROR", httpErr, nil)
 }

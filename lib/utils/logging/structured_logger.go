@@ -90,41 +90,60 @@ func (l *StructuredLogger) log(level string, key string, fields map[string]any) 
 	}
 
 	switch level {
-	case info, debug:
+	case Info, Debug:
 		fmt.Fprintf(stdoutWriter, "%s%s\n", prefix, output)
-	case warn, error, fatal:
+	case Warn, Error, Fatal:
 		fmt.Fprintf(stderrWriter, "%s%s\n", prefix, output)
 	}
 }
 
-func (l *StructuredLogger) Info(key string, fields map[string]any) {
-	if ShouldLog(LevelInfo) {
-		l.log(info, key, fields)
-	}
-}
-
-func (l *StructuredLogger) Warn(key string, fields map[string]any) {
-	if ShouldLog(LevelWarn) {
-		l.log(warn, key, fields)
-	}
-}
-
-func (l *StructuredLogger) Error(key string, fields map[string]any) {
-	if ShouldLog(LevelError) {
-		l.log(error, key, fields)
-	}
-}
-
 func (l *StructuredLogger) Debug(key string, fields map[string]any) {
-	if ShouldLog(LevelDebug) {
-		l.log(debug, key, fields)
+	if ShouldLog(Debug) {
+		l.log(Debug, key, fields)
 	}
 }
 
-func (l *StructuredLogger) Fatal(key string, fields map[string]any) {
+func (l *StructuredLogger) Info(key string, fields map[string]any) {
+	if ShouldLog(Info) {
+		l.log(Info, key, fields)
+	}
+}
+
+func (l *StructuredLogger) Warn(key string, err error, fields map[string]any) {
+	if ShouldLog(Warn) {
+		if fields == nil {
+			fields = make(map[string]any)
+		}
+		if err != nil {
+			fields[ERROR] = err.Error()
+		}
+		l.log(Warn, key, fields)
+	}
+}
+
+func (l *StructuredLogger) Error(key string, err error, fields map[string]any) {
+	if ShouldLog(Error) {
+		if fields == nil {
+			fields = make(map[string]any)
+		}
+		if err != nil {
+			fields[ERROR] = err.Error()
+		}
+		l.log(Error, key, fields)
+	}
+}
+
+
+func (l *StructuredLogger) Fatal(key string, err error, fields map[string]any) {
 	// Fatal logs are always shown when error level is enabled (fatal is not a separate configurable level)
-	if ShouldLog(LevelError) {
-		l.log(fatal, key, fields)
+	if ShouldLog(Error) {
+		if fields == nil {
+			fields = make(map[string]any)
+		}
+		if err != nil {
+			fields[ERROR] = err.Error()
+		}
+		l.log(Fatal, key, fields)
 	}
 	os.Exit(1)
 }

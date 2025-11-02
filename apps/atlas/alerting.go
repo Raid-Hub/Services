@@ -114,9 +114,9 @@ func logMissedInstance(instanceId int64, startTime time.Time) {
 		}
 		atlasAlerting.SendCustom(&webhook, "", nil)
 	}
-	AtlasLogger.Warn("MISSED_PGCR", map[string]any{
+	AtlasLogger.Warn("MISSED_PGCR", nil, map[string]any{
 		logging.INSTANCE_ID: instanceId,
-		"duration":          fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
+		logging.DURATION:    fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
 	})
 }
 
@@ -137,9 +137,9 @@ func logMissedInstanceWarning(instanceId int64, startTime time.Time) {
 		}}
 		atlasAlerting.SendWarning("Unresolved Instance (Warning)", fields, "", nil)
 	}
-	AtlasLogger.Warn("INSTANCE_RESOLUTION_WARNING", map[string]any{
+	AtlasLogger.Warn("INSTANCE_RESOLUTION_WARNING", nil, map[string]any{
 		logging.INSTANCE_ID: instanceId,
-		"duration":          fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
+		logging.DURATION:    fmt.Sprintf("%dms", time.Since(startTime).Milliseconds()),
 		logging.ACTION:      "monitoring",
 	})
 }
@@ -163,10 +163,10 @@ func logHigh404Rate(count int, rate float64) {
 		}},
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
-	AtlasLogger.Warn("HIGH_404_RATE_DETECTED", map[string]any{
-		"rate":         rate,
-		logging.COUNT:  count,
-		logging.ACTION: "gap_supercharge_initiated",
+	AtlasLogger.Warn("HIGH_404_RATE_DETECTED", nil, map[string]any{
+		logging.RATE:    rate,
+		logging.COUNT:   count,
+		logging.ACTION:  "gap_supercharge_initiated",
 	})
 }
 
@@ -180,7 +180,7 @@ func logExitGapSupercharge(percentNotFound float64, p20Lag float64) {
 	}}
 	atlasAlerting.SendStatus("Gap Supercharge Exiting", fields, "GAP_SUPERCHARGE_EXITING", map[string]any{
 		"percent_not_found": percentNotFound,
-		"lag":               discord.FormatDuration(p20Lag),
+		logging.LAG:         discord.FormatDuration(p20Lag),
 	})
 }
 
@@ -220,7 +220,7 @@ func logRunawayError(percentNotFound float64, currentInstanceId, latestInstanceI
 			}},
 	}
 	atlasAlerting.SendCustom(&webhook, "", nil)
-	AtlasLogger.Error("RUNAWAY_ERROR", map[string]any{
+	AtlasLogger.Error("RUNAWAY_ERROR", nil, map[string]any{
 		"percent_not_found":               percentNotFound,
 		"current_instance_id":             currentInstanceId,
 		"latest_instance_id":              latestInstanceId,

@@ -21,10 +21,9 @@ func Crawl(groupId int64) error {
 	// Get clan from Bungie API
 	_, err := bungie.Client.GetGroup(groupId)
 	if err != nil {
-		logger.Warn(CLAN_CRAWL_ERROR, map[string]any{
+		logger.Warn(CLAN_CRAWL_ERROR, err, map[string]any{
 			logging.GROUP_ID:  groupId,
 			logging.OPERATION: "fetch_clan",
-			logging.ERROR:     err.Error(),
 		})
 		return err
 	}

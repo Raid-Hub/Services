@@ -43,13 +43,12 @@ func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.D
 
 	if err != nil {
 		fields := map[string]any{
-			logging.ERROR:       err.Error(),
 			logging.INSTANCE_ID: instanceID,
 		}
 		if !isExpectedError {
-			logger.Error("PGCR_PARSING_EXCEPTION", fields)
+			logger.Error("PGCR_PARSING_EXCEPTION", err, fields)
 		} else {
-			logger.Warn("PGCR_PARSING_ERROR", fields)
+			logger.Warn("PGCR_PARSING_ERROR", err, fields)
 		}
 		return BadFormat, nil, nil
 	}
@@ -299,7 +298,7 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 
 	start, err := time.Parse(time.RFC3339, pgcr.Period)
 	if err != nil {
-		logger.Warn("Error parsing 'period'", map[string]any{logging.INSTANCE_ID: pgcr.ActivityDetails.InstanceId, logging.ERROR: err.Error()})
+		logger.Warn("Error parsing 'period'", err, map[string]any{logging.INSTANCE_ID: pgcr.ActivityDetails.InstanceId})
 		return nil, err
 	}
 

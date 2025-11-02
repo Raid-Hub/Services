@@ -1,7 +1,6 @@
 package queueworkers
 
 import (
-	"fmt"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
@@ -36,12 +35,11 @@ func processActivityHistory(worker processing.WorkerInterface, message amqp.Deli
 	}
 
 	// Call player activity history logic
-	err = player.UpdateActivityHistory(fmt.Sprintf("%d", membershipId))
+	err = player.UpdateActivityHistory(membershipId)
 
 	if err != nil {
-		worker.Error("ACTIVITY_HISTORY_PROCESSING_ERROR", map[string]any{
+		worker.Error("ACTIVITY_HISTORY_PROCESSING_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}

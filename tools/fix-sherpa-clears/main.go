@@ -44,13 +44,13 @@ func FixSherpaClears() {
 
 	_, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_instance_player_completed ON instance_player (completed) INCLUDE (membership_id, instance_id) WHERE completed`)
 	if err != nil {
-		logger.Error("ERROR_CREATING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", logging.ERROR: err.Error()})
+		logger.Error("ERROR_CREATING_INDEX", err, map[string]any{"table": "instance_player", "index": "idx_instance_player_completed"})
 	}
 	endMonitor() // Stop monitoring after index creation
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		logger.Error("ERROR_BEGINNING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+		logger.Error("ERROR_BEGINNING_TRANSACTION", err, map[string]any{})
 	}
 	defer tx.Rollback()
 
@@ -58,27 +58,27 @@ func FixSherpaClears() {
 	logger.Info("ACQUIRING_LOCK", map[string]any{"tables": "player, instance_player, player_stats"})
 	_, err = tx.ExecContext(ctx, `LOCK TABLE player, instance_player, player_stats IN EXCLUSIVE MODE`)
 	if err != nil {
-		logger.Error("ERROR_ACQUIRING_LOCK", map[string]any{"tables": "player, instance_player, player_stats", logging.ERROR: err.Error()})
+		logger.Error("ERROR_ACQUIRING_LOCK", err, map[string]any{"tables": "player, instance_player, player_stats"})
 	}
 	logger.Info("LOCK_ACQUIRED", map[string]any{})
 
-	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "firsts_clears_tmp"})
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{logging.VIEW: "firsts_clears_tmp"})
 	start := time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW firsts_clears_tmp WITH DATA`)
 	if err != nil {
-		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "firsts_clears_tmp", logging.ERROR: err.Error()})
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", err, map[string]any{logging.VIEW: "firsts_clears_tmp"})
 	}
-	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "firsts_clears_tmp", "duration": time.Since(start).String()})
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{logging.VIEW: "firsts_clears_tmp", "duration": time.Since(start).String()})
 
-	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "noob_counts"})
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{logging.VIEW: "noob_counts"})
 	start = time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW noob_counts WITH DATA`)
 	if err != nil {
-		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "noob_counts", logging.ERROR: err.Error()})
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", err, map[string]any{logging.VIEW: "noob_counts"})
 	}
-	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "noob_counts", "duration": time.Since(start).String()})
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{logging.VIEW: "noob_counts", "duration": time.Since(start).String()})
 
 	logger.Info("UPDATING_SHERPAS_AND_FIRST_CLEAR", map[string]any{})
 	start = time.Now()
@@ -97,7 +97,7 @@ func FixSherpaClears() {
 			AND ap.membership_id = _ap.membership_id
 			AND ap.instance_id = _ap.instance_id`)
 	if err != nil {
-		logger.Error("ERROR_UPDATING_SHERPAS_AND_FIRST_CLEAR", map[string]any{logging.ERROR: err.Error()})
+		logger.Error("ERROR_UPDATING_SHERPAS_AND_FIRST_CLEAR", err, map[string]any{})
 	}
 	logger.Info("SHERPAS_AND_FIRST_CLEAR_UPDATED", map[string]any{"duration": time.Since(start).String()})
 
@@ -108,7 +108,7 @@ func FixSherpaClears() {
 		start := time.Now()
 		_, err = tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_instance_player_completed`)
 		if err != nil {
-			logger.Error("ERROR_DROPPING_INDEX", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", logging.ERROR: err.Error()})
+			logger.Error("ERROR_DROPPING_INDEX", err, map[string]any{"table": "instance_player", "index": "idx_instance_player_completed"})
 		}
 		logger.Info("INDEX_DROPPED", map[string]any{"table": "instance_player", "index": "idx_instance_player_completed", "duration": time.Since(start).String()})
 	}()
@@ -116,14 +116,14 @@ func FixSherpaClears() {
 	// part 1 end, can restart from part 2 if needed
 
 	// Once the first section is done, we can update the materialized view which seeds the player_stats and global_stats tables
-	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{"view": "p_stats_cache"})
+	logger.Info("UPDATING_MATERIALIZED_VIEW", map[string]any{logging.VIEW: "p_stats_cache"})
 	start = time.Now()
 
 	_, err = tx.ExecContext(ctx, `REFRESH MATERIALIZED VIEW p_stats_cache WITH DATA`)
 	if err != nil {
-		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", map[string]any{"view": "p_stats_cache", logging.ERROR: err.Error()})
+		logger.Error("ERROR_REFRESHING_MATERIALIZED_VIEW", err, map[string]any{logging.VIEW: "p_stats_cache"})
 	}
-	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{"view": "p_stats_cache", "duration": time.Since(start).String()})
+	logger.Info("MATERIALIZED_VIEW_UPDATED", map[string]any{logging.VIEW: "p_stats_cache", "duration": time.Since(start).String()})
 
 	// This update the player_stats and global_stats tables
 	wg.Add(1)
@@ -142,7 +142,7 @@ func FixSherpaClears() {
             LEFT JOIN p_stats_cache p USING (membership_id, activity_id)
             WHERE ps.membership_id = _ps.membership_id AND ps.activity_id = _ps.activity_id`)
 		if err != nil {
-			logger.Error("ERROR_UPDATING_PLAYER_STATS", map[string]any{logging.ERROR: err.Error()})
+			logger.Error("ERROR_UPDATING_PLAYER_STATS", err, map[string]any{})
 		}
 		logger.Info("PLAYER_STATS_UPDATED", map[string]any{"duration": time.Since(start).String()})
 	}()
@@ -182,14 +182,14 @@ func FixSherpaClears() {
 			LEFT JOIN g_stats g USING (membership_id)
             WHERE p.membership_id = _p.membership_id`)
 		if err != nil {
-			logger.Error("ERROR_UPDATING_GLOBAL_STATS", map[string]any{logging.ERROR: err.Error()})
+			logger.Error("ERROR_UPDATING_GLOBAL_STATS", err, map[string]any{})
 		}
 		logger.Info("GLOBAL_STATS_UPDATED", map[string]any{"duration": time.Since(start).String()})
 	}()
 
 	wg.Wait()
 	if err := tx.Commit(); err != nil {
-		logger.Error("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+		logger.Error("ERROR_COMMITTING_TRANSACTION", err, map[string]any{})
 	}
 	logger.Info("TRANSACTION_COMMITTED", map[string]any{})
 

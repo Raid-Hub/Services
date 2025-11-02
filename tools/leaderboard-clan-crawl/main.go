@@ -45,14 +45,14 @@ func LeaderboardClanCrawl() {
 
 	ch, err := rabbit.Conn.Channel()
 	if err != nil {
-		logger.Fatal("ERROR_CREATING_CHANNEL", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_CREATING_CHANNEL", err, map[string]any{})
 	}
 	defer ch.Close()
 
 	// Query top players from leaderboards
 	players, err := queryTopPlayers(ctx, *topPlayers)
 	if err != nil {
-		logger.Fatal("ERROR_QUERYING_DATABASE", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_QUERYING_DATABASE", err, map[string]any{})
 	}
 
 	logger.Info("PLAYERS_SELECTED", map[string]any{
@@ -61,7 +61,7 @@ func LeaderboardClanCrawl() {
 	})
 
 	if len(players) == 0 {
-		logger.Warn("NO_PLAYERS_FOUND", map[string]any{
+		logger.Warn("NO_PLAYERS_FOUND", nil, map[string]any{
 			"message": "No top players found in leaderboards. Views may need refreshing.",
 		})
 		return
@@ -82,7 +82,7 @@ func LeaderboardClanCrawl() {
 	})
 
 	if len(clans) == 0 {
-		logger.Warn("NO_CLANS_FOUND", map[string]any{
+		logger.Warn("NO_CLANS_FOUND", nil, map[string]any{
 			"message": "No clans found for top players",
 		})
 		return
@@ -104,7 +104,7 @@ func LeaderboardClanCrawl() {
 
 	// Refresh clan leaderboard
 	if err := refreshClanLeaderboard(ctx); err != nil {
-		logger.Warn("ERROR_REFRESHING_CLAN_LEADERBOARD", map[string]any{logging.ERROR: err.Error()})
+		logger.Warn("ERROR_REFRESHING_CLAN_LEADERBOARD", err, map[string]any{})
 	}
 }
 
@@ -188,9 +188,8 @@ func fetchClansForPlayers(ctx context.Context, players []PlayerTransport, concur
 			for player := range playerQueue {
 				groups, err := fetchPlayerGroups(ctx, player)
 				if err != nil {
-					logger.Warn("PLAYER_GROUPS_FAILED", map[string]any{
+					logger.Warn("PLAYER_GROUPS_FAILED", err, map[string]any{
 						logging.MEMBERSHIP_ID: player.membershipId,
-						logging.ERROR:         err.Error(),
 					})
 					continue
 				}
@@ -240,10 +239,9 @@ func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]b
 	for attempt := 0; attempt < 4; attempt++ {
 		result, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
 		if err != nil {
-			logger.Warn("GET_GROUPS_ERROR", map[string]any{
+			logger.Warn("GET_GROUPS_ERROR", err, map[string]any{
 				logging.MEMBERSHIP_ID: player.membershipId,
 				"membership_type":     player.membershipType,
-				logging.ERROR:         err.Error(),
 			})
 			time.Sleep(time.Second * time.Duration((attempt+1)*2))
 			continue
@@ -274,13 +272,13 @@ type processingStats struct {
 func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, concurrency int) processingStats {
 	tx, err := postgres.DB.BeginTx(ctx, nil)
 	if err != nil {
-		logger.Fatal("ERROR_BEGINNING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_BEGINNING_TRANSACTION", err, map[string]any{})
 	}
 	defer tx.Rollback()
 
 	// Truncate clan members table
 	if _, err := tx.ExecContext(ctx, `TRUNCATE TABLE clan.clan_members`); err != nil {
-		logger.Fatal("ERROR_TRUNCATING_CLAN_MEMBERS", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_TRUNCATING_CLAN_MEMBERS", err, map[string]any{})
 	}
 
 	// Prepare statements
@@ -290,7 +288,7 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 		ON CONFLICT (group_id)
 		DO UPDATE SET name = $2, motto = $3, call_sign = $4, clan_banner_data = $5, updated_at = $6`)
 	if err != nil {
-		logger.Fatal("ERROR_PREPARING_UPSERT_CLAN", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_PREPARING_UPSERT_CLAN", err, map[string]any{})
 	}
 	defer upsertClan.Close()
 
@@ -299,7 +297,7 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 		VALUES ($1, $2) 
 		ON CONFLICT DO NOTHING`)
 	if err != nil {
-		logger.Fatal("ERROR_PREPARING_INSERT_MEMBER", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_PREPARING_INSERT_MEMBER", err, map[string]any{})
 	}
 	defer insertMember.Close()
 
@@ -383,7 +381,7 @@ func processClanMembers(ctx context.Context, clans map[int64]bungie.GroupV2, con
 	}
 
 	if err := tx.Commit(); err != nil {
-		logger.Fatal("ERROR_COMMITTING_TRANSACTION", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_COMMITTING_TRANSACTION", err, map[string]any{})
 	}
 
 	return stats
@@ -395,16 +393,14 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 	// Parse and upsert clan details
 	clanBannerData, clanName, callSign, motto, err := clan.ParseClanDetails(group)
 	if err != nil {
-		logger.Warn("ERROR_PARSING_CLAN_DETAILS", map[string]any{
+		logger.Warn("ERROR_PARSING_CLAN_DETAILS", err, map[string]any{
 			logging.GROUP_ID: group.GroupId,
-			logging.ERROR:    err.Error(),
 		})
 	}
 
 	if _, err := upsertClan.ExecContext(ctx, group.GroupId, clanName, motto, callSign, clanBannerData, time.Now().UTC()); err != nil {
-		logger.Warn("ERROR_UPSERTING_CLAN", map[string]any{
+		logger.Warn("ERROR_UPSERTING_CLAN", err, map[string]any{
 			logging.GROUP_ID: group.GroupId,
-			logging.ERROR:    err.Error(),
 		})
 	}
 
@@ -413,10 +409,9 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 	for page := 1; ; page++ {
 		members, hasMore, err := fetchClanMembersPage(ctx, group.GroupId, page)
 		if err != nil {
-			logger.Warn("ERROR_FETCHING_CLAN_MEMBERS", map[string]any{
+			logger.Warn("ERROR_FETCHING_CLAN_MEMBERS", err, map[string]any{
 				logging.GROUP_ID: group.GroupId,
 				"page":           page,
-				logging.ERROR:    err.Error(),
 			})
 			break
 		}
@@ -438,9 +433,8 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 					queuedForCrawl++
 					publishing.PublishInt64Message(ctx, routing.PlayerCrawl, membershipId)
 				} else {
-					logger.Warn("ERROR_CHECKING_PLAYER_EXISTS", map[string]any{
+					logger.Warn("ERROR_CHECKING_PLAYER_EXISTS", err, map[string]any{
 						logging.MEMBERSHIP_ID: membershipId,
-						logging.ERROR:         err.Error(),
 					})
 				}
 				continue
@@ -448,10 +442,9 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 
 			// Insert clan member
 			if _, err := insertMember.ExecContext(ctx, group.GroupId, membershipId); err != nil {
-				logger.Warn("ERROR_INSERTING_MEMBER", map[string]any{
+				logger.Warn("ERROR_INSERTING_MEMBER", err, map[string]any{
 					logging.MEMBERSHIP_ID: membershipId,
 					logging.GROUP_ID:      group.GroupId,
-					logging.ERROR:         err.Error(),
 				})
 				stats.failed++
 			} else {

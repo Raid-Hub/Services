@@ -24,10 +24,9 @@ func CheckCheat(instanceId int64) error {
 	// Run cheat detection
 	_, instanceResult, playerResults, _, err := CheckForCheats(instanceId)
 	if err != nil {
-		logger.Error(CHEAT_CHECK_ERROR, map[string]any{
+		logger.Error(CHEAT_CHECK_ERROR, err, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 			logging.OPERATION:   "CheckForCheats",
-			logging.ERROR:       err.Error(),
 		})
 		return err
 	}

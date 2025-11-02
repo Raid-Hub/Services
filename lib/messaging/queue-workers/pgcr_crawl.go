@@ -44,7 +44,9 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 	// Check if instance already exists in database
 	exists, err := instance.CheckExists(instanceId)
 	if err != nil {
-		worker.Error("FAILED_TO_CHECK_PGCR_EXISTENCE", map[string]any{logging.ERROR: err.Error()})
+		worker.Error("FAILED_TO_CHECK_PGCR_EXISTENCE", err, map[string]any{
+			logging.INSTANCE_ID: instanceId,
+		})
 		return err
 	}
 
@@ -61,9 +63,8 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 		// Successfully fetched and processed a raid PGCR - publish to storage queue
 		storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 		if publishErr := publishing.PublishJSONMessage(worker.Context(), routing.InstanceStore, storeMessage); publishErr != nil {
-			worker.Error("FAILED_TO_PUBLISH_PGCR_FOR_STORAGE", map[string]any{
+			worker.Error("FAILED_TO_PUBLISH_PGCR_FOR_STORAGE", publishErr, map[string]any{
 				logging.INSTANCE_ID: instanceId,
-				logging.ERROR:       publishErr.Error(),
 			})
 			instance_storage.WriteMissedLog(instanceId)
 			return publishErr
@@ -87,9 +88,8 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 	case pgcr_processing.InsufficientPrivileges:
 		// Blocked by Bungie - publish to retry queue
 		if publishErr := publishing.PublishInt64Message(worker.Context(), routing.PGCRRetry, instanceId); publishErr != nil {
-			worker.Error("FAILED_TO_PUBLISH_TO_RETRY_QUEUE", map[string]any{
+			worker.Error("FAILED_TO_PUBLISH_TO_RETRY_QUEUE", publishErr, map[string]any{
 				logging.INSTANCE_ID: instanceId,
-				logging.ERROR:       publishErr.Error(),
 			})
 			return publishErr
 		}
@@ -98,19 +98,19 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 
 	case pgcr_processing.SystemDisabled:
 		// System disabled - log but don't retry
-		worker.Warn("BUNGIE_SYSTEM_DISABLED", map[string]any{logging.INSTANCE_ID: instanceId})
+		worker.Warn("BUNGIE_SYSTEM_DISABLED", nil, map[string]any{logging.INSTANCE_ID: instanceId})
 		return nil
 
 	case pgcr_processing.BadFormat, pgcr_processing.ExternalError:
 		// Malformed or external error - log but don't retry
-		worker.Warn("PGCR_PROCESSING_ERROR", map[string]any{
+		worker.Warn("PGCR_PROCESSING_ERROR", nil, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 			"result":            result,
 		})
 		return nil
 
 	default:
-		worker.Error("UNKNOWN_PGCR_RESULT", map[string]any{
+		worker.Error("UNKNOWN_PGCR_RESULT", nil, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 			"result":            result,
 		})

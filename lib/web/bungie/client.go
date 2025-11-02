@@ -12,6 +12,7 @@ import (
 	"raidhub/lib/utils/network"
 )
 
+
 var clientLogger = logging.NewLogger("BUNGIE_CLIENT")
 
 type BungieHttpResult[T any] struct {
@@ -54,10 +55,9 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", map[string]any{
+		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", err, map[string]any{
 			logging.OPERATION: operation,
 			logging.ENDPOINT:  url,
-			logging.ERROR:     err.Error(),
 		})
 		return makeNonStandardHttpResult[T](0), err
 	}
@@ -77,24 +77,23 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 
 	// first check if json header is present
 	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
-		clientLogger.Warn("BUNGIE_REQUEST_FAILED", map[string]any{
+		err := fmt.Errorf("content-type is not application/json")
+		clientLogger.Warn("BUNGIE_RESPONSE_NOT_PARSABLE", err, map[string]any{
 			logging.OPERATION:   operation,
 			logging.ENDPOINT:    url,
-			logging.ERROR:       "Content-Type is not application/json",
 			logging.DURATION:    fmt.Sprintf("%dms", duration),
 			logging.STATUS_CODE: resp.StatusCode,
 		})
-		return makeNonStandardHttpResult[T](resp.StatusCode), fmt.Errorf("content-type is not application/json")
+		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		error_response, err := decodeResponse[BungieError](resp)
 		if err != nil {
-			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", map[string]any{
+			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, map[string]any{
 				logging.OPERATION:   operation,
 				logging.ENDPOINT:    url,
 				logging.STATUS_CODE: resp.StatusCode,
-				logging.ERROR:       err.Error(),
 				logging.DURATION:    fmt.Sprintf("%dms", duration),
 			})
 			return makeNonStandardHttpResult[T](resp.StatusCode), err
@@ -118,11 +117,10 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 	}
 	response, err := decodeResponse[BungieResponse[T]](resp)
 	if err != nil {
-		clientLogger.Error("BUNGIE_RESPONSE_DECODE_FAILED", map[string]any{
+		clientLogger.Error("BUNGIE_RESPONSE_DECODE_FAILED", err, map[string]any{
 			logging.OPERATION:   operation,
 			logging.ENDPOINT:    url,
 			logging.STATUS_CODE: resp.StatusCode,
-			logging.ERROR:       err.Error(),
 			logging.DURATION:    fmt.Sprintf("%dms", duration),
 		})
 		return makeNonStandardHttpResult[T](resp.StatusCode), err

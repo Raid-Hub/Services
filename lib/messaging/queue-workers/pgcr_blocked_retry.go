@@ -84,7 +84,7 @@ func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery
 			// Publish to storage queue
 			storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 			if publishErr := publishing.PublishJSONMessage(worker.Context(), routing.InstanceStore, storeMessage); publishErr != nil {
-				worker.Error("FAILED_TO_PUBLISH_PGCR_FOR_STORAGE", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: publishErr.Error()})
+				worker.Error("FAILED_TO_PUBLISH_PGCR_FOR_STORAGE", publishErr, map[string]any{logging.INSTANCE_ID: instanceId})
 				return publishErr
 			}
 			return nil
@@ -133,7 +133,7 @@ func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery
 
 		// If we've failed too many times, give up
 		if errCount > 3 {
-			worker.Warn("GIVING_UP_ON_BLOCKED_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
+			worker.Warn("GIVING_UP_ON_BLOCKED_PGCR", nil, map[string]any{logging.INSTANCE_ID: instanceId})
 			instance_storage.WriteMissedLog(instanceId)
 			return nil
 		}

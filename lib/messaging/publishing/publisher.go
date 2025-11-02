@@ -44,9 +44,8 @@ func publishWithTracking(ctx context.Context, queueName string, publishMsg amqp.
 	
 	if err != nil {
 		global_metrics.PublishingOperations.WithLabelValues(queueName, ERROR).Inc()
-		logger.Error("PUBLISH_FAILED", map[string]any{
-			"queue":  queueName,
-			"error":  err.Error(),
+		logger.Error("PUBLISH_FAILED", err, map[string]any{
+			logging.QUEUE: queueName,
 		})
 	} else {
 		global_metrics.PublishingOperations.WithLabelValues(queueName, SUCCESS).Inc()
@@ -60,9 +59,8 @@ func PublishJSONMessage(ctx context.Context, queueName string, body any) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		global_metrics.PublishingOperations.WithLabelValues(queueName, ERROR).Inc()
-		logger.Error("PUBLISH_MARSHAL_FAILED", map[string]any{
-			"queue": queueName,
-			logging.ERROR: err.Error(),
+		logger.Error("PUBLISH_MARSHAL_FAILED", err, map[string]any{
+			logging.QUEUE: queueName,
 		})
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}

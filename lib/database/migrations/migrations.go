@@ -7,23 +7,7 @@ import (
 	"sort"
 )
 
-var logger = logging.NewLogger("Migrations")
-
-func Info(message string, fields map[string]any) {
-	logger.Info(message, fields)
-}
-
-func Debug(message string, fields map[string]any) {
-	logger.Debug(message, fields)
-}
-
-func Warn(message string, fields map[string]any) {
-	logger.Warn(message, fields)
-}
-
-func Error(message string, fields map[string]any) {
-	logger.Error(message, fields)
-}
+var MigrationsLogger = logging.NewLogger("Migrations")
 
 // GetMigrationFiles reads all SQL files from a directory and returns them sorted
 func GetMigrationFiles(directory string) ([]string, error) {
@@ -59,17 +43,14 @@ func ReadMigrationFile(directory, filename string) (string, error) {
 
 // RunMigrations is a generic migration runner that handles the common logic
 func RunMigrations(config MigrationConfig) error {
-	Info("FOUND_MIGRATION_FILES", map[string]any{
-		"count":     len(config.MigrationFiles),
-		"directory": config.Directory,
+	MigrationsLogger.Info("FOUND_MIGRATION_FILES", map[string]any{
+		logging.COUNT:     len(config.MigrationFiles),
+		logging.DIRECTORY: config.Directory,
 	})
 
 	// Query applied migrations
 	appliedMigrations, err := config.GetAppliedMigrations()
 	if err != nil {
-		Error("FAILED_TO_GET_APPLIED_MIGRATIONS", map[string]any{
-			"error": err.Error(),
-		})
 		return err
 	}
 
@@ -77,45 +58,43 @@ func RunMigrations(config MigrationConfig) error {
 	appliedCount := 0
 	for _, filename := range config.MigrationFiles {
 		if appliedMigrations[filename] {
-			Debug("MIGRATION_ALREADY_APPLIED", map[string]any{
-				"filename": filename,
+			MigrationsLogger.Info("MIGRATION_ALREADY_APPLIED", map[string]any{
+				logging.FILENAME: filename,
 			})
 			continue
 		}
 
-		Info("APPLYING_MIGRATION", map[string]any{
-			"filename": filename,
+		MigrationsLogger.Info("APPLYING_MIGRATION", map[string]any{
+			logging.FILENAME: filename,
 		})
 
 		migrationSQL, err := ReadMigrationFile(config.Directory, filename)
 		if err != nil {
-			Error("FAILED_TO_READ_MIGRATION_FILE", map[string]any{
-				"filename": filename,
-				"error":    err.Error(),
+			MigrationsLogger.Error("FAILED_TO_READ_MIGRATION_FILE", err, map[string]any{
+				logging.FILENAME: filename,
 			})
 			return err
 		}
 
 		err = config.ApplyMigration(filename, migrationSQL)
 		if err != nil {
-			Error("FAILED_TO_APPLY_MIGRATION", map[string]any{
-				"filename": filename,
-				"error":    err.Error(),
+			MigrationsLogger.Error("FAILED_TO_APPLY_MIGRATION", err, map[string]any{
+				logging.FILENAME: filename,
 			})
 			return err
 		}
 
-		Info("MIGRATION_APPLIED", map[string]any{
-			"filename": filename,
+		MigrationsLogger.Info("MIGRATION_APPLIED", map[string]any{
+			logging.FILENAME: filename,
 		})
 		appliedCount++
 	}
 
 	if appliedCount == 0 {
-		Info("DATABASE_UP_TO_DATE", nil)
+		MigrationsLogger.Info("DATABASE_UP_TO_DATE", nil)
 	} else {
-		Info("MIGRATIONS_COMPLETE", map[string]any{
-			"applied_count": appliedCount,
+		MigrationsLogger.Info("MIGRATIONS_COMPLETE", map[string]any{
+			logging.APPLIED_COUNT: appliedCount,
 		})
 	}
 

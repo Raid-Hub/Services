@@ -37,8 +37,8 @@ type PrometheusClient struct {
 func NewPrometheusClient(port string) *PrometheusClient {
 	baseURL := fmt.Sprintf("http://%s:%s", env.PrometheusHost, port)
 	clientLogger.Info("PROMETHEUS_CLIENT_CREATED", map[string]any{
-		"host": env.PrometheusHost,
-		"port": port,
+		logging.HOST: env.PrometheusHost,
+		logging.PORT: port,
 	})
 	return &PrometheusClient{
 		baseURL: baseURL,
@@ -61,16 +61,15 @@ func (c *PrometheusClient) QueryRange(query string, intervalMins int) (*QueryRan
 
 	resp, err := c.client.Get(queryURL)
 	if err != nil {
-		clientLogger.Error("PROMETHEUS_QUERY_FAILED", map[string]any{
+		clientLogger.Error("PROMETHEUS_QUERY_FAILED", err, map[string]any{
 			logging.ENDPOINT: queryURL,
-			logging.ERROR:    err.Error(),
 		})
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		clientLogger.Error("PROMETHEUS_QUERY_BAD_STATUS", map[string]any{
+		clientLogger.Error("PROMETHEUS_QUERY_BAD_STATUS", err, map[string]any{
 			logging.ENDPOINT:    queryURL,
 			logging.STATUS_CODE: resp.StatusCode,
 		})
@@ -81,9 +80,7 @@ func (c *PrometheusClient) QueryRange(query string, intervalMins int) (*QueryRan
 	var res QueryRangeResponse
 	err = decoder.Decode(&res)
 	if err != nil {
-		clientLogger.Error("PROMETHEUS_QUERY_DECODE_FAILED", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		clientLogger.Error("PROMETHEUS_QUERY_DECODE_FAILED", err, nil)
 		return nil, err
 	}
 

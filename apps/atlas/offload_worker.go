@@ -31,9 +31,8 @@ func offloadWorker(consumerConfig *ConsumerConfig) {
 					storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
 					err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
 					if err != nil {
-						offloadLogger.Warn("FAILED_TO_PUBLISH_PGCR_STORE_MESSAGE", map[string]any{
+						offloadLogger.Warn("FAILED_TO_PUBLISH_PGCR_STORE_MESSAGE", err, map[string]any{
 							logging.INSTANCE_ID: instanceId,
-							logging.ERROR:       err.Error(),
 							logging.ATTEMPT:     i,
 						})
 					} else {

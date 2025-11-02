@@ -163,9 +163,8 @@ func checkAndUpdatePrivacy(membershipId int64, isPrivate bool) (bool, error) {
 	var currentIsPrivate bool
 	err := postgres.DB.QueryRow("SELECT is_private FROM player WHERE membership_id = $1", membershipId).Scan(&currentIsPrivate)
 	if err != nil {
-		logger.Warn("ERROR_GETTING_PRIVACY_STATUS", map[string]any{
+		logger.Warn("ERROR_GETTING_PRIVACY_STATUS", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return false, err
 	}
@@ -174,9 +173,8 @@ func checkAndUpdatePrivacy(membershipId int64, isPrivate bool) (bool, error) {
 	if isPrivate != currentIsPrivate {
 		_, err = postgres.DB.Exec("UPDATE player SET is_private = $1 WHERE membership_id = $2", isPrivate, membershipId)
 		if err != nil {
-			logger.Warn("ERROR_UPDATING_PRIVACY_STATUS", map[string]any{
+			logger.Warn("ERROR_UPDATING_PRIVACY_STATUS", err, map[string]any{
 				logging.MEMBERSHIP_ID: membershipId,
-				logging.ERROR:         err.Error(),
 			})
 			return false, err
 		}

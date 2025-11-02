@@ -22,9 +22,7 @@ func serveMetrics(port int) {
 	go func() {
 		port := fmt.Sprintf(":%d", port)
 		if err := http.ListenAndServe(port, nil); err != nil {
-			logger.Fatal("PROMETHEUS_SERVER_ERROR", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			logger.Fatal("PROMETHEUS_SERVER_ERROR", err, nil)
 		}
 	}()
 }
@@ -33,9 +31,8 @@ func loadMetricsPort(port string) (int, bool) {
 	if metricsPort, err := strconv.Atoi(port); err == nil {
 		return metricsPort, true
 	} else {
-		logger.Warn("INVALID_METRICS_PORT", map[string]any{
-			logging.ERROR: err.Error(),
-			"port":        port,
+		logger.Warn("INVALID_METRICS_PORT", err, map[string]any{
+			logging.PORT: port,
 		})
 		return 0, false
 	}

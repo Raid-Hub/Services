@@ -36,7 +36,7 @@ func processInstanceCheatCheck(worker processing.WorkerInterface, message amqp.D
 	// Call PGCR cheat check logic
 	err = cheat_detection.CheckCheat(instanceId)
 	if err != nil {
-		worker.Error("Failed to check for cheat", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
+		worker.Error("Failed to check for cheat", err, map[string]any{logging.INSTANCE_ID: instanceId})
 		return err
 	}
 

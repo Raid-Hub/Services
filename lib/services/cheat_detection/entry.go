@@ -20,10 +20,9 @@ const (
 func CheckForCheats(instanceId int64) (*Instance, ResultTuple, []ResultTuple, bool, error) {
 	instance, err := getInstance(instanceId)
 	if err != nil {
-		logger.Warn(CHEAT_CHECK_ERROR, map[string]any{
+		logger.Warn(CHEAT_CHECK_ERROR, err, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 			logging.OPERATION:   "get_instance",
-			logging.ERROR:       err.Error(),
 		})
 		return nil, ResultTuple{}, nil, false, err
 	}

@@ -26,7 +26,6 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 		fields := map[string]any{
 			logging.INSTANCE_ID:       instanceID,
 			logging.BUNGIE_ERROR_CODE: resp.BungieErrorCode,
-			logging.ERROR:             err.Error(),
 			logging.STATUS_CODE:       resp.HttpStatusCode,
 		}
 
@@ -44,17 +43,17 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 			logger.Info("PGCR_INSUFFICIENT_PRIVILEGES", fields)
 			return InsufficientPrivileges, nil
 		case bungie.DestinyThrottledByGameServer:
-			logger.Warn("PGCR_THROTTLED_BY_GAME_SERVER", fields)
+			logger.Warn("PGCR_THROTTLED_BY_GAME_SERVER", err, fields)
 			return ExternalError, nil
 		}
 
 		// Handle HTTP status codes
 		switch resp.HttpStatusCode {
 		case http.StatusForbidden:
-			logger.Warn("PGCR_FORBIDDEN_ERROR", fields)
+			logger.Warn("PGCR_FORBIDDEN_ERROR", err, fields)
 			return RateLimited, nil
 		case http.StatusServiceUnavailable:
-			logger.Warn("PGCR_SERVICE_UNAVAILABLE", fields)
+			logger.Warn("PGCR_SERVICE_UNAVAILABLE", err, fields)
 			return RateLimited, nil
 		}
 
@@ -72,16 +71,16 @@ func logUnexpectedError(
 	netErr := network.CategorizeNetworkError(err)
 	
 	if netErr == nil {
-		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", fields)
+		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", err, fields)
 		return
 	}
 
 	switch netErr.Type {
 	case network.ErrorTypeTimeout:
-		logger.Warn("PGCR_FETCH_TIMEOUT", fields)
+		logger.Warn("PGCR_FETCH_TIMEOUT", err, fields)
 	case network.ErrorTypeConnection:
-		logger.Warn("PGCR_NETWORK_ERROR", fields)
+		logger.Warn("PGCR_NETWORK_ERROR", err, fields)
 	case network.ErrorTypeUnknown:
-		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", fields)
+		logger.Error("UNEXPECTED_PGCR_REQUEST_ERROR", err, fields)
 	}
 }

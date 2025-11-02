@@ -195,9 +195,8 @@ func GetAllInstanceFlagsByPlayer(out chan PlayerInstanceFlagStats, versionLike s
 	`, versionLike)
 
 	if err != nil {
-		logger.Warn(CHEAT_CHECK_ERROR, map[string]any{
+		logger.Warn(CHEAT_CHECK_ERROR, err, map[string]any{
 			logging.OPERATION: "database_query",
-			logging.ERROR:     err.Error(),
 		})
 		panic(err)
 	}

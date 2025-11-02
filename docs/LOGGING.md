@@ -223,17 +223,20 @@ logger.Info("BATCH_PROCESSED", map[string]any{
   - Business logic violations
 
 ```go
-logger.Warn("API_CONNECTION_FAILED", map[string]any{
+logger.Warn("API_CONNECTION_FAILED", err, map[string]any{
     "service": "bungie",
-    "error": err,
     "attempt": attemptCount,
     "action": "retrying",
 })
-logger.Warn("INVALID_DATA_DETECTED", map[string]any{
+logger.Warn("INVALID_DATA_DETECTED", err, map[string]any{
     "entity": "player",
     "playerId": playerId,
     "issue": "completion_data",
-    "error": err,
+})
+// Can pass nil if there's no error
+logger.Warn("PERFORMANCE_DEGRADATION", nil, map[string]any{
+    "response_time": "2s",
+    "threshold": "500ms",
 })
 ```
 
@@ -250,17 +253,16 @@ logger.Warn("INVALID_DATA_DETECTED", map[string]any{
   - Operations that must succeed but failed
 
 ```go
-logger.Error("AUTHENTICATION_FAILED", map[string]any{
+logger.Error("AUTHENTICATION_FAILED", err, map[string]any{
     "user_id": userId,
-    "error": err,
     "action": "access_denied",
 })
-logger.Error("DATA_CORRUPTION_DETECTED", map[string]any{
+logger.Error("DATA_CORRUPTION_DETECTED", err, map[string]any{
     "entity": "instance",
     "instance_id": instanceId,
     "issue": "invalid_completion_data",
-    "error": err,
 })
+// Error is automatically added to fields with key "error" if provided
 ```
 
 ### FATAL
@@ -276,16 +278,16 @@ logger.Error("DATA_CORRUPTION_DETECTED", map[string]any{
   - Programming errors that violate invariants
 
 ```go
-logger.Fatal("DATABASE_CONNECTION_FAILED", map[string]any{
+logger.Fatal("DATABASE_CONNECTION_FAILED", err, map[string]any{
     "phase": "startup",
     "type": "postgresql",
-    "error": err,
 })
-logger.Fatal("CONFIGURATION_MISSING", map[string]any{
+logger.Fatal("CONFIGURATION_MISSING", nil, map[string]any{
     "key": configKey,
     "phase": "startup",
     "severity": "critical",
 })
+// Error is automatically added to fields with key "error" if provided
 ```
 
 **Note**: `Fatal` is not a separate configurable log level. Fatal logs are always shown when the log level is set to `error` or lower. The `Fatal()` method will always exit the application after logging, regardless of log level configuration.
@@ -313,8 +315,7 @@ Use `logger.Error()` for problems that:
 ```go
 // Example: API failure with retry (monitoring)
 if err := externalAPI.Call(); err != nil {
-    logger.Warn("EXTERNAL_API_CALL_FAILED", map[string]any{
-        "error": err,
+    logger.Warn("EXTERNAL_API_CALL_FAILED", err, map[string]any{
         "action": "retrying",
     })
     // Continue with retry logic
@@ -322,9 +323,8 @@ if err := externalAPI.Call(); err != nil {
 
 // Example: Critical authentication failure (requires alert)
 if err := validateUserPermissions(userId); err != nil {
-    logger.Error("USER_PERMISSION_VALIDATION_FAILED", map[string]any{
+    logger.Error("USER_PERMISSION_VALIDATION_FAILED", err, map[string]any{
         "userId": userId,
-        "error": err,
         "action": "access_denied",
     })
     return fmt.Errorf("access denied: %w", err)
@@ -342,11 +342,10 @@ Use `logger.Fatal()` for problems that:
 ```go
 // Example: Critical startup failure
 if err := database.Connect(); err != nil {
-    logger.Fatal("DATABASE_CONNECTION_FAILED", map[string]any{
+    logger.Fatal("DATABASE_CONNECTION_FAILED", err, map[string]any{
         "phase": "startup",
-        "error": err,
     })
-    // Application crashes here with panic
+    // Application crashes here with os.Exit(1)
 }
 ```
 
@@ -359,13 +358,13 @@ if err := database.Connect(); err != nil {
 
 ## Interface Reference
 
-| Method    | Signature                                  | Usage                    | Output | Respects Log Level           |
-| --------- | ------------------------------------------ | ------------------------ | ------ | ---------------------------- |
-| `Info()`  | `Info(key string, fields map[string]any)`  | Operational information  | stdout | Yes                          |
-| `Warn()`  | `Warn(key string, fields map[string]any)`  | Issues needing attention | stderr | Yes                          |
-| `Error()` | `Error(key string, fields map[string]any)` | Sentry alerts            | stderr | Yes                          |
-| `Debug()` | `Debug(key string, fields map[string]any)` | Verbose flag only        | stdout | Yes                          |
-| `Fatal()` | `Fatal(key string, fields map[string]any)` | Logs then crashes        | stderr | Yes (treated as error level) |
+| Method    | Signature                                             | Usage                    | Output | Respects Log Level           |
+| --------- | ----------------------------------------------------- | ------------------------ | ------ | ---------------------------- |
+| `Info()`  | `Info(key string, fields map[string]any)`             | Operational information  | stdout | Yes                          |
+| `Warn()`  | `Warn(key string, err error, fields map[string]any)`  | Issues needing attention | stderr | Yes                          |
+| `Error()` | `Error(key string, err error, fields map[string]any)` | Sentry alerts            | stderr | Yes                          |
+| `Debug()` | `Debug(key string, fields map[string]any)`            | Verbose flag only        | stdout | Yes                          |
+| `Fatal()` | `Fatal(key string, err error, fields map[string]any)` | Logs then crashes        | stderr | Yes (treated as error level) |
 
 **Output Behavior**:
 
@@ -374,8 +373,18 @@ if err := database.Connect(); err != nil {
 - All logging methods respect the configured log level - logs below the current level are not output
 - `Fatal` logs are shown when log level is `error` or lower (fatal is not a separate configurable level)
 
+**Error Parameter**:
+
+- `Warn()`, `Error()`, and `Fatal()` methods accept an `error` as the second parameter
+- If the error is not `nil`, it is automatically added to the fields map with the key `"error"` (using `err.Error()`)
+- You can pass `nil` if there's no error to log
+- The `fields` parameter can be `nil` if you only want to log the error
+
+**Parameters**:
+
 - **Message**: SCREAMING_UPPER_CASE string for the event
-- **Fields**: Structured key-value pairs using `map[string]any{}`
+- **Error**: Optional error to include in the log (automatically added to fields with key "error")
+- **Fields**: Structured key-value pairs using `map[string]any{}` (can be `nil`)
 
 ## Best Practices
 
@@ -413,14 +422,14 @@ logger.Info("USER_LOGIN", nil) // Still not structured - missing fields!
 
 ### 2. Consistent Error Context
 
-Always include relevant context with errors:
+Always include relevant context with errors. The error parameter is automatically added to fields:
 
 ```go
-logger.Warn("DATABASE_QUERY_FAILED", map[string]any{
+logger.Warn("DATABASE_QUERY_FAILED", err, map[string]any{
     "query": "SELECT * FROM users",
     "params": params,
-    "error": err,
 })
+// Error is automatically added to fields with key "error"
 ```
 
 ### 3. Performance Considerations
@@ -463,7 +472,7 @@ logger.Info("API_REQUEST_COMPLETED_SUCCESSFULLY", nil)
 import "log"
 log.Println("message")     → logger.Info("MESSAGE", nil)
 log.Printf("msg %s", var)  → logger.Info("MESSAGE", map[string]any{"var": var})
-log.Fatalf("err: %v", err) → logger.Fatal("ERROR", map[string]any{"error": err})
+log.Fatalf("err: %v", err) → logger.Fatal("ERROR", err, nil)
 
 // Setup
 import "raidhub/lib/utils/logging"
@@ -594,15 +603,14 @@ logger.Debug("STARTING_CHEAT_DETECTION_ANALYSIS", map[string]any{
     logging.MEMBERSHIP_ID: membershipId,
     logging.TYPE: "behavioral_analysis",
 })
-logger.Warn(SUSPICIOUS_ACTIVITY_DETECTED, map[string]any{
+logger.Warn(SUSPICIOUS_ACTIVITY_DETECTED, nil, map[string]any{
     logging.MEMBERSHIP_ID: playerId,
     logging.TYPE: "stat_anomaly",
     logging.ACTION: "flagged_for_review",
 })
-logger.Fatal(DATABASE_CONNECTION_FAILED, map[string]any{
-    logging.DB_TYPE: "postgresql",
+logger.Fatal(DATABASE_CONNECTION_FAILED, err, map[string]any{
+    logging.TYPE: "postgresql",
     logging.OPERATION: "query_player_stats",
-    logging.ERROR: err.Error(),
 })
 ```
 
@@ -646,7 +654,7 @@ var logger = logging.NewLogger("POSTGRES")
 logger.Info("POSTGRES_CONNECTED", map[string]any{
     logging.STATUS: "ready",
 })
-logger.Warn("POSTGRES_CONNECTION_POOL_APPROACHING_LIMIT", map[string]any{
+logger.Warn("POSTGRES_CONNECTION_POOL_APPROACHING_LIMIT", nil, map[string]any{
     logging.COUNT: count,
     logging.TYPE: "active_connections",
     logging.ACTION: "monitor_pool_usage",

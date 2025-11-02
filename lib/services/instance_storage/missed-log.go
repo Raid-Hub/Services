@@ -55,9 +55,7 @@ func WriteMissedLog(instanceId int64) {
 	// Open the file in append mode, creating it if it doesn't exist
 	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		logger.Fatal("FAILED_TO_OPEN_MISSED_LOG_FILE", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Fatal("FAILED_TO_OPEN_MISSED_LOG_FILE", err, nil)
 		return
 	}
 	defer file.Close()
@@ -67,8 +65,7 @@ func WriteMissedLog(instanceId int64) {
 
 	_, err = writer.WriteString(fmt.Sprint(instanceId) + "\n")
 	if err != nil {
-		logger.Fatal("FAILED_TO_WRITE_TO_MISSED_LOG_FILE", map[string]any{
-			logging.ERROR:       err.Error(),
+		logger.Fatal("FAILED_TO_WRITE_TO_MISSED_LOG_FILE", err, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 		})
 		return
@@ -77,8 +74,7 @@ func WriteMissedLog(instanceId int64) {
 	// Flush the writer to ensure the data is written to the file
 	err = writer.Flush()
 	if err != nil {
-		logger.Fatal("FAILED_TO_FLUSH_MISSED_LOG_FILE", map[string]any{
-			logging.ERROR:       err.Error(),
+		logger.Fatal("FAILED_TO_FLUSH_MISSED_LOG_FILE", err, map[string]any{
 			logging.INSTANCE_ID: instanceId,
 		})
 		return

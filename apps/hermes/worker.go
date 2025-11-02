@@ -55,9 +55,8 @@ func (w *Worker) Run() {
 			return
 		case msg, ok := <-w.channel:
 			if !ok {
-				w.Error(WORKER_STOPPING, map[string]any{
-					logging.ERROR: "channel_closed",
-				})
+				err := fmt.Errorf("channel_closed")
+				w.Error(WORKER_STOPPING, err, nil)
 				return
 			}
 
@@ -68,26 +67,20 @@ func (w *Worker) Run() {
 
 			err := w.ProcessMessage(msg)
 			if err != nil {
-				w.Warn("MESSAGE_PROCESSING_ERROR", map[string]any{
-					logging.ERROR: err.Error(),
-				})
+				w.Warn("MESSAGE_PROCESSING_ERROR", err, nil)
 				// Record metrics for failed processing
 				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
 				// NACK with requeue=false to prevent infinite retries on permanent failures
 				// The message will be sent to the dead letter queue if configured
 				if err := msg.Nack(false, false); err != nil {
-					w.Fatal("MESSAGE_NACK_ERROR", map[string]any{
-						logging.ERROR: err.Error(),
-					})
+					w.Fatal("MESSAGE_NACK_ERROR", err, nil)
 				}
 				continue
 			}
 
 			// Ack successful processing
 			if err := msg.Ack(false); err != nil {
-				w.Warn("MESSAGE_ACK_ERROR", map[string]any{
-					logging.ERROR: err.Error(),
-				})
+				w.Warn("MESSAGE_ACK_ERROR", err, nil)
 			} else {
 				// Record metrics for successful processing
 				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "success").Inc()
@@ -147,14 +140,14 @@ func (w *Worker) Info(key string, fields map[string]any) {
 	w.logger.Info(key, w.addWorkerFields(fields))
 }
 
-func (w *Worker) Warn(key string, fields map[string]any) {
-	w.logger.Warn(key, w.addWorkerFields(fields))
+func (w *Worker) Warn(key string, err error, fields map[string]any) {
+	w.logger.Warn(key, err, w.addWorkerFields(fields))
 }
 
-func (w *Worker) Error(key string, fields map[string]any) {
-	w.logger.Error(key, w.addWorkerFields(fields))
+func (w *Worker) Error(key string, err error, fields map[string]any) {
+	w.logger.Error(key, err, w.addWorkerFields(fields))
 }
 
-func (w *Worker) Fatal(key string, fields map[string]any) {
-	w.logger.Fatal(key, w.addWorkerFields(fields))
+func (w *Worker) Fatal(key string, err error, fields map[string]any) {
+	w.logger.Fatal(key, err, w.addWorkerFields(fields))
 }

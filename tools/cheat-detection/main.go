@@ -79,9 +79,7 @@ func CheatDetection() {
 			&flag.FlagsC,
 			&flag.FlagsD,
 		); err != nil {
-			logger.Warn("ROW_SCAN_ERROR", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			logger.Warn("ROW_SCAN_ERROR", err, nil)
 		}
 		flags <- flag
 	}
@@ -115,9 +113,8 @@ func CheatDetection() {
 			for instanceId := range instanceIds {
 				_, _, _, _, err := cheat_detection.CheckForCheats(instanceId)
 				if err != nil {
-					logger.Warn("CHEAT_CHECK_FAILED", map[string]any{
+					logger.Warn("CHEAT_CHECK_FAILED", err, map[string]any{
 						logging.INSTANCE_ID: instanceId,
-						logging.ERROR:       err.Error(),
 					})
 				}
 			}
@@ -129,9 +126,8 @@ func CheatDetection() {
 		JOIN player USING (membership_id)
 		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'`)
 	if err != nil {
-		logger.Warn("BLACKLIST_QUERY_ERROR", map[string]any{
+		logger.Warn("BLACKLIST_QUERY_ERROR", err, map[string]any{
 			logging.OPERATION: "query_blacklisted_instances",
-			logging.ERROR:     err.Error(),
 		})
 	}
 	defer rows.Close()
@@ -139,9 +135,7 @@ func CheatDetection() {
 	for rows.Next() {
 		var instanceId int64
 		if err := rows.Scan(&instanceId); err != nil {
-			logger.Warn("INSTANCE_ID_SCAN_ERROR", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			logger.Warn("INSTANCE_ID_SCAN_ERROR", err, nil)
 		}
 		instanceIds <- instanceId
 	}
@@ -151,9 +145,8 @@ func CheatDetection() {
 	// step 3: upgrade high flagged instances to blacklisted
 	countBlacklisted, err := cheat_detection.BlacklistFlaggedInstances()
 	if err != nil {
-		logger.Warn(BLACKLIST_UPDATE_ERROR, map[string]any{
+		logger.Warn(BLACKLIST_UPDATE_ERROR, err, map[string]any{
 			logging.OPERATION: "blacklist_flagged_instances",
-			logging.ERROR:     err.Error(),
 		})
 	}
 
@@ -161,9 +154,8 @@ func CheatDetection() {
 	now := time.Now()
 	players, err := cheat_detection.GetRecentlyPlayedBlacklistedPlayers(now.Add(-14 * 24 * time.Hour))
 	if err != nil {
-		logger.Warn("PLAYER_QUERY_ERROR", map[string]any{
+		logger.Warn("PLAYER_QUERY_ERROR", err, map[string]any{
 			logging.OPERATION: "get_recently_played_blacklisted",
-			logging.ERROR:     err.Error(),
 		})
 	}
 
@@ -172,10 +164,9 @@ func CheatDetection() {
 	for _, player := range players {
 		count, elligible, err := cheat_detection.BlacklistRecentInstances(player)
 		if err != nil {
-			logger.Warn(BLACKLIST_UPDATE_ERROR, map[string]any{
-				"membership_id":   player.MembershipId,
+			logger.Warn(BLACKLIST_UPDATE_ERROR, err, map[string]any{
+				logging.MEMBERSHIP_ID:   player.MembershipId,
 				logging.OPERATION: "blacklist_player_instances",
-				logging.ERROR:     err.Error(),
 			})
 		}
 		totalBlacklistedCount += count

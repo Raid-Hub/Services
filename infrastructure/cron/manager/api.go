@@ -100,16 +100,15 @@ func handleKill(w http.ResponseWriter, r *http.Request) {
 
 	// Kill the process
 	if err := cmd.Process.Kill(); err != nil {
-		logger.Error("JOB_KILL_ERROR", map[string]any{
-			"job_id":        jobID,
-			logging.ERROR: err.Error(),
+		logger.Error("JOB_KILL_ERROR", err, map[string]any{
+			logging.JOB_ID: jobID,
 		})
 		http.Error(w, fmt.Sprintf("Error killing job: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	logger.Info("JOB_KILLED", map[string]any{
-		"job_id": jobID,
+		logging.JOB_ID: jobID,
 	})
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "killed", "job_id": jobID})
@@ -128,9 +127,8 @@ func streamJobLogs(w http.ResponseWriter, job *Job) {
 	// Get output writers (job log files + STDOUT/STDERR env files)
 	baseStdoutWriter, baseStderrWriter, stdoutFile, stderrFile, err := getOutputWriters(job.ID, env)
 	if err != nil {
-		logger.Error("OUTPUT_WRITERS_ERROR", map[string]any{
-			"job_id":        job.ID,
-			logging.ERROR: err.Error(),
+		logger.Error("OUTPUT_WRITERS_ERROR", err, map[string]any{
+			logging.JOB_ID: job.ID,
 		})
 		sendSSE(w, "error", fmt.Sprintf("Error setting up output writers: %v", err))
 		return
@@ -187,10 +185,9 @@ func streamJobLogs(w http.ResponseWriter, job *Job) {
 	}()
 
 	if err := cmd.Start(); err != nil {
-		logger.Error("JOB_START_ERROR", map[string]any{
-			"job_id":        job.ID,
-			"command":       job.Command,
-			logging.ERROR: err.Error(),
+		logger.Error("JOB_START_ERROR", err, map[string]any{
+			logging.JOB_ID:  job.ID,
+			logging.COMMAND: job.Command,
 		})
 		sendSSE(w, "error", fmt.Sprintf("Error starting job: %v", err))
 		return
@@ -237,20 +234,19 @@ func streamJobLogs(w http.ResponseWriter, job *Job) {
 
 	if err != nil {
 		duration := time.Since(startTime)
-		logger.Error("JOB_COMPLETED_WITH_ERROR", map[string]any{
-			"job_id":        job.ID,
-			"command":       job.Command,
-			"duration":      duration.String(),
-			logging.ERROR: err.Error(),
+		logger.Error("JOB_COMPLETED_WITH_ERROR", err, map[string]any{
+			logging.JOB_ID:   job.ID,
+			logging.COMMAND:  job.Command,
+			logging.DURATION: duration.String(),
 		})
 		sendSSE(w, "error", fmt.Sprintf("Job completed with error: %v", err))
 		fmt.Fprintf(stderrFile, "\n--- Job failed with error: %v ---\n", err)
 	} else {
 		duration := time.Since(startTime)
 		logger.Info("JOB_COMPLETED_SUCCESS", map[string]any{
-			"job_id":   job.ID,
-			"command":  job.Command,
-			"duration": duration.String(),
+			logging.JOB_ID:   job.ID,
+			logging.COMMAND:  job.Command,
+			logging.DURATION: duration.String(),
 		})
 		sendSSE(w, "complete", fmt.Sprintf("Job completed successfully in %v", duration))
 	}
@@ -325,9 +321,8 @@ func executeJob(job *Job) {
 	// Get output writers (job log files + STDOUT/STDERR env files)
 	stdoutWriter, stderrWriter, stdoutFile, stderrFile, err := getOutputWriters(job.ID, env)
 	if err != nil {
-		logger.Error("OUTPUT_WRITERS_ERROR", map[string]any{
-			"job_id":        job.ID,
-			logging.ERROR: err.Error(),
+		logger.Error("OUTPUT_WRITERS_ERROR", err, map[string]any{
+			logging.JOB_ID: job.ID,
 		})
 		return
 	}
@@ -364,25 +359,24 @@ func executeJob(job *Job) {
 
 	startTime := time.Now()
 	logger.Info("JOB_STARTING", map[string]any{
-		"job_id":  job.ID,
-		"command": job.Command,
+		logging.JOB_ID:  job.ID,
+		logging.COMMAND: job.Command,
 	})
 
 	if err := cmd.Run(); err != nil {
 		duration := time.Since(startTime)
-		logger.Error("JOB_COMPLETED_WITH_ERROR", map[string]any{
-			"job_id":        job.ID,
-			"command":       job.Command,
-			"duration":      duration.String(),
-			logging.ERROR: err.Error(),
+		logger.Error("JOB_COMPLETED_WITH_ERROR", err, map[string]any{
+			logging.JOB_ID:   job.ID,
+			logging.COMMAND:  job.Command,
+			logging.DURATION: duration.String(),
 		})
 		fmt.Fprintf(stderrFile, "\n--- Job failed with error: %v ---\n", err)
 	} else {
 		duration := time.Since(startTime)
 		logger.Info("JOB_COMPLETED_SUCCESS", map[string]any{
-			"job_id":   job.ID,
-			"command":  job.Command,
-			"duration": duration.String(),
+			logging.JOB_ID:   job.ID,
+			logging.COMMAND:  job.Command,
+			logging.DURATION: duration.String(),
 		})
 	}
 }
@@ -402,8 +396,8 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Debug("LOG_REQUEST", map[string]any{
-		"job_id":  jobID,
-		"log_type": logType,
+		logging.JOB_ID:  jobID,
+		logging.LOG_TYPE: logType,
 	})
 
 	stdoutPath := filepath.Join(logDir, fmt.Sprintf("%s.log", jobID))
@@ -424,9 +418,8 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
-			logger.Error("LOG_MERGE_ERROR", map[string]any{
-				"job_id":        jobID,
-				logging.ERROR: err.Error(),
+			logger.Error("LOG_MERGE_ERROR", err, map[string]any{
+				logging.JOB_ID: jobID,
 			})
 			http.Error(w, "Error reading log files", http.StatusInternalServerError)
 			return
@@ -437,7 +430,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 		// Format merged lines for JSON response
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"merged": mergedLines,
+			logging.MERGED: mergedLines,
 		})
 		return
 	}
@@ -454,28 +447,27 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	fileInfo, err := os.Stat(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logger.Warn("LOG_FILE_NOT_FOUND", map[string]any{
-				"job_id": jobID,
-				"path":   logPath,
+			logger.Warn("LOG_FILE_NOT_FOUND", nil, map[string]any{
+				logging.JOB_ID: jobID,
+				logging.PATH:   logPath,
 			})
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("No log file found for this job."))
 			return
 		}
-		logger.Error("LOG_FILE_STAT_ERROR", map[string]any{
-			"job_id":        jobID,
-			"path":          logPath,
-			logging.ERROR: err.Error(),
+		logger.Error("LOG_FILE_STAT_ERROR", err, map[string]any{
+			logging.JOB_ID: jobID,
+			logging.PATH:   logPath,
 		})
 		http.Error(w, "Error reading log file", http.StatusInternalServerError)
 		return
 	}
 
 	logger.Debug("LOG_FILE_FOUND", map[string]any{
-		"job_id": jobID,
-		"path":   logPath,
-		"size":   fileInfo.Size(),
+		logging.JOB_ID: jobID,
+		logging.PATH:   logPath,
+		logging.SIZE:   fileInfo.Size(),
 	})
 
 	// If file is empty, return appropriate message
@@ -488,10 +480,9 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	file, err := os.Open(logPath)
 	if err != nil {
-		logger.Error("LOG_FILE_OPEN_ERROR", map[string]any{
-			"job_id":        jobID,
-			"path":          logPath,
-			logging.ERROR: err.Error(),
+		logger.Error("LOG_FILE_OPEN_ERROR", err, map[string]any{
+			logging.JOB_ID: jobID,
+			logging.PATH:   logPath,
 		})
 		http.Error(w, "Error reading log file", http.StatusInternalServerError)
 		return
@@ -500,19 +491,15 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	bytesCopied, err := io.Copy(w, file)
+	fields := map[string]any{
+		logging.JOB_ID: jobID,	
+		logging.PATH:   logPath,
+		"bytes_copied": bytesCopied,
+	}
 	if err != nil {
-		logger.Error("LOG_FILE_COPY_ERROR", map[string]any{
-			"job_id":        jobID,
-			"path":          logPath,
-			"bytes_copied":  bytesCopied,
-			logging.ERROR: err.Error(),
-		})
+		logger.Error("LOG_FILE_COPY_ERROR", err, fields)
 	} else {
-		logger.Debug("LOG_FILE_COPIED", map[string]any{
-			"job_id":       jobID,
-			"path":         logPath,
-			"bytes_copied": bytesCopied,
-		})
+		logger.Debug("LOG_FILE_COPIED", fields)
 	}
 }
 
@@ -520,9 +507,8 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		file, err := os.Open(htmlFile)
 		if err != nil {
-			logger.Error("HTML_FILE_OPEN_ERROR", map[string]any{
-				"path":         htmlFile,
-				logging.ERROR: err.Error(),
+			logger.Error("HTML_FILE_OPEN_ERROR", err, map[string]any{
+				logging.PATH: htmlFile,
 			})
 			http.Error(w, "Failed to load HTML file", http.StatusInternalServerError)
 			return
@@ -540,9 +526,8 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		cssFile := filepath.Join(htmlDir, "styles.css")
 		file, err := os.Open(cssFile)
 		if err != nil {
-			logger.Error("CSS_FILE_OPEN_ERROR", map[string]any{
-				"path":         cssFile,
-				logging.ERROR: err.Error(),
+			logger.Error("CSS_FILE_OPEN_ERROR", err, map[string]any{
+				logging.PATH: cssFile,
 			})
 			http.Error(w, "Failed to load CSS file", http.StatusInternalServerError)
 			return
@@ -557,9 +542,8 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		jsFile := filepath.Join(htmlDir, "app.js")
 		file, err := os.Open(jsFile)
 		if err != nil {
-			logger.Error("JS_FILE_OPEN_ERROR", map[string]any{
-				"path":         jsFile,
-				logging.ERROR: err.Error(),
+			logger.Error("JS_FILE_OPEN_ERROR", err, map[string]any{
+				logging.PATH: jsFile,
 			})
 			http.Error(w, "Failed to load JS file", http.StatusInternalServerError)
 			return
@@ -599,9 +583,8 @@ func mergeLogFiles(stdoutPath, stderrPath string) ([]LogLine, error) {
 		}
 		stdoutFile.Close()
 		if err := scanner.Err(); err != nil {
-			logger.Error("STDOUT_READ_ERROR", map[string]any{
-				"path":         stdoutPath,
-				logging.ERROR: err.Error(),
+			logger.Error("STDOUT_READ_ERROR", err, map[string]any{
+				logging.PATH: stdoutPath,
 			})
 		}
 	} else if !os.IsNotExist(err) {
@@ -616,9 +599,8 @@ func mergeLogFiles(stdoutPath, stderrPath string) ([]LogLine, error) {
 		}
 		stderrFile.Close()
 		if err := scanner.Err(); err != nil {
-			logger.Error("STDERR_READ_ERROR", map[string]any{
-				"path":         stderrPath,
-				logging.ERROR: err.Error(),
+			logger.Error("STDERR_READ_ERROR", err, map[string]any{
+				logging.PATH: stderrPath,
 			})
 		}
 	} else if !os.IsNotExist(err) {

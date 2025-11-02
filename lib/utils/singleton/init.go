@@ -41,18 +41,16 @@ func InitAsync(name string, maxRetries int, connectionDetails map[string]any, co
 				return
 			}
 
-			logger.Warn(fmt.Sprintf("%s_CONNECTION_FAILED", name), map[string]any{
+			logger.Warn(fmt.Sprintf("%s_CONNECTION_FAILED", name), lastErr, map[string]any{
 				logging.ATTEMPT: i + 1,
-				logging.ERROR:   lastErr.Error(),
 			})
 
 			// Exponential backoff
 			time.Sleep(time.Duration(i+1) * time.Second)
 		}
 
-		logger.Fatal(fmt.Sprintf("%s_CONNECTION_FAILED", name), map[string]any{
+		logger.Fatal(fmt.Sprintf("%s_CONNECTION_FAILED", name), lastErr, map[string]any{
 			logging.RETRIES: maxRetries,
-			logging.ERROR:   lastErr.Error(),
 		})
 	}()
 

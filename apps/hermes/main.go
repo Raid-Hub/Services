@@ -45,7 +45,7 @@ func main() {
 	go func() {
 		sig := <-sigChan
 		mutex.Lock()
-		HermesLogger.Info(logging.RECEIVED_SHUTDOWN_SIGNAL, map[string]any{
+		HermesLogger.Info("RECEIVED_SHUTDOWN_SIGNAL", map[string]any{
 			"signal": sig.String(),
 		})
 		cancel(fmt.Errorf("shutdown_requested"))
@@ -54,7 +54,7 @@ func main() {
 
 	monitoring.RegisterHermesMetrics(*metricsPort)
 
-	HermesLogger.Debug(logging.WAITING_ON_CONNECTIONS, map[string]any{
+	HermesLogger.Debug("WAITING_ON_CONNECTIONS", map[string]any{
 		"services": []string{"postgres", "clickhouse", "rabbit", "publishing"},
 	})
 	postgres.Wait()
@@ -83,7 +83,7 @@ func main() {
 			mutex.Lock()
 			select {
 			case <-ctx.Done():
-				HermesLogger.Warn("STARTUP_INTERRUPTED", map[string]any{})
+				HermesLogger.Warn("STARTUP_INTERRUPTED", nil, nil)
 				mutex.Unlock()
 				goto shutdown
 			default:
@@ -95,9 +95,8 @@ func main() {
 			})
 			tm, err := startTopicManager(t, ctx)
 			if err != nil {
-				HermesLogger.Error(FAILED_TO_START_TOPIC, map[string]any{
-					logging.ERROR: err.Error(),
-					"topic":       t.Config.QueueName,
+				HermesLogger.Error(FAILED_TO_START_TOPIC, err, map[string]any{
+					"topic": t.Config.QueueName,
 				})
 			} else {
 				topicManagers = append(topicManagers, tm)
@@ -125,7 +124,7 @@ func main() {
 		}
 
 		if !found {
-			HermesLogger.Fatal("UNKNOWN_TOPIC_TYPE", map[string]any{
+			HermesLogger.Fatal("UNKNOWN_TOPIC_TYPE", nil, map[string]any{
 				"topic": *topicType,
 			})
 			return
@@ -138,9 +137,8 @@ func main() {
 		})
 		tm, err := startTopicManager(topicInstance, ctx)
 		if err != nil {
-			HermesLogger.Fatal(FAILED_TO_START_TOPIC, map[string]any{
+			HermesLogger.Fatal(FAILED_TO_START_TOPIC, err, map[string]any{
 				"topic": topicInstance.Config.QueueName,
-				"error": err.Error(),
 			})
 			return
 		} else {

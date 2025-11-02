@@ -6,14 +6,6 @@ import (
 	"raidhub/lib/env"
 	"strings"
 )
-
-const (
-	LevelDebug = "debug"
-	LevelInfo  = "info"
-	LevelWarn  = "warn"
-	LevelError = "error"
-)
-
 var (
 	verbose      bool
 	logLevel     string
@@ -22,16 +14,16 @@ var (
 
 // logLevelPriority maps log levels to their numeric priority (higher = more important)
 var logLevelPriority = map[string]int{
-	LevelDebug: 0,
-	LevelInfo:  1,
-	LevelWarn:  2,
-	LevelError: 3,
+	Debug: 0,
+	Info:  1,
+	Warn:  2,
+	Error: 3,
 	// fatal is not a configurable level - it's always shown when error level is enabled
 }
 
 func init() {
 	// Default log level is "info"
-	logLevel = LevelInfo
+	logLevel = Info
 
 	// Check environment variable first
 	if envLevel := env.LogLevel; isValidLogLevel(envLevel) {
@@ -52,7 +44,7 @@ func init() {
 	// Set verbose if either flag was provided (overrides log level for backwards compatibility)
 	if *verboseFlag || *verboseLongFlag {
 		verbose = true
-		logLevel = LevelDebug
+		logLevel = Debug
 	}
 
 	// If log-level flag is provided, use it (overrides env var and verbose flags)
@@ -62,7 +54,7 @@ func init() {
 		} else if *logLevelLongFlag != "" && isValidLogLevel(*logLevelLongFlag) {
 			logLevel = strings.ToLower(*logLevelLongFlag)
 		}
-		verbose = (logLevel == LevelDebug)
+		verbose = (logLevel == Debug)
 	}
 }
 
@@ -77,7 +69,7 @@ func isValidLogLevel(level string) bool {
 
 // IsVerbose returns true if verbose logging is enabled via either flag or log level is debug
 func IsVerbose() bool {
-	return verbose || logLevel == LevelDebug
+	return verbose || logLevel == Debug
 }
 
 // GetLogLevel returns the current log level
@@ -89,7 +81,7 @@ func GetLogLevel() string {
 func SetLogLevel(level string) {
 	if isValidLogLevel(level) {
 		logLevel = strings.ToLower(level)
-		verbose = (logLevel == LevelDebug)
+		verbose = (logLevel == Debug)
 	}
 }
 
@@ -97,7 +89,7 @@ func SetLogLevel(level string) {
 func SetVerbose(enabled bool) {
 	verbose = enabled
 	if enabled {
-		logLevel = LevelDebug
+		logLevel = Debug
 	}
 }
 
@@ -120,17 +112,17 @@ func SyncLoggingFlags() {
 
 	if verboseFlag != nil && verboseFlag.Value.String() == "true" {
 		verbose = true
-		logLevel = LevelDebug
+		logLevel = Debug
 	} else if verboseLongFlag != nil && verboseLongFlag.Value.String() == "true" {
 		verbose = true
-		logLevel = LevelDebug
+		logLevel = Debug
 	}
 
 	// Check log-level flag (overrides verbose)
 	if logLevelFlag != nil && logLevelFlag.Value.String() != "" {
 		if isValidLogLevel(logLevelFlag.Value.String()) {
 			logLevel = strings.ToLower(logLevelFlag.Value.String())
-			verbose = (logLevel == LevelDebug)
+			verbose = (logLevel == Debug)
 		}
 	}
 }

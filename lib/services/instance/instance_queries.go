@@ -16,9 +16,8 @@ func CheckExists(instanceId int64) (bool, error) {
 		SELECT EXISTS(SELECT 1 FROM instance WHERE instance_id = $1)
 	`, instanceId).Scan(&exists)
 	if err != nil {
-		logger.Error("INSTANCE_EXISTS_CHECK_ERROR", map[string]any{
+		logger.Error("INSTANCE_EXISTS_CHECK_ERROR", err, map[string]any{
 			logging.INSTANCE_ID: instanceId,
-			logging.ERROR:       err.Error(),
 		})
 		return false, err
 	}
@@ -31,9 +30,7 @@ func GetLatestInstanceId(buffer int64) (int64, error) {
 	var latestID int64
 	err := postgres.DB.QueryRow(`SELECT instance_id FROM instance WHERE instance_id < 100000000000 ORDER BY instance_id DESC LIMIT 1`).Scan(&latestID)
 	if err != nil {
-		logger.Warn("LATEST_INSTANCE_ID_ERROR", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Warn("LATEST_INSTANCE_ID_ERROR", err, nil)
 		return 0, err
 	} else {
 		return latestID - buffer, nil
@@ -46,9 +43,7 @@ func GetLatestInstance() (int64, time.Time, error) {
 	var dateCompleted time.Time
 	err := postgres.DB.QueryRow(`SELECT instance_id, date_completed FROM instance WHERE instance_id < 100000000000 ORDER BY instance_id DESC LIMIT 1`).Scan(&latestID, &dateCompleted)
 	if err != nil {
-		logger.Warn("LATEST_INSTANCE_ERROR", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Warn("LATEST_INSTANCE_ERROR", err, nil)
 		return 0, time.Time{}, err
 	} else {
 		return latestID, dateCompleted, nil
@@ -106,10 +101,11 @@ func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
 	}
 
 	if latestFound == 0 {
-		logger.Warn("NO_LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{
+		err := errors.New("no valid PGCR found in search range")
+		logger.Warn("NO_LATEST_INSTANCE_FOUND_FROM_WEB", err, map[string]any{
 			"iterations": iterations,
 		})
-		return 0, errors.New("no valid PGCR found in search range")
+		return 0, err
 	}
 
 	logger.Info("LATEST_INSTANCE_FOUND_FROM_WEB", map[string]any{

@@ -1,7 +1,6 @@
 package player
 
 import (
-	"strconv"
 	"sync"
 
 	"raidhub/lib/utils/logging"
@@ -9,32 +8,22 @@ import (
 )
 
 // UpdateActivityHistory updates the activity history for a player
-func UpdateActivityHistory(membershipIdStr string) error {
+func UpdateActivityHistory(membershipId int64) error {
 	// Parse membership ID
-	membershipId, err := strconv.ParseInt(membershipIdStr, 10, 64)
-	if err != nil {
-		logger.Warn("MEMBERSHIP_ID_PARSE_ERROR", map[string]any{
-			logging.MEMBERSHIP_ID: membershipIdStr,
-			logging.ERROR:         err.Error(),
-		})
-		return err
-	}
-
-	logger.Info("ACTIVITY_HISTORY_UPDATE_STARTED", map[string]any{
+	logger.Debug("ACTIVITY_HISTORY_UPDATE_STARTED", map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
 	})
 
 	// Get player to check current privacy status
 	p, err := GetPlayer(membershipId)
 	if err != nil {
-		logger.Error("PLAYER_GET_ERROR", map[string]any{
+		logger.Error("PLAYER_GET_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
 	if p == nil {
-		logger.Warn("PLAYER_NOT_FOUND", map[string]any{
+		logger.Warn("PLAYER_NOT_FOUND", nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
 		return nil
@@ -43,9 +32,8 @@ func UpdateActivityHistory(membershipIdStr string) error {
 	// Get all characters for this player
 	characters, err := GetPlayerCharacters(membershipId)
 	if err != nil {
-		logger.Warn("CHARACTERS_GET_ERROR", map[string]any{
+		logger.Warn("CHARACTERS_GET_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
@@ -64,10 +52,9 @@ func UpdateActivityHistory(membershipIdStr string) error {
 			result := bungie.Client.GetActivityHistoryInChannel(2, membershipId, characterId, 5, instanceIds)
 
 			if result.Error != nil {
-				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", map[string]any{
+				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", result.Error, map[string]any{
 					logging.MEMBERSHIP_ID: membershipId,
-					"character_id":        characterId,
-					logging.ERROR:         result.Error.Error(),
+					logging.CHARACTER_ID:  characterId,
 				})
 			}
 
@@ -102,9 +89,8 @@ func UpdateActivityHistory(membershipIdStr string) error {
 	// Update the last crawled timestamp
 	err = UpdateHistoryLastCrawled(membershipId)
 	if err != nil {
-		logger.Warn("HISTORY_LAST_CRAWLED_UPDATE_ERROR", map[string]any{
+		logger.Warn("HISTORY_LAST_CRAWLED_UPDATE_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}

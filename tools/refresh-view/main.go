@@ -16,7 +16,7 @@ var logger = logging.NewLogger("REFRESH_VIEW_TOOL")
 // Handles both regular views and leaderboard views (with cache management)
 func RefreshView() {
 	if flag.NArg() < 1 {
-		logger.Error("NO_VIEW_NAME", map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})
+		logger.Error("NO_VIEW_NAME", nil, map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})
 		os.Exit(1)
 		return
 	}
@@ -54,30 +54,30 @@ func RefreshView() {
 }
 
 func refreshCache(ctx context.Context, cacheView string) bool {
-	logger.Info("REFRESHING_CACHE", map[string]any{"cache": cacheView})
+	logger.Info("REFRESHING_CACHE", map[string]any{logging.CACHE: cacheView})
 	start := time.Now()
 
 	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", cacheView))
 	if err != nil {
-		logger.Error("ERROR_REFRESHING_CACHE", map[string]any{"cache": cacheView, logging.ERROR: err.Error()})
+		logger.Error("ERROR_REFRESHING_CACHE", err, map[string]any{logging.CACHE: cacheView})
 		return false
 	}
 
-	logger.Info("CACHE_REFRESHED", map[string]any{"cache": cacheView, "duration": time.Since(start).String()})
+	logger.Info("CACHE_REFRESHED", map[string]any{logging.CACHE: cacheView, "duration": time.Since(start).String()})
 	return true
 }
 
 func refreshView(ctx context.Context, viewName string) bool {
-	logger.Info("REFRESHING_VIEW", map[string]any{"view": viewName})
+	logger.Info("REFRESHING_VIEW", map[string]any{logging.VIEW: viewName})
 	start := time.Now()
 
 	_, err := postgres.DB.ExecContext(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW CONCURRENTLY %s WITH DATA", viewName))
 	if err != nil {
-		logger.Error("ERROR_REFRESHING_VIEW", map[string]any{"view": viewName, logging.ERROR: err.Error()})
+		logger.Error("ERROR_REFRESHING_VIEW", err, map[string]any{logging.VIEW: viewName})
 		return false
 	}
 
-	logger.Info("VIEW_REFRESHED", map[string]any{"view": viewName, "duration": time.Since(start).String()})
+	logger.Info("VIEW_REFRESHED", map[string]any{logging.VIEW: viewName, "duration": time.Since(start).String()})
 	return true
 }
 

@@ -15,9 +15,8 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	// Get player from database
 	p, err := GetPlayer(membershipId)
 	if err != nil {
-		logger.Warn("PLAYER_GET_ERROR", map[string]any{
+		logger.Warn("PLAYER_GET_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
@@ -39,14 +38,13 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	_, result, err = bungie.ResolveProfile(membershipId, knownType)
 
 	if err != nil {
-		logger.Warn("BUNGIE_PROFILE_FETCH_ERROR", map[string]any{
+		logger.Warn("BUNGIE_PROFILE_FETCH_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
 	if !result.Success || result.Data == nil {
-		logger.Warn("NO_PROFILE_DATA", map[string]any{
+		logger.Warn("NO_PROFILE_DATA", nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.REASON:        "bungie_api_empty_response",
 		})
@@ -59,7 +57,7 @@ func Crawl(ctx context.Context, membershipId int64) error {
 
 	// Extract user info from profile
 	if profile.Profile.Data == nil {
-		logger.Warn("NO_PROFILE_DATA", map[string]any{
+		logger.Warn("NO_PROFILE_DATA", nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.REASON:        "empty_profile_data",
 		})
@@ -105,9 +103,8 @@ func Crawl(ctx context.Context, membershipId int64) error {
 
 	savedPlayer, wasUpdated, err := CreateOrUpdatePlayer(newPlayer)
 	if err != nil {
-		logger.Warn("PLAYER_UPSERT_ERROR", map[string]any{
+		logger.Warn("PLAYER_UPSERT_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
@@ -208,24 +205,22 @@ func logNetworkError(membershipId int64, err error) {
 	netErr := network.CategorizeNetworkError(err)
 	
 	if netErr == nil {
-		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", map[string]any{
+		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return
 	}
 
 	logFields := map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
-		logging.ERROR:         err.Error(),
 	}
 
 	switch netErr.Type {
 	case network.ErrorTypeTimeout:
-		logger.Warn("ACTIVITY_HISTORY_FETCH_TIMEOUT", logFields)
+		logger.Warn("ACTIVITY_HISTORY_FETCH_TIMEOUT", err, logFields)
 	case network.ErrorTypeConnection:
-		logger.Warn("ACTIVITY_HISTORY_NETWORK_ERROR", logFields)
+		logger.Warn("ACTIVITY_HISTORY_NETWORK_ERROR", err, logFields)
 	case network.ErrorTypeUnknown:
-		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", logFields)
+		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", err, logFields)
 	}
 }

@@ -41,7 +41,7 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 				logger.Info(QUERY_COMPLETED, map[string]any{
 					logging.OPERATION: label,
 					logging.DURATION:  time.Since(start).String(),
-					"status":          "stopped",
+					logging.STATUS:    "stopped",
 				})
 				return
 			case <-ticker.C:
@@ -53,9 +53,8 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 					continue
 				}
 				if err != nil {
-					logger.Warn(QUERY_WATCH_ERROR, map[string]any{
+					logger.Warn(QUERY_WATCH_ERROR, err, map[string]any{
 						logging.OPERATION: label,
-						logging.ERROR:     err.Error(),
 					})
 					return
 				}
@@ -65,38 +64,38 @@ func monitorProgress(ctx context.Context, poll time.Duration, query string, args
 				case progress.TuplesDone != progress.TuplesTotal:
 					percent = float64(progress.TuplesDone) / float64(progress.TuplesTotal) * 100
 					logger.Info(QUERY_PROGRESS, map[string]any{
-						logging.OPERATION:        label,
-						logging.PHASE:            progress.Phase,
-						logging.PROGRESS_PERCENT: percent,
-						"tuples_done":            progress.TuplesDone,
-						"tuples_total":           progress.TuplesTotal,
-						"unit":                   "tuples",
+						logging.OPERATION:  label,
+						logging.PHASE:      progress.Phase,
+						"progress_percent": percent,
+						"tuples_done":      progress.TuplesDone,
+						"tuples_total":     progress.TuplesTotal,
+						"unit":             "tuples",
 					})
 				case progress.BlocksDone != progress.BlocksTotal:
 					percent = float64(progress.BlocksDone) / float64(progress.BlocksTotal) * 100
 					logger.Info(QUERY_PROGRESS, map[string]any{
-						logging.OPERATION:        label,
-						logging.PHASE:            progress.Phase,
-						logging.PROGRESS_PERCENT: percent,
-						"blocks_done":            progress.BlocksDone,
-						"blocks_total":           progress.BlocksTotal,
-						"unit":                   "blocks",
+						logging.OPERATION:  label,
+						logging.PHASE:      progress.Phase,
+						"progress_percent": percent,
+						"blocks_done":      progress.BlocksDone,
+						"blocks_total":     progress.BlocksTotal,
+						"unit":             "blocks",
 					})
 				case progress.PartitionsDone != progress.PartitionsTotal:
 					percent = float64(progress.PartitionsDone) / float64(progress.PartitionsTotal) * 100
 					logger.Info(QUERY_PROGRESS, map[string]any{
-						logging.OPERATION:        label,
-						logging.PHASE:            progress.Phase,
-						logging.PROGRESS_PERCENT: percent,
-						logging.PARTITIONS_DONE:  progress.PartitionsDone,
-						logging.PARTITIONS_TOTAL: progress.PartitionsTotal,
-						logging.UNIT:             "partitions",
+						logging.OPERATION:   label,
+						logging.PHASE:       progress.Phase,
+						"progress_percent":  percent,
+						"partitions_done":   progress.PartitionsDone,
+						"partitions_total":  progress.PartitionsTotal,
+						"unit":              "partitions",
 					})
 				default:
 					logger.Info(QUERY_PROGRESS, map[string]any{
-						logging.OPERATION:         label,
-						"phase":                   progress.Phase,
-						logging.PROGRESS_MEASURED: false,
+						logging.OPERATION:   label,
+						logging.PHASE:       progress.Phase,
+						"progress_measured": false,
 					})
 				}
 			}

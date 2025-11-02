@@ -14,13 +14,13 @@ func ProcessSinglePGCR() {
 	// 1. Parse the instance ID from command line args
 	// Since main.go uses flag.Parse(), the actual arguments start from flag.Arg(1)
 	if flag.NArg() < 2 {
-		logger.Error("USAGE_ERROR", map[string]any{"message": "Usage: scripts process-single-pgcr <instance_id>"})
+		logger.Error("USAGE_ERROR", nil, map[string]any{"message": "Usage: scripts process-single-pgcr <instance_id>"})
 		return
 	}
 
 	instanceId, err := strconv.ParseInt(flag.Arg(1), 10, 64)
 	if err != nil {
-		logger.Error("INVALID_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
+		logger.Error("INVALID_INSTANCE_ID", err, map[string]any{})
 		return
 	}
 
@@ -30,7 +30,7 @@ func ProcessSinglePGCR() {
 	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
 
 	if result != pgcr_processing.Success {
-		logger.Error("PGCR_FETCH_FAILED", map[string]any{logging.INSTANCE_ID: instanceId, "result": result})
+		logger.Error("PGCR_FETCH_FAILED", nil, map[string]any{logging.INSTANCE_ID: instanceId, "result": result})
 		return
 	}
 
@@ -39,7 +39,7 @@ func ProcessSinglePGCR() {
 	// 3. Store the PGCR
 	lag, committed, err := instance_storage.StorePGCR(instance, pgcr)
 	if err != nil {
-		logger.Error("FAILED_TO_STORE_PGCR", map[string]any{logging.INSTANCE_ID: instanceId, logging.ERROR: err.Error()})
+		logger.Error("FAILED_TO_STORE_PGCR", err, map[string]any{logging.INSTANCE_ID: instanceId})
 		return
 	}
 

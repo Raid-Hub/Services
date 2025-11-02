@@ -83,9 +83,8 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 		WHERE membership_id = $1
 	`, membershipId).Scan(&data.AgeInDays, &data.Clears, &data.MembershipType, &data.IconPath, &data.BungieName, &data.CurrentCheatLevel, &data.IsPrivate)
 	if err != nil {
-		logger.Warn(PLAYER_INFO_ERROR, map[string]any{
+		logger.Warn(PLAYER_INFO_ERROR, err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return -1, 0, data
 	}
@@ -101,19 +100,17 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 			AND membership_id = $1
 	`, membershipId).Scan(&data.FlawlessRatio, &data.LowmanRatio, &data.SoloRatio)
 	if err != nil {
-		logger.Warn(PLAYER_INFO_ERROR, map[string]any{
-			"membership_id":   membershipId,
-			logging.OPERATION: "get_ratios",
-			logging.ERROR:     err.Error(),
+		logger.Warn(PLAYER_INFO_ERROR, err, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.OPERATION:     "get_ratios",
 		})
 		return -1, 0, data
 	}
 
 	result, err := bungie.Client.GetProfile(data.MembershipType, membershipId, []int{100})
 	if err != nil {
-		logger.Warn(PLAYER_PROFILE_ERROR, map[string]any{
+		logger.Warn(PLAYER_PROFILE_ERROR, err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.ERROR:         err.Error(),
 		})
 		return -1, 0, data
 	}
@@ -252,11 +249,11 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 
 	if minCheatLevel > data.CurrentCheatLevel {
 		logger.Info(CHEAT_LEVEL_UPDATED, map[string]any{
-			logging.MEMBERSHIP_ID:  flag.MembershipId,
-			logging.BUNGIE_NAME:    data.BungieName,
-			logging.PREVIOUS_LEVEL: data.CurrentCheatLevel,
-			logging.NEW_LEVEL:      minCheatLevel,
-			logging.LAST_PLAYED:    data.Profile.DateLastPlayed.UTC().Format("15:04:05"),
+			logging.MEMBERSHIP_ID: flag.MembershipId,
+			"bungie_name":         data.BungieName,
+			"previous_level":      data.CurrentCheatLevel,
+			"new_level":           minCheatLevel,
+			"last_played":         data.Profile.DateLastPlayed.UTC().Format("15:04:05"),
 		})
 		// Update the player's cheat level in the database
 		_, err := postgres.DB.Exec(`
@@ -266,9 +263,8 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 		`, minCheatLevel, flag.MembershipId)
 
 		if err != nil {
-			logger.Warn(CHEAT_LEVEL_UPDATE_ERROR, map[string]any{
+			logger.Warn(CHEAT_LEVEL_UPDATE_ERROR, err, map[string]any{
 				logging.MEMBERSHIP_ID: flag.MembershipId,
-				logging.ERROR:         err.Error(),
 			})
 		}
 
@@ -298,10 +294,9 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 			})
 
 			if err != nil {
-				logger.Warn(WEBHOOK_ERROR, map[string]any{
-					"membership_id":   flag.MembershipId,
-					logging.OPERATION: "gm_report_webhook",
-					logging.ERROR:     err.Error(),
+				logger.Warn(WEBHOOK_ERROR, err, map[string]any{
+					logging.MEMBERSHIP_ID: flag.MembershipId,
+					logging.OPERATION:     "gm_report_webhook",
 				})
 			}
 		}

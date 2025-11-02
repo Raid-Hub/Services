@@ -27,10 +27,9 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 		resolvedType, _, err := bungie.ResolveProfile(membershipId, nil)
 		if err != nil || resolvedType == 0 {
 			// fail here
-			logger.Error("COULD_NOT_DETERMINE_MEMBERSHIP_TYPE", map[string]any{
+			logger.Error("COULD_NOT_DETERMINE_MEMBERSHIP_TYPE", err, map[string]any{
 				logging.MEMBERSHIP_ID: membershipId,
 				logging.CHARACTER_ID:  characterId,
-				logging.ERROR:         err.Error(),
 			})
 			return err
 		}
@@ -43,30 +42,29 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	result, err := bungie.Client.GetCharacter(membershipType, membershipId, characterId)
 	if err != nil {
 		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
-			logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+			logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 				logging.MEMBERSHIP_ID: membershipId,
 				logging.CHARACTER_ID:  characterId,
 				logging.REASON:        "character_not_found",
 			})
 			return nil
 		}
-		logger.Error("CHARACTER_FETCH_ERROR", map[string]any{
+		logger.Error("CHARACTER_FETCH_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}
 	if !result.Success || result.Data == nil {
 		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
-			logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+			logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 				logging.MEMBERSHIP_ID: membershipId,
 				logging.CHARACTER_ID:  characterId,
 				logging.REASON:        "character_not_found_bungie_error",
 			})
 			return nil
 		}
-		logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
 			logging.REASON:        "no_api_data",
@@ -76,7 +74,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	character := result.Data
 
 	if character == nil || character.Character.Data == nil {
-		logger.Warn(CHARACTER_NOT_FOUND, map[string]any{
+		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
 			logging.REASON:        "no_character_data",
@@ -96,11 +94,10 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 		  AND character_id = $5
 	`, charData.ClassHash, charData.EmblemHash, instanceId, membershipId, characterId)
 	if err != nil {
-		logger.Error("CHARACTER_UPDATE_ERROR", map[string]any{
+		logger.Error("CHARACTER_UPDATE_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
 			logging.INSTANCE_ID:   instanceId,
-			logging.ERROR:         err.Error(),
 		})
 		return err
 	}

@@ -56,19 +56,19 @@ func ProcessMissedPGCRs() {
 				// missedLogPath exists, move it to processingLogPath for processing
 				err = moveFile(missedLogPath, processingLogPath)
 				if err != nil {
-					logger.Fatal("ERROR_MOVING_FILE", map[string]any{logging.ERROR: err.Error()})
+					logger.Fatal("ERROR_MOVING_FILE", err, map[string]any{})
 				}
 			} else if !os.IsNotExist(err) {
 				// Some other error checking missedLogPath
-				logger.Fatal("ERROR_CHECKING_MISSED_LOG_PATH", map[string]any{logging.ERROR: err.Error()})
+				logger.Fatal("ERROR_CHECKING_MISSED_LOG_PATH", err, map[string]any{})
 			} else {
 				// missedLogPath doesn't exist, nothing to process - just create empty missedLogPath and exit
 				if err := os.MkdirAll(logDir, 0755); err != nil {
-					logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", map[string]any{logging.ERROR: err.Error()})
+					logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", err, map[string]any{})
 				}
 				missedLogFile, err := createFile(missedLogPath)
 				if err != nil {
-					logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
+					logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", err, map[string]any{})
 				}
 				missedLogFile.Close()
 				logger.Info("NO_MISSED_PGCRS_TO_PROCESS", map[string]any{})
@@ -78,13 +78,13 @@ func ProcessMissedPGCRs() {
 			// It will be created at the end after processing completes, so that any failed PGCRs
 			// written during processing are preserved
 		} else {
-			logger.Fatal("ERROR_STAT_PROCESSING_LOG_PATH", map[string]any{logging.ERROR: err.Error()})
+			logger.Fatal("ERROR_STAT_PROCESSING_LOG_PATH", err, map[string]any{})
 		}
 	}
 
 	logFile, err := os.Open(processingLogPath)
 	if err != nil {
-		logger.Fatal("ERROR_OPENING_PROCESSING_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
+		logger.Fatal("ERROR_OPENING_PROCESSING_LOG_FILE", err, map[string]any{})
 	}
 	defer logFile.Close()
 
@@ -117,7 +117,7 @@ func ProcessMissedPGCRs() {
 	}
 
 	if *gap && (maxN-minN > 200_000) {
-		logger.Error("GAP_TOO_LARGE", map[string]any{logging.MAX: maxN, logging.MIN: minN})
+		logger.Error("GAP_TOO_LARGE", nil, map[string]any{logging.MAX: maxN, logging.MIN: minN})
 	}
 
 	if *gap && minN > 0 && maxN > 0 {
@@ -128,14 +128,14 @@ func ProcessMissedPGCRs() {
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.Warn("DATABASE_QUERY_ERROR", map[string]any{logging.ERROR: err.Error()})
-		logger.Fatal("ERROR_SCANNING_FILE", map[string]any{logging.ERROR: err.Error()})
+		logger.Warn("DATABASE_QUERY_ERROR", err, map[string]any{})
+		logger.Fatal("ERROR_SCANNING_FILE", err, map[string]any{})
 	}
 
 	// postgres.DB is initialized in init()
 	stmnt, err := postgres.DB.Prepare("SELECT instance_id FROM instance INNER JOIN pgcr USING (instance_id) WHERE instance_id = $1 LIMIT 1;")
 	if err != nil {
-		logger.Error("ERROR_PREPARING_STATEMENT", map[string]any{logging.ERROR: err.Error()})
+		logger.Error("ERROR_PREPARING_STATEMENT", err, map[string]any{})
 	}
 	defer stmnt.Close()
 
@@ -171,7 +171,7 @@ func ProcessMissedPGCRs() {
 			var err error
 			latestId, err = instance.GetLatestInstanceId(5_000)
 			if err != nil {
-				logger.Fatal("ERROR_GETTING_LATEST_INSTANCE_ID", map[string]any{logging.ERROR: err.Error()})
+				logger.Fatal("ERROR_GETTING_LATEST_INSTANCE_ID", err, map[string]any{})
 			}
 		} else {
 			latestId = 0 // Set to 0 when forcing, worker will skip the comparison
@@ -230,7 +230,7 @@ func ProcessMissedPGCRs() {
 	// Remove processingLogPath file
 	if _, err := os.Stat(processingLogPath); err == nil {
 		if err := os.Remove(processingLogPath); err != nil {
-			logger.Fatal("ERROR_REMOVING_PROCESSING_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
+			logger.Fatal("ERROR_REMOVING_PROCESSING_LOG_FILE", err, map[string]any{})
 		}
 		logger.Debug("TEMPORARY_FILE_DELETED_SUCCESSFULLY", map[string]any{})
 	}
@@ -239,11 +239,11 @@ func ProcessMissedPGCRs() {
 	// (failed PGCRs written during processing should be preserved)
 	if _, err := os.Stat(missedLogPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(logDir, 0755); err != nil {
-			logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", map[string]any{logging.ERROR: err.Error()})
+			logger.Fatal("ERROR_CREATING_LOG_DIRECTORY", err, map[string]any{})
 		}
 		missedLogFile, err := createFile(missedLogPath)
 		if err != nil {
-			logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", map[string]any{logging.ERROR: err.Error()})
+			logger.Fatal("ERROR_CREATING_MISSED_LOG_FILE", err, map[string]any{})
 		}
 		missedLogFile.Close()
 	}
@@ -276,11 +276,10 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 				if err != nil {
 					attempt := errors + 1
 					if attempt > workerMaxRetries {
-						logger.Error(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: instanceID,
-							logging.ERROR:   err.Error(),
+						logger.Error(instance_storage.FAILED_TO_STORE_INSTANCE, err, map[string]any{logging.INSTANCE_ID: instanceID,
 							logging.ATTEMPT: attempt})
 					} else {
-						logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, map[string]any{logging.INSTANCE_ID: instanceID, logging.ERROR: err.Error(), logging.ATTEMPT: attempt, logging.RETRIES: workerMaxRetries})
+						logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, err, map[string]any{logging.INSTANCE_ID: instanceID, logging.ATTEMPT: attempt, logging.RETRIES: workerMaxRetries})
 					}
 					time.Sleep(3 * time.Second)
 					errors++
@@ -299,14 +298,14 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 				errors++
 				// continue loop to retry
 			} else {
-				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", map[string]any{logging.INSTANCE_ID: instanceID})
+				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", nil, map[string]any{logging.INSTANCE_ID: instanceID})
 				instance_storage.WriteMissedLog(instanceID)
 				failures <- instanceID
 				processed = true
 			}
 		}
 		if errors >= workerMaxRetries {
-			logger.Warn("FAILED_TO_FETCH_INSTANCE_ID_MULTIPLE_TIMES_SKIPPING", map[string]any{logging.INSTANCE_ID: instanceID, logging.RETRIES: workerMaxRetries})
+			logger.Warn("FAILED_TO_FETCH_INSTANCE_ID_MULTIPLE_TIMES_SKIPPING", nil, map[string]any{logging.INSTANCE_ID: instanceID, logging.RETRIES: workerMaxRetries})
 			instance_storage.WriteMissedLog(instanceID)
 			failures <- instanceID
 		}

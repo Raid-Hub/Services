@@ -16,9 +16,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 	for {
 		metrics, err := GetMetrics(4)
 		if err != nil {
-			AtlasLogger.Error("FAILED_TO_GET_METRICS_IN_GAP_CHECKER", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			AtlasLogger.Error("FAILED_TO_GET_METRICS_IN_GAP_CHECKER", err, nil)
 			time.Sleep(5 * time.Minute)
 			continue
 		}
@@ -31,9 +29,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 
 			metrics, err := GetMetricsForScaling(time.Since(startTime))
 			if err != nil {
-				AtlasLogger.Error("FAILED_TO_GET_METRICS_AFTER_GAP_SUPERCHARGE", map[string]any{
-					logging.ERROR: err.Error(),
-				})
+				AtlasLogger.Error("FAILED_TO_GET_METRICS_AFTER_GAP_SUPERCHARGE", err, nil)
 				// Continue loop without evaluating metrics
 				time.Sleep(5 * time.Minute)
 				continue
@@ -49,8 +45,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 
 				if err != nil {
 					// Error finding block start
-					AtlasLogger.Warn("GAP_BLOCK_SEARCH_FAILED", map[string]any{
-						logging.ERROR:       err.Error(),
+					AtlasLogger.Warn("GAP_BLOCK_SEARCH_FAILED", err, map[string]any{
 						logging.INSTANCE_ID: consumerConfig.LatestId,
 						logging.FROM:        minCursor,
 						logging.TO:          maxCursor,
@@ -58,9 +53,7 @@ func gapCheckWorker(consumerConfig *ConsumerConfig) {
 					})
 					latestId, completionDate, err := instance.GetLatestInstance()
 					if err != nil {
-						AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE", map[string]any{
-							logging.ERROR: err.Error(),
-						})
+						AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE", err, nil)
 					}
 
 					// reset the crawler

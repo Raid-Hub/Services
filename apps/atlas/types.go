@@ -55,14 +55,14 @@ func (w *AtlasWorker) Info(key string, fields map[string]any) {
 	w.logger.Info(key, w.addWorkerFields(fields))
 }
 
-func (w *AtlasWorker) Warn(key string, fields map[string]any) {
-	w.logger.Warn(key, w.addWorkerFields(fields))
+func (w *AtlasWorker) Warn(key string, err error, fields map[string]any) {
+	w.logger.Warn(key, err, w.addWorkerFields(fields))
 }
 
-func (w *AtlasWorker) Error(key string, fields map[string]any) {
-	w.logger.Error(key, w.addWorkerFields(fields))
+func (w *AtlasWorker) Error(key string, err error, fields map[string]any) {
+	w.logger.Error(key, err, w.addWorkerFields(fields))
 }
 
-func (w *AtlasWorker) Fatal(key string, fields map[string]any) {
-	w.logger.Fatal(key, w.addWorkerFields(fields))
+func (w *AtlasWorker) Fatal(key string, err error, fields map[string]any) {
+	w.logger.Fatal(key, err, w.addWorkerFields(fields))
 }

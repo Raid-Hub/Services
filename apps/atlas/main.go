@@ -20,7 +20,7 @@ func main() {
 
 	monitoring.RegisterAtlasMetrics()
 
-	AtlasLogger.Debug(logging.WAITING_ON_CONNECTIONS, map[string]any{
+	AtlasLogger.Debug("WAITING_ON_CONNECTIONS", map[string]any{
 		"services": []string{"postgres", "publishing"},
 	})
 	postgres.Wait()
@@ -36,16 +36,14 @@ func main() {
 					"attempting": "binary_search_from_web",
 				})
 				if instanceId, err = instance.GetLatestInstanceIdFromWeb(config.Buffer); err != nil {
-					AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE_ID", map[string]any{
-						logging.ERROR: err.Error(),
-						"buffer":      config.Buffer,
-						"source":      "database_and_web",
+					AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE_ID", err, map[string]any{
+						"buffer": config.Buffer,
+						"source": "database_and_web",
 					})
 				}
 			} else {
-				AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE_ID", map[string]any{
-					logging.ERROR: err.Error(),
-					"buffer":      config.Buffer,
+				AtlasLogger.Fatal("FAILED_TO_GET_LATEST_INSTANCE_ID", err, map[string]any{
+					"buffer": config.Buffer,
 				})
 			}
 		}

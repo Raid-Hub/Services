@@ -46,7 +46,7 @@ func parseConfig() AtlasConfig {
 	} else {
 		// Not in dev mode
 		if *devSkip != 0 {
-			AtlasLogger.Fatal("INVALID_FLAG_COMBINATION", map[string]any{
+			AtlasLogger.Fatal("INVALID_FLAG_COMBINATION", nil, map[string]any{
 				logging.REASON: "dev-skip flag requires --dev flag to be set",
 			})
 		}
@@ -57,7 +57,7 @@ func parseConfig() AtlasConfig {
 	}
 
 	if *devSkip < 0 {
-		AtlasLogger.Fatal("INVALID_FLAG_VALUE", map[string]any{
+		AtlasLogger.Fatal("INVALID_FLAG_VALUE", nil, map[string]any{
 			logging.REASON: "dev-skip must be >= 0",
 			"dev_skip":     *devSkip,
 		})
@@ -65,7 +65,7 @@ func parseConfig() AtlasConfig {
 
 	workersValue := *numWorkers
 	if effectiveBuffer < 0 || workersValue <= 0 {
-		AtlasLogger.Fatal("INVALID_FLAGS", map[string]any{
+		AtlasLogger.Fatal("INVALID_FLAGS", nil, map[string]any{
 			logging.REASON:       "invalid flag values",
 			"buffer":             effectiveBuffer,
 			logging.WORKER_COUNT: workersValue,
@@ -76,7 +76,7 @@ func parseConfig() AtlasConfig {
 	if *devFlag && workersValue > effectiveMaxWorkers {
 		workersValue = effectiveMaxWorkers
 	} else if !*devFlag && workersValue > effectiveMaxWorkers {
-		AtlasLogger.Fatal("INVALID_FLAGS", map[string]any{
+		AtlasLogger.Fatal("INVALID_FLAGS", nil, map[string]any{
 			logging.REASON:       "workers exceeds max-workers",
 			"buffer":             effectiveBuffer,
 			logging.WORKER_COUNT: *numWorkers,

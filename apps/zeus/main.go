@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -56,9 +55,8 @@ func main() {
 		if env.ZeusPort != "" {
 			var err error
 			if *port, err = strconv.Atoi(env.ZeusPort); err != nil {
-				logger.Fatal("INVALID_ZEUS_PORT", map[string]any{
-					logging.ERROR: err.Error(),
-					"port":        env.ZeusPort,
+				logger.Fatal("INVALID_ZEUS_PORT", err, map[string]any{
+					"port": env.ZeusPort,
 				})
 			}
 		} else {
@@ -154,7 +152,6 @@ func main() {
 				logger.Debug("REQUEST_CANCELED", map[string]any{
 					logging.METHOD:   r.Method,
 					logging.ENDPOINT: r.URL.String(),
-					"error":          err.Error(),
 				})
 			} else if strings.Contains(err.Error(), "connection reset by peer") {
 				// Connection reset errors are common and should be handled silently
@@ -164,37 +161,27 @@ func main() {
 				})
 			} else if strings.Contains(err.Error(), "no such host") {
 				// DNS lookup errors are network issues that should be logged at info level
-				logger.Warn("PROXY_DNS_ERROR", map[string]any{
+				logger.Warn("PROXY_DNS_ERROR", err, map[string]any{
 					logging.METHOD:   r.Method,
 					logging.ENDPOINT: r.URL.String(),
 				})
 			} else {
-				logger.Warn("PROXY_ERROR", map[string]any{
+				logger.Warn("PROXY_ERROR", err, map[string]any{
 					logging.METHOD:   r.Method,
 					logging.ENDPOINT: r.URL.String(),
-					logging.ERROR:    err.Error(),
 				})
 			}
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
 
-	mainHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("x-betteruptime-probe") != "" {
-			io.WriteString(w, "ok")
-			return
-		}
-
-		rp.ServeHTTP(w, r)
-	})
+	mainHandler := http.HandlerFunc(rp.ServeHTTP)
 	logger.Info("SERVICE_READY", map[string]any{
 		"port": *port,
 	})
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), mainHandler); err != nil {
-		logger.Error("SERVER_FAILED", map[string]any{
-			logging.ERROR: err.Error(),
-		})
+		logger.Error("SERVER_FAILED", err, nil)
 	}
 }
 
@@ -232,10 +219,11 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 		r.Header.Add("x-forwarded-for", securityKey)
 	} else if securityKey != "" {
 		// Only log warning if security key is configured but not provided
-		logger.Warn("SECURITY_CHECK_FAILED", map[string]any{
-			"host":   r.Host,
-			"path":   r.URL.Path,
-			"method": r.Method,
+		logger.Warn("SECURITY_CHECK_FAILED", errors.New("api key mismatch"), map[string]any{
+			logging.HOST:   r.Host,
+			logging.PATH:   r.URL.Path,
+			logging.METHOD: r.Method,
+			"x_api_key": r.Header.Get("x-api-key"),
 		})
 	}
 
@@ -279,7 +267,7 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}:
 	default:
 		// Channel full, drop metric to avoid blocking (buffer should be large enough)
-		logger.Warn("METRICS_CHANNEL_FULL", map[string]any{})
+		logger.Warn("METRICS_CHANNEL_FULL", errors.New("unable to process zeus metrics"), nil)
 	}
 
 	return resp, err

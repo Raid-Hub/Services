@@ -39,7 +39,11 @@ func processCharacterFill(worker processing.WorkerInterface, message amqp.Delive
 	err = character.Fill(request.MembershipId, request.CharacterId, request.InstanceId)
 
 	if err != nil {
-		worker.Error("FAILED_TO_UPDATE_CHARACTER", map[string]any{logging.ERROR: err.Error()})
+		worker.Error("FAILED_TO_UPDATE_CHARACTER", err, map[string]any{
+			logging.MEMBERSHIP_ID: request.MembershipId,
+			logging.CHARACTER_ID:  request.CharacterId,
+			logging.INSTANCE_ID:   request.InstanceId,
+		})
 		return err
 	}
 

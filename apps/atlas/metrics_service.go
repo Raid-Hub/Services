@@ -144,9 +144,8 @@ func execWeightedQuery(query string, intervalMins int) (float64, error) {
 	for idx, y := range res.Data.Result[0].Values {
 		val, err := strconv.ParseFloat(y[1].(string), 64)
 		if err != nil {
-			metricsLogger.Error("PROMETHEUS_VALUE_PARSE_FAILED", map[string]any{
-				logging.ERROR: err.Error(),
-				"value":       y[1],
+			metricsLogger.Error("PROMETHEUS_VALUE_PARSE_FAILED", err, map[string]any{
+				"value": y[1],
 			})
 			return 0, err
 		}

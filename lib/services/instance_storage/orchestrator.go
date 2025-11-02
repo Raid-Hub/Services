@@ -25,7 +25,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	// Start transaction for atomic storage of pgcr + instance data
 	tx, err := postgres.DB.Begin()
 	if err != nil {
-		logger.Warn(FAILED_TO_INITIATE_TRANSACTION, map[string]any{logging.ERROR: err.Error()})
+		logger.Warn(FAILED_TO_INITIATE_TRANSACTION, err, nil)
 		global_metrics.InstanceStorageOperations.WithLabelValues("begin_transaction", "error").Inc()
 		return nil, false, err
 	}
@@ -34,14 +34,14 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	// 1. Store raw JSON (pgcr domain) - within transaction
 	rawIsNew, err := StoreRawJSON(tx, raw)
 	if err != nil {
-		logger.Warn(ERROR_STORING_RAW_PGCR, map[string]any{logging.ERROR: err.Error()})
+		logger.Warn(ERROR_STORING_RAW_PGCR, err, nil)
 		return nil, false, err
 	}
 
 	// 2. Store instance data (instance domain) - within same transaction
 	sideEffects, instanceIsNew, err := Store(tx, inst)
 	if err != nil {
-		logger.Warn(ERROR_STORING_INSTANCE_DATA, map[string]any{logging.ERROR: err.Error()})
+		logger.Warn(ERROR_STORING_INSTANCE_DATA, err, nil)
 		return nil, false, err
 	}
 	// Determine if this was a new PGCR (either raw or instance was new)
@@ -66,7 +66,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	err = StoreToClickHouse(inst)
 	clickhouseDuration := time.Since(clickhouseStart)
 	if err != nil {
-		logger.Warn(FAILED_TO_STORE_TO_CLICKHOUSE, map[string]any{logging.ERROR: err.Error()})
+		logger.Warn(FAILED_TO_STORE_TO_CLICKHOUSE, err, nil)
 		global_metrics.InstanceStorageOperations.WithLabelValues("store_to_clickhouse", "error").Inc()
 		global_metrics.InstanceStorageOperationDuration.WithLabelValues("store_to_clickhouse", "error").Observe(clickhouseDuration.Seconds())
 		return nil, false, err // Roll back the entire transaction
@@ -77,7 +77,7 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	// 4. Commit transaction (only if ClickHouse succeeded)
 	err = tx.Commit()
 	if err != nil {
-		logger.Warn(FAILED_TO_COMMIT_TRANSACTION, map[string]any{logging.ERROR: err.Error()})
+		logger.Warn(FAILED_TO_COMMIT_TRANSACTION, err, nil)
 		global_metrics.InstanceStorageOperations.WithLabelValues("commit_transaction", "error").Inc()
 		return nil, false, err
 	}

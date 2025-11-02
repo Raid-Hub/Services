@@ -22,8 +22,8 @@ type Topic struct {
 // WorkerInterface provides a minimal interface for processors to interact with workers
 type WorkerInterface interface {
 	Info(key string, fields map[string]any)
-	Warn(key string, fields map[string]any)
-	Error(key string, fields map[string]any)
+	Warn(key string, err error, fields map[string]any)
+	Error(key string, err error, fields map[string]any)
 	Debug(key string, fields map[string]any)
 	Context() context.Context
 }
@@ -32,9 +32,7 @@ type WorkerInterface interface {
 func ParseJSON[T any](worker WorkerInterface, data []byte) (T, error) {
 	var v T
 	if err := json.Unmarshal(data, &v); err != nil {
-		worker.Error("FAILED_TO_UNMARSHAL_MESSAGE", map[string]any{
-			"error": err.Error(),
-		})
+		worker.Error("FAILED_TO_UNMARSHAL_MESSAGE", err, nil)
 		return v, err
 	}
 	return v, nil
@@ -44,8 +42,9 @@ func ParseJSON[T any](worker WorkerInterface, data []byte) (T, error) {
 func ParseText(worker WorkerInterface, data []byte) (string, error) {
 	text := string(data)
 	if text == "" {
-		worker.Error("EMPTY_MESSAGE_BODY", nil)
-		return "", fmt.Errorf("empty message body")
+		err := fmt.Errorf("empty message body")
+		worker.Error("FAILED_TO_PARSE_TEXT", err, nil)
+		return "", err
 	}
 	return text, nil
 }
@@ -54,14 +53,14 @@ func ParseText(worker WorkerInterface, data []byte) (string, error) {
 func ParseInt64(worker WorkerInterface, data []byte) (int64, error) {
 	text := string(data)
 	if text == "" {
-		worker.Error("EMPTY_MESSAGE_BODY", nil)
-		return 0, fmt.Errorf("empty message body")
+		err := fmt.Errorf("empty message body")
+		worker.Error("FAILED_TO_PARSE_INT64", err, nil)
+		return 0, err
 	}
 	value, err := strconv.ParseInt(text, 10, 64)
 	if err != nil {
-		worker.Error("FAILED_TO_PARSE_INT64", map[string]any{
-			"error": err.Error(),
-			"value": text,
+		worker.Error("FAILED_TO_PARSE_INT64", err, map[string]any{
+			"body": text,
 		})
 		return 0, err
 	}

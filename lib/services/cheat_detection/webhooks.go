@@ -90,9 +90,8 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+		logger.Warn(RATE_LIMITER_ERROR, err, map[string]any{
 			logging.OPERATION: "webhook_rate_limit",
-			logging.ERROR:     err.Error(),
 		})
 	}
 
@@ -137,9 +136,8 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 	}
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+		logger.Warn(RATE_LIMITER_ERROR, err, map[string]any{
 			logging.OPERATION: "webhook_rate_limit",
-			logging.ERROR:     err.Error(),
 		})
 	}
 
@@ -151,9 +149,8 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 	ctx := context.Background()
 	err := webhookRl.Wait(ctx)
 	if err != nil {
-		logger.Warn(RATE_LIMITER_ERROR, map[string]any{
+		logger.Warn(RATE_LIMITER_ERROR, err, map[string]any{
 			logging.OPERATION: "webhook_rate_limit",
-			logging.ERROR:     err.Error(),
 		})
 	}
 
@@ -202,12 +199,12 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 
 	logger.Info(PLAYER_BLACKLISTED, map[string]any{
 		logging.MEMBERSHIP_ID: flag.MembershipId,
-		logging.BUNGIE_NAME:   bungieName,
-		logging.CLEARS:        clears,
-		logging.AGE_DAYS:      ageInDays,
-		logging.CHEAT_CHANCE:  cheaterAccountChance,
-		logging.FLAGS:         strings.Join(GetCheaterAccountFlagsStrings(flags), ", "),
-		logging.CLASS_A_FLAGS: flag.FlagsA,
+		"bungie_name":         bungieName,
+		"clears":              clears,
+		"age_days":            ageInDays,
+		"cheat_chance":        cheaterAccountChance,
+		"flags":               strings.Join(GetCheaterAccountFlagsStrings(flags), ", "),
+		"class_a_flags":       flag.FlagsA,
 	})
 
 	discord.SendWebhook(getNemesisWebhookUrl(), &webhook)

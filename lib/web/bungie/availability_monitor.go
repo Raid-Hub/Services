@@ -128,15 +128,11 @@ func (gm *globalAPIMonitor) updateAllSystems() {
 	defer gm.updateMutex.Unlock()
 
 	result, err := Client.GetCommonSettings()
-	if err != nil {
-		globalMonitorLogger.Error("BUNGIE_SETTINGS_CHECK_ERROR", map[string]any{
-			logging.ERROR: err.Error(),
-		})
-		return
-	}
-	if !result.Success || result.Data == nil {
-		globalMonitorLogger.Error("FAILED_TO_GET_BUNGIE_SETTINGS", map[string]any{
-			"success": result.Success,
+	if !result.Success || err != nil {
+		globalMonitorLogger.Error("BUNGIE_SETTINGS_CHECK_ERROR", err, map[string]any{
+			logging.BUNGIE_ERROR_CODE: result.BungieErrorCode,
+			logging.ERROR_STATUS:      result.BungieErrorStatus,
+			logging.STATUS_CODE:       result.HttpStatusCode,
 		})
 		return
 	}
@@ -169,9 +165,9 @@ func (gm *globalAPIMonitor) blockSystemImmediately(systemName string) {
 	// Only update wait group if transitioning from available to disabled
 	if wasAvailable {
 		globalMonitorLogger.Info("BUNGIE_API_DISABLED", map[string]any{
-			"action": "blocking_workers",
-			"system": monitor.systemName,
-			"source": "system_disabled_signal",
+			logging.ACTION: "blocking_workers",
+			logging.SYSTEM: monitor.systemName,
+			logging.SOURCE: "system_disabled_signal",
 		})
 		monitor.monitorWG.Add(1)
 	}
@@ -192,14 +188,14 @@ func (gm *globalAPIMonitor) updateSystemState(monitor *systemMonitor, systems ma
 	// If API status changed, update the wait group
 	if wasAvailable && isAPIDisabled {
 		globalMonitorLogger.Info("BUNGIE_API_DISABLED", map[string]any{
-			"action": "blocking_workers",
-			"system": monitor.systemName,
+			logging.ACTION: "blocking_workers",
+			logging.SYSTEM: monitor.systemName,
 		})
 		monitor.monitorWG.Add(1)
 	} else if !wasAvailable && !isAPIDisabled {
 		globalMonitorLogger.Info("BUNGIE_API_ENABLED", map[string]any{
-			"action": "unblocking_workers",
-			"system": monitor.systemName,
+			logging.ACTION: "unblocking_workers",
+			logging.SYSTEM: monitor.systemName,
 		})
 		monitor.monitorWG.Done()
 	}

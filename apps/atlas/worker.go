@@ -51,9 +51,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 			if result == pgcr_processing.NonRaid {
 				startDate, err := time.Parse(time.RFC3339, pgcr.Period)
 				if err != nil {
-					w.Error("Failed to parse time", map[string]any{
-						logging.ERROR: err.Error(),
-					})
+					w.Error("TIME_PARSE_FAILURE", err, nil)
 					continue
 				}
 				endDate := pgcr_processing.CalculateDateCompleted(startDate, pgcr.Entries[0])
@@ -69,9 +67,7 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
 				if err != nil {
 					errCount++
-					w.Warn("FAILED_TO_PUBLISH_INSTANCE_STORE_MESSAGE", map[string]any{
-						logging.ERROR: err.Error(),
-					})
+					w.Warn("FAILED_TO_PUBLISH_INSTANCE_STORE_MESSAGE", err, nil)
 					time.Sleep(5 * time.Second)
 				} else {
 					endTime := time.Now()

@@ -67,12 +67,12 @@ func (tm *TopicManager) Debug(message string, fields map[string]any) {
 	tm.logger.Debug(message, tm.addTopicFields(fields))
 }
 
-func (tm *TopicManager) Warn(message string, fields map[string]any) {
-	tm.logger.Warn(message, tm.addTopicFields(fields))
+func (tm *TopicManager) Warn(message string, err error, fields map[string]any) {
+	tm.logger.Warn(message, err, tm.addTopicFields(fields))
 }
 
-func (tm *TopicManager) Error(message string, fields map[string]any) {
-	tm.logger.Error(message, tm.addTopicFields(fields))
+func (tm *TopicManager) Error(message string, err error, fields map[string]any) {
+	tm.logger.Error(message, err, tm.addTopicFields(fields))
 }
 
 // GetInitialWorkers returns the initial worker count for this topic
@@ -228,9 +228,8 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 		for i := currentWorkers; i < targetWorkers; i++ {
 			worker, err := tm.startWorkerGoroutine(i)
 			if err != nil {
-				tm.Warn("WORKER_START_ERROR", map[string]any{
-					"worker_id":   i,
-					logging.ERROR: err.Error(),
+				tm.Warn("WORKER_START_ERROR", err, map[string]any{
+					"worker_id": i,
 				})
 				continue
 			}
@@ -345,9 +344,7 @@ func (tm *TopicManager) monitorSelfScaling() {
 	for range ticker.C {
 		queueDepth, err := tm.getQueueDepthWithRetry()
 		if err != nil {
-			tm.logger.Error("QUEUE_DEPTH_ERROR", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			tm.logger.Error("QUEUE_DEPTH_ERROR", err, nil)
 			// Use cached queue depth as fallback if available and recent (< 2 check intervals)
 			tm.scalingMutex.Lock()
 			cachedDepth := tm.scalingState.cachedQueueDepth
@@ -356,7 +353,7 @@ func (tm *TopicManager) monitorSelfScaling() {
 			tm.scalingMutex.Unlock()
 
 			if cachedDepth > 0 && cacheAge < maxCacheAge {
-				tm.Warn("USING_CACHED_QUEUE_DEPTH", map[string]any{
+				tm.Warn("USING_CACHED_QUEUE_DEPTH", nil, map[string]any{
 					"cached_depth": cachedDepth,
 					"cache_age":    cacheAge.String(),
 				})
@@ -399,8 +396,7 @@ func (tm *TopicManager) monitorSelfScaling() {
 
 		err = tm.scaleTo(targetWorkers)
 		if err != nil {
-			tm.Warn("SCALING_FAILED", map[string]any{
-				logging.ERROR:    err.Error(),
+			tm.Warn("SCALING_FAILED", err, map[string]any{
 				"target_workers": targetWorkers,
 			})
 		} else {
@@ -537,11 +533,10 @@ func (tm *TopicManager) getQueueDepthWithRetry() (int, error) {
 		// If this isn't the last attempt, wait before retrying
 		if attempt < maxRetries-1 {
 			delay := baseDelay * time.Duration(1<<uint(attempt)) // Exponential backoff: 100ms, 200ms, 400ms
-			tm.logger.Warn("QUEUE_DEPTH_RETRY", map[string]any{
+			tm.logger.Warn("QUEUE_DEPTH_RETRY", err, map[string]any{
 				"attempt":     attempt + 1,
 				"max_retries": maxRetries,
 				"delay_ms":    delay.Milliseconds(),
-				logging.ERROR: err.Error(),
 			})
 			time.Sleep(delay)
 		}

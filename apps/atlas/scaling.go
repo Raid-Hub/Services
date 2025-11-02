@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"raidhub/lib/monitoring/atlas_metrics"
-	"raidhub/lib/utils/logging"
 )
 
 var workers = 0
@@ -49,9 +48,7 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 
 		metrics, err := GetMetricsForScaling(time.Since(startTime))
 		if err != nil {
-			AtlasLogger.Error("FAILED_TO_GET_METRICS", map[string]any{
-				logging.ERROR: err.Error(),
-			})
+			AtlasLogger.Error("FAILED_TO_GET_METRICS", err, nil)
 			// Continue with previous worker count and period length on metrics failure
 			continue
 		}
