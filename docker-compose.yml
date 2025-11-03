@@ -104,7 +104,7 @@ services:
     environment:
       POSTGRES_DB: "raidhub"
       POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PASSWORD: "password"
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -135,9 +135,6 @@ services:
       CLICKHOUSE_USER: "default"
       CLICKHOUSE_PASSWORD: ""
       CLICKHOUSE_DB: "default"
-      POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: ""
-      POSTGRES_DB: "raidhub"
     volumes:
       # Data
       - ./volumes/clickhouse:/var/lib/clickhouse

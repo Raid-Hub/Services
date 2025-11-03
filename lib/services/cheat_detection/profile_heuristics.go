@@ -5,7 +5,6 @@ import (
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
-	"raidhub/lib/web/gm_report"
 )
 
 const (
@@ -270,35 +269,6 @@ func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64)
 
 		if minCheatLevel == 4 {
 			flag.SendBlacklistedPlayerWebhook(data.Profile, data.Clears, data.AgeInDays, data.BungieName, data.IconPath, cheaterAccountChance, bitFlags)
-		}
-
-		if minCheatLevel >= 2 {
-			err := gm_report.SendGmReportWebhook(flag.MembershipId, gm_report.GmReportWebhookMetadata{
-				CheaterAccountProbability:  cheaterAccountChance,
-				CheaterAccountHeuristics:   GetCheaterAccountFlagsStrings(bitFlags),
-				RaidHubCheatLevel:          minCheatLevel,
-				EstimatedAccountAgeDays:    data.AgeInDays,
-				LookBackDays:               60,
-				RaidClears:                 data.Clears,
-				FractionRaidClearsSolo:     data.SoloRatio,
-				FractionRaidClearsLowman:   data.LowmanRatio,
-				FractionRaidClearsFlawless: data.FlawlessRatio,
-				LastSeen:                   data.Profile.DateLastPlayed,
-				Flags: gm_report.GmReportWebhookFlags{
-					Total:  flag.FlaggedCount,
-					ClassA: flag.FlagsA,
-					ClassB: flag.FlagsB,
-					ClassC: flag.FlagsC,
-					ClassD: flag.FlagsD,
-				},
-			})
-
-			if err != nil {
-				logger.Warn(WEBHOOK_ERROR, err, map[string]any{
-					logging.MEMBERSHIP_ID: flag.MembershipId,
-					logging.OPERATION:     "gm_report_webhook",
-				})
-			}
 		}
 	}
 

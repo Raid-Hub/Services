@@ -97,10 +97,10 @@ func init() {
 		}
 	}
 
-	// Database (defaults: user=postgres, password="", db=raidhub)
+	// Database (defaults: user=postgres, password="password", db=raidhub)
 	PostgresHost = getHostEnv("POSTGRES_HOST")
 	PostgresUser = getEnvWithDefault("POSTGRES_USER", "postgres")
-	PostgresPassword = getEnv("POSTGRES_PASSWORD") // Default: empty string
+	PostgresPassword = getEnvWithDefault("POSTGRES_PASSWORD", "password")
 	PostgresDB = getEnvWithDefault("POSTGRES_DB", "raidhub")
 	PostgresPort = requireEnv("POSTGRES_PORT")
 
@@ -120,20 +120,17 @@ func init() {
 	// Zeus
 	ZeusHost = getHostEnv("ZEUS_HOST")
 	ZeusPort = getHostEnv("ZEUS_PORT")
+	ZeusAPIKeys = getEnv("ZEUS_API_KEYS")
+	ZeusIPV6 = getEnvWithDefault("ZEUS_IPV6", "")
 
 	// API
 	BungieAPIKey = requireEnv("BUNGIE_API_KEY")
-	ZeusAPIKeys = getEnv("ZEUS_API_KEYS")
-	ZeusIPV6 = getEnv("ZEUS_IPV6")
 
-	// Webhooks (optional)
+	// Discord Webhooks (optional)
 	AtlasWebhookURL = getEnv("ATLAS_WEBHOOK_URL")
 	HadesWebhookURL = getEnv("HADES_WEBHOOK_URL")
-	AlertsRoleID = getEnv("ALERTS_ROLE_ID")
 	CheatCheckWebhookURL = getEnv("CHEAT_CHECK_WEBHOOK_URL")
-	NemesisWebhookURL = getEnv("NEMESIS_WEBHOOK_URL")
-	GMReportWebhookURL = getEnv("GM_REPORT_WEBHOOK_URL")
-	GMReportWebhookAuth = getEnv("GM_REPORT_WEBHOOK_AUTH")
+	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
@@ -145,18 +142,19 @@ func init() {
 
 	// Metrics export ports (for Prometheus scraping)
 	AtlasMetricsPort = requireEnv("ATLAS_METRICS_PORT")
-	HermesMetricsPort = getEnv("HERMES_METRICS_PORT") // Optional for individual topic runners
+	HermesMetricsPort = requireEnv("HERMES_METRICS_PORT")
 	ZeusMetricsPort = requireEnv("ZEUS_METRICS_PORT")
 
 	// Initialize stdout/stderr file descriptors
 	StdoutPath = getEnv("STDOUT")
 	StderrPath = getEnv("STDERR")
 
+	// Cron Manager
 	CronManagerPort = getEnv("CRON_MANAGER_PORT")
 
 	// Sentry (optional)
 	SentryDSN = getEnv("SENTRY_DSN")
-	Environment = getEnvWithDefault("ENVIRONMENT", "production")
+	Environment = getEnvWithDefault("ENVIRONMENT", "development")
 	Release = getEnv("RELEASE")
 
 	if len(envIssues) > 0 {

@@ -9,31 +9,14 @@ import (
 	"raidhub/lib/web/bungie"
 	"raidhub/lib/web/discord"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
 var (
-	_cheatCheckWebhookUrl string
-	_nemesisWebhookUrl    string
-	once                  sync.Once
-	webhookRl             = rate.NewLimiter(rate.Every(3*time.Second), 5)
+	webhookRl = rate.NewLimiter(rate.Every(3*time.Second), 5)
 )
-
-func getCheatCheckWebhookUrl() string {
-	once.Do(func() {
-		_cheatCheckWebhookUrl = env.CheatCheckWebhookURL
-		_nemesisWebhookUrl = env.NemesisWebhookURL
-	})
-	return _cheatCheckWebhookUrl
-}
-
-func getNemesisWebhookUrl() string {
-	getCheatCheckWebhookUrl() // Initialize once
-	return _nemesisWebhookUrl
-}
 
 func getRedColor(probability float64) int {
 	// Convert probability to a color value from 0xFF0000 (red) to 0xFFFFEF (pale orange)
@@ -95,7 +78,7 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 		})
 	}
 
-	discord.SendWebhook(getCheatCheckWebhookUrl(), &webhook)
+	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
 }
 
 func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) {
@@ -141,7 +124,7 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 		})
 	}
 
-	discord.SendWebhook(getCheatCheckWebhookUrl(), &webhook)
+	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
 }
 
 func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie.DestinyProfileComponent, clears int, ageInDays float64, bungieName string, iconPath string, cheaterAccountChance float64, flags uint64) {
@@ -207,5 +190,5 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 		"class_a_flags":       flag.FlagsA,
 	})
 
-	discord.SendWebhook(getNemesisWebhookUrl(), &webhook)
+	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
 }
