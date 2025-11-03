@@ -132,8 +132,8 @@ services:
       - "${CLICKHOUSE_PORT}:9000" # Native
       - "${CLICKHOUSE_HTTP_PORT}:8123" # HTTP
     environment:
-      CLICKHOUSE_USER: "dev"
-      CLICKHOUSE_PASSWORD: "password"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: ""
       CLICKHOUSE_DB: "default"
     volumes:
       # Data

@@ -110,10 +110,10 @@ func init() {
 	RabbitMQPassword = getEnvWithDefault("RABBITMQ_PASSWORD", "password")
 	RabbitMQPort = requireEnv("RABBITMQ_PORT")
 
-	// ClickHouse (defaults: user=dev, password=password, db=default)
+	// ClickHouse (defaults: user=default, password=, db=default)
 	ClickHouseHost = getHostEnv("CLICKHOUSE_HOST")
-	ClickHouseUser = getEnvWithDefault("CLICKHOUSE_USER", "dev")
-	ClickHousePassword = getEnvWithDefault("CLICKHOUSE_PASSWORD", "password")
+	ClickHouseUser = getEnvWithDefault("CLICKHOUSE_USER", "default")
+	ClickHousePassword = getEnv("CLICKHOUSE_PASSWORD")
 	ClickHouseDB = getEnvWithDefault("CLICKHOUSE_DB", "default")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
 

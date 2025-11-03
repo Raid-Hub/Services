@@ -6,7 +6,7 @@ SELECT 'CREATE DATABASE raidhub'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'raidhub')\gexec
 
 -- Grant permissions and all
-GRANT ALL PRIVILEGES ON DATABASE raidhub TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE raidhub TO dev;
 
 -- Grant schema usage
 \c raidhub
