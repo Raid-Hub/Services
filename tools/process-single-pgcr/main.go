@@ -11,14 +11,14 @@ import (
 var logger = logging.NewLogger("process-single-pgcr")
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()
 	defer recoverSentry()
 
 	// Parse the instance ID from command line args
-	// Since flag.Parse() is used, the actual arguments start from flag.Arg(0)
+	// Since logging.ParseFlags() is used, the actual arguments start from flag.Arg(0)
 	if flag.NArg() < 1 {
 		logger.Error("USAGE_ERROR", nil, map[string]any{"message": "Usage: scripts process-single-pgcr <instance_id>"})
 		return

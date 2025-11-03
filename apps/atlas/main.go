@@ -1,8 +1,6 @@
 package main
 
 import (
-	"flag"
-
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/monitoring"
@@ -13,7 +11,7 @@ import (
 var AtlasLogger = logging.NewLogger("atlas")
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := AtlasLogger.InitSentry()
 	defer flushSentry()

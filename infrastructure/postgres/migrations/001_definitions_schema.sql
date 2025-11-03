@@ -66,7 +66,7 @@ BEGIN
 
     RETURN season_id;
 END;
-$$ LANGUAGE plpgsql VOLATILE;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Weapon enums
 CREATE TYPE "WeaponElement" AS ENUM ('Kinetic', 'Arc', 'Solar', 'Void', 'Stasis', 'Strand');

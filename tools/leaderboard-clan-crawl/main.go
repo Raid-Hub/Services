@@ -498,7 +498,7 @@ func refreshClanLeaderboard(ctx context.Context) error {
 }
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()

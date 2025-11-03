@@ -56,9 +56,10 @@ CREATE TABLE "core"."instance" (
     "date_completed" TIMESTAMPTZ(0) NOT NULL,
     "duration" INTEGER NOT NULL,
     "platform_type" INTEGER NOT NULL,
-    "season_id" INTEGER,
+    "season_id" INTEGER GENERATED ALWAYS AS ("definitions".get_season("date_started")) STORED,
     "is_whitelisted" BOOLEAN NOT NULL DEFAULT false,
-    "skull_hashes" BIGINT[]
+    "skull_hashes" BIGINT[],
+    CONSTRAINT "activity_version_fk" FOREIGN KEY ("hash") REFERENCES "definitions"."activity_version"("hash")
 );
 
 CREATE INDEX "hash_date_completed_index_partial" ON "core"."instance"("hash", "date_completed") WHERE "completed";

@@ -41,7 +41,7 @@ func refreshView(ctx context.Context, viewName string) bool {
 }
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()

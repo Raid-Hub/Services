@@ -415,7 +415,7 @@ func findGaps(failed []int64) []Gap {
 }
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()

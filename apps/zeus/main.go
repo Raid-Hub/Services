@@ -48,7 +48,7 @@ type transport struct {
 var proxyTransport = &transport{}
 
 func main() {
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()

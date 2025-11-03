@@ -23,6 +23,50 @@ import (
 
 var logger = logging.NewLogger("manifest-downloader")
 
+
+func main() {
+	out := flag.String("out", ".raidhub/defs", "where to store the sqlite (required)")
+	force := flag.Bool("f", false, "force the defs to be updated")
+	fromDisk := flag.Bool("disk", false, "read from disk, not bnet")
+
+	logging.ParseFlags()
+
+	if *out == "" {
+		logger.Fatal("MISSING_OUTPUT_DIRECTORY", nil, map[string]any{"message": "must specify an artifacts output directory with the -out flag"})
+	}
+
+
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
+
+	path := DownloadManifest(*out, *fromDisk, *force)
+	definitions, err := sql.Open("sqlite3", path)
+	if err != nil {
+		logger.Warn("ERROR_OPENING_SQLITE_DATABASE", err, map[string]any{})
+	}
+	logger.Debug("CONNECTED_TO_SQLITE3", map[string]any{})
+	defer definitions.Close()
+
+	// Wait for PostgreSQL connection to be ready
+	postgres.Wait()
+
+	// postgres.DB is initialized in init()
+	logger.Debug("CONNECTED_TO_POSTGRES", map[string]any{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go saveWeaponDefinitions(ctx, &wg, definitions)
+	go saveFeatDefinitions(ctx, &wg, definitions)
+
+	wg.Wait()
+}
+
+
 // sanitizeVersionForFilename replaces filesystem-unsafe characters in version strings
 func sanitizeVersionForFilename(version string) string {
 	// Replace dots, dashes, and other special chars with underscores
@@ -35,24 +79,14 @@ func sanitizeVersionForFilename(version string) string {
 
 // DownloadManifest is the command function for downloading and processing Destiny 2 manifest
 // Usage: ./bin/manifest-downloader [-out=<directory>] [-f] [-disk]
-func DownloadManifest() string {
-	out := flag.String("out", ".raidhub/defs", "where to store the sqlite (required)")
-	force := flag.Bool("f", false, "force the defs to be updated")
-	fromDisk := flag.Bool("disk", false, "read from disk, not bnet")
-
-	flag.Parse()
-
-	if *out == "" {
-		logger.Fatal("MISSING_OUTPUT_DIRECTORY", nil, map[string]any{"message": "must specify an artifacts output directory with the -out flag"})
-	}
-
+func DownloadManifest(out string, fromDisk bool, force bool) string {
 	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(*out, os.ModePerm); err != nil {
+	if err := os.MkdirAll(out, os.ModePerm); err != nil {
 		logger.Fatal("ERROR_CREATING_OUTPUT_DIRECTORY", err, map[string]any{})
 	}
 
 	var sqlitePath string
-	if !*fromDisk {
+	if !fromDisk {
 		result, err := bungie.Client.GetDestinyManifest()
 		if err != nil {
 			logger.Fatal("ERROR_GETTING_MANIFEST", err, map[string]any{})
@@ -73,7 +107,7 @@ func DownloadManifest() string {
 		// Insert version at the start: Version_baseName
 		versionSanitized := sanitizeVersionForFilename(manifest.Version)
 		versionedFileName := fmt.Sprintf("%s_%s", versionSanitized, baseName)
-		dbFileName := filepath.Join(*out, versionedFileName)
+		dbFileName := filepath.Join(out, versionedFileName)
 		sqlitePath = dbFileName + ".sqlite3" // name for the cached file
 
 		if _, err := os.Stat(sqlitePath); os.IsNotExist(err) {
@@ -81,7 +115,7 @@ func DownloadManifest() string {
 		} else if err != nil {
 			logger.Fatal("ERROR_CHECKING_MANIFEST_FILE", err, map[string]any{})
 		} else {
-			if !*force {
+			if !force {
 				logger.Info("NO_NEW_MANIFEST_DEFINITIONS", map[string]any{})
 				os.Exit(0)
 				return ""
@@ -135,7 +169,7 @@ func DownloadManifest() string {
 		// Extract each file from the ZIP archive
 		var originalExtractedFile string
 		for _, file := range zipReader.File {
-			filePath := filepath.Join(*out, file.Name)
+			filePath := filepath.Join(out, file.Name)
 			if file.FileInfo().IsDir() {
 				// Create directories
 				err = os.MkdirAll(filePath, os.ModePerm)
@@ -199,7 +233,7 @@ func DownloadManifest() string {
 	} else {
 		var newestModTime time.Time
 
-		err := filepath.Walk(*out, func(path string, info os.FileInfo, err error) error {
+		err := filepath.Walk(out, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -221,7 +255,7 @@ func DownloadManifest() string {
 		}
 
 		if sqlitePath == "" {
-			logger.Warn("DIRECTORY_IS_EMPTY", nil, map[string]any{logging.DIRECTORY: *out})
+			logger.Warn("DIRECTORY_IS_EMPTY", nil, map[string]any{logging.DIRECTORY: out})
 		}
 	}
 
@@ -405,35 +439,4 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, definitions *s
 			logger.Warn("ERROR_INSERTING_FEAT_DEFINITION", err, map[string]any{})
 		}
 	}
-}
-
-func main() {
-	flushSentry, recoverSentry := logger.InitSentry()
-	defer flushSentry()
-	defer recoverSentry()
-
-	path := DownloadManifest()
-	definitions, err := sql.Open("sqlite3", path)
-	if err != nil {
-		logger.Warn("ERROR_OPENING_SQLITE_DATABASE", err, map[string]any{})
-	}
-	logger.Debug("CONNECTED_TO_SQLITE3", map[string]any{})
-	defer definitions.Close()
-
-	// Wait for PostgreSQL connection to be ready
-	postgres.Wait()
-
-	// postgres.DB is initialized in init()
-	logger.Debug("CONNECTED_TO_POSTGRES", map[string]any{})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-
-	wg.Add(2)
-	go saveWeaponDefinitions(ctx, &wg, definitions)
-	go saveFeatDefinitions(ctx, &wg, definitions)
-
-	wg.Wait()
 }

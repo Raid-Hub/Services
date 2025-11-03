@@ -31,7 +31,7 @@ func main() {
 	topicType := flag.String("topic", "", "Name of topic to run. If empty, starts all topics.")
 	metricsPort := flag.String("metrics-port", "", "Override metrics port (default: env HERMES_METRICS_PORT)")
 
-	flag.Parse()
+	logging.ParseFlags()
 
 	flushSentry, recoverSentry := HermesLogger.InitSentry()
 	defer flushSentry()
