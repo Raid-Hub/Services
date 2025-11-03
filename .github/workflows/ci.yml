@@ -43,7 +43,7 @@ jobs:
 
       - name: Wait for databases to be ready
         run: |
-          timeout 60 bash -c 'until docker compose exec -T postgres pg_isready -U postgres; do sleep 1; done'
+          timeout 60 bash -c 'until docker compose exec -T postgres pg_isready -U dev; do sleep 1; done'
           timeout 60 bash -c 'until docker compose exec -T clickhouse clickhouse-client --query "SELECT 1"; do sleep 1; done'
 
       - name: Run migrations

@@ -192,7 +192,7 @@ attempt=0
 
 # Wait for PostgreSQL
 while [ $attempt -lt $max_attempts ]; do
-    if $DOCKER_COMPOSE_CMD --env-file ./.env exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+    if $DOCKER_COMPOSE_CMD --env-file ./.env exec -T postgres pg_isready -U dev > /dev/null 2>&1; then
         echo "✅ PostgreSQL is ready"
         break
     fi
@@ -276,9 +276,9 @@ echo "                              This starts infrastructure + apps with hot r
 echo "   🛑  Stop all services:     make down"
 echo ""
 echo "🐳 Manual Docker Compose:"
-echo "   ▶️   Start Zeus:            make zeus-dev"
-echo "   ▶️   Start cralwer:         make atlas-dev"
+echo "   ▶️   Start crawler:         make atlas-dev"
 echo "   ▶️   Start queue workers:   make hermes-dev"
+echo "   ▶️   Start API-proxy:       make zeus-dev"
 echo "   ▶️   Start cron UI:         make cron-dev"
 echo "   ▶️   Start infrastructure:  make infra"
 echo "   ▶️   Start everything:      make up"
