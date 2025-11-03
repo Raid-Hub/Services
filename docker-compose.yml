@@ -103,7 +103,7 @@ services:
       - "${POSTGRES_PORT}:5432"
     environment:
       POSTGRES_DB: "raidhub"
-      POSTGRES_USER: "postgres"
+      POSTGRES_USER: "dev"
       POSTGRES_PASSWORD: "password"
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
@@ -114,8 +114,8 @@ services:
   rabbitmq:
     image: rabbitmq:3.8-management
     environment:
-      RABBITMQ_DEFAULT_USER: "guest"
-      RABBITMQ_DEFAULT_PASS: "guest"
+      RABBITMQ_DEFAULT_USER: "dev"
+      RABBITMQ_DEFAULT_PASS: "password"
       RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/definitions.json
     ports:
       - "${RABBITMQ_PORT}:5672" # AMQP
@@ -132,8 +132,8 @@ services:
       - "${CLICKHOUSE_PORT}:9000" # Native
       - "${CLICKHOUSE_HTTP_PORT}:8123" # HTTP
     environment:
-      CLICKHOUSE_USER: "default"
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_USER: "dev"
+      CLICKHOUSE_PASSWORD: "password"
       CLICKHOUSE_DB: "default"
     volumes:
       # Data
@@ -181,8 +181,8 @@ services:
     ports:
       - "${GRAFANA_PORT}:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_ADMIN_USER="dev"
+      - GF_SECURITY_ADMIN_PASSWORD="password"
     volumes:
       - ./volumes/grafana:/var/lib/grafana
       - ./infrastructure/grafana:/etc/grafana/provisioning:ro

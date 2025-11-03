@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// Database
+	// Postgres
 	PostgresHost     string
 	PostgresUser     string
 	PostgresPassword string
@@ -99,21 +99,21 @@ func init() {
 
 	// Database (defaults: user=postgres, password="password", db=raidhub)
 	PostgresHost = getHostEnv("POSTGRES_HOST")
-	PostgresUser = getEnvWithDefault("POSTGRES_USER", "postgres")
+	PostgresUser = getEnvWithDefault("POSTGRES_USER", "dev")
 	PostgresPassword = getEnvWithDefault("POSTGRES_PASSWORD", "password")
 	PostgresDB = getEnvWithDefault("POSTGRES_DB", "raidhub")
 	PostgresPort = requireEnv("POSTGRES_PORT")
 
-	// RabbitMQ (defaults: user=guest, password=guest)
+	// RabbitMQ (defaults: user=dev, password=password)
 	RabbitMQHost = getHostEnv("RABBITMQ_HOST")
-	RabbitMQUser = getEnvWithDefault("RABBITMQ_USER", "guest")
-	RabbitMQPassword = getEnvWithDefault("RABBITMQ_PASSWORD", "guest")
+	RabbitMQUser = getEnvWithDefault("RABBITMQ_USER", "dev")
+	RabbitMQPassword = getEnvWithDefault("RABBITMQ_PASSWORD", "password")
 	RabbitMQPort = requireEnv("RABBITMQ_PORT")
 
-	// ClickHouse (defaults: user=default, password="", db=raidhub)
+	// ClickHouse (defaults: user=dev, password=password, db=default)
 	ClickHouseHost = getHostEnv("CLICKHOUSE_HOST")
-	ClickHouseUser = getEnvWithDefault("CLICKHOUSE_USER", "default")
-	ClickHousePassword = getEnvWithDefault("CLICKHOUSE_PASSWORD", "")
+	ClickHouseUser = getEnvWithDefault("CLICKHOUSE_USER", "dev")
+	ClickHousePassword = getEnvWithDefault("CLICKHOUSE_PASSWORD", "password")
 	ClickHouseDB = getEnvWithDefault("CLICKHOUSE_DB", "default")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
 
