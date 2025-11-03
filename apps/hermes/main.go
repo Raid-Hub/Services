@@ -33,8 +33,9 @@ func main() {
 
 	flag.Parse()
 
-	sentryCleanup := HermesLogger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := HermesLogger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancelCause(context.Background())

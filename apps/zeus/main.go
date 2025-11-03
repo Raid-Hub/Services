@@ -50,8 +50,9 @@ var proxyTransport = &transport{}
 func main() {
 	flag.Parse()
 
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	// Use env port if flag not provided
 	if *port == 0 {

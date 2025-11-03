@@ -197,8 +197,9 @@ func FixSherpaClears() {
 }
 
 func main() {
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	FixSherpaClears()
 }

@@ -417,8 +417,9 @@ func findGaps(failed []int64) []Gap {
 func main() {
 	flag.Parse()
 
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	ProcessMissedPGCRs()
 }

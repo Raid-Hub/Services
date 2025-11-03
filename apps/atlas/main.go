@@ -15,8 +15,9 @@ var AtlasLogger = logging.NewLogger("atlas")
 func main() {
 	flag.Parse()
 
-	sentryCleanup := AtlasLogger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := AtlasLogger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	config := parseConfig()
 	workers = config.Workers

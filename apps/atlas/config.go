@@ -15,6 +15,13 @@ var (
 	devSkip          = flag.Int("dev-skip", 0, "skip N instances between each processed instance (requires --dev flag, defaults to 3)")
 )
 
+const (
+	minWorkers = 5
+	maxWorkers = 250
+
+	retryDelayTime = 5500
+)
+
 func parseConfig() AtlasConfig {
 	// Apply dev mode defaults
 	effectiveDevSkip := 0

@@ -32,8 +32,9 @@ type LevelsDTO struct {
 }
 
 func main() {
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	logger.Info("JOB_STARTED", map[string]any{
 		logging.SERVICE: "cheat-detection",

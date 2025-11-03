@@ -408,8 +408,9 @@ func saveFeatDefinitions(ctx context.Context, wg *sync.WaitGroup, definitions *s
 }
 
 func main() {
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	path := DownloadManifest()
 	definitions, err := sql.Open("sqlite3", path)

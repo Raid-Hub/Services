@@ -150,34 +150,38 @@ func (l *StructuredLogger) Fatal(key string, err error, fields map[string]any) {
 // InitSentry initializes Sentry error tracking using the logger's prefix as the app name.
 // Sentry will only be initialized if SENTRY_DSN environment variable is set.
 //
-// Returns a cleanup function that should be deferred in main() to:
-//   - Capture any panics and send them to Sentry
-//   - Flush pending Sentry events before program exit
+// Returns two functions that should be deferred in main():
+//   - flushFunc: Flushes pending Sentry events before program exit (defer this first)
+//   - recoverFunc: Captures panics and sends them to Sentry (defer this second)
 //
 // Example usage:
 //
 //	func main() {
 //		logger := logging.NewLogger("my-service")
-//		cleanup := logger.InitSentry()
-//		defer cleanup()
+//		flushSentry, recoverSentry := logger.InitSentry()
+//		defer flushSentry()    // Runs second - flushes all events
+//		defer recoverSentry()  // Runs first - catches panics
 //
 //		// Your application code here
 //	}
-func (l *StructuredLogger) InitSentry() func() {
-	sentryInitialized := sentry.Init(l.prefix)
-	if !sentryInitialized {
-		l.Debug("SENTRY_NOT_INITIALIZED", map[string]any{
-			"app": l.prefix,
-		})
-	} else {
-		l.Debug("SENTRY_INITIALIZED", map[string]any{
-			"app": l.prefix,
-		})
+func (l *StructuredLogger) InitSentry() (flushFunc func(), recoverFunc func()) {
+	fields := map[string]any{
+		"app": l.prefix,
 	}
-	return func() {
+	sentryInitialized := sentry.Init(l.prefix, IsVerbose())
+	if !sentryInitialized {
+		l.Debug("SENTRY_NOT_INITIALIZED", fields)
+	} else {
+		l.Debug("SENTRY_INITIALIZED", fields)
+	}
+
+	flushFunc = func() {
 		if sentryInitialized {
-			sentry.Recover()
+			l.Debug("FLUSHING_SENTRY", fields)
 			sentry.Flush()
 		}
 	}
+
+	recoverFunc = sentry.Recover
+	return
 }

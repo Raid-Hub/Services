@@ -38,9 +38,12 @@ func init() {
 	logLevelFlag := loggingFlags.String("log", "", "set log level (debug, info, warn, error)")
 	logLevelLongFlag := loggingFlags.String("log-level", "", "set log level (debug, info, warn, error)")
 
-	// Parse logging flags from os.Args, ignoring errors (flags might not be present)
+	// Parse logging flags from os.Args (skip program name with os.Args[1:])
+	// Ignoring errors (flags might not be present)
 	// This allows logging flags to work independently of when application flags are parsed
-	loggingFlags.Parse(os.Args)
+	if len(os.Args) > 1 {
+		loggingFlags.Parse(os.Args[1:])
+	}
 
 	// Set verbose if either flag was provided (overrides log level for backwards compatibility)
 	if *verboseFlag || *verboseLongFlag {
@@ -99,31 +102,4 @@ func ShouldLog(level string) bool {
 	currentPriority := logLevelPriority[logLevel]
 	logPriority := logLevelPriority[level]
 	return logPriority >= currentPriority
-}
-
-// SyncLoggingFlags should be called by applications after flag.Parse() if they want
-// logging flags to work even when other flags are present. This is optional - the
-// init() function will handle most cases, but this ensures logging flags work
-// correctly even when applications have their own flag definitions.
-func SyncLoggingFlags() {
-	// Check verbose flags
-	verboseFlag := flag.Lookup("v")
-	verboseLongFlag := flag.Lookup("verbose")
-	logLevelFlag := flag.Lookup("log-level")
-
-	if verboseFlag != nil && verboseFlag.Value.String() == "true" {
-		verbose = true
-		logLevel = Debug
-	} else if verboseLongFlag != nil && verboseLongFlag.Value.String() == "true" {
-		verbose = true
-		logLevel = Debug
-	}
-
-	// Check log-level flag (overrides verbose)
-	if logLevelFlag != nil && logLevelFlag.Value.String() != "" {
-		if isValidLogLevel(logLevelFlag.Value.String()) {
-			logLevel = strings.ToLower(logLevelFlag.Value.String())
-			verbose = (logLevel == Debug)
-		}
-	}
 }

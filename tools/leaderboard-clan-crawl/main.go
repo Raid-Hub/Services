@@ -500,8 +500,9 @@ func refreshClanLeaderboard(ctx context.Context) error {
 func main() {
 	flag.Parse()
 
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	LeaderboardClanCrawl()
 }

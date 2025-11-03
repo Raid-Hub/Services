@@ -10,7 +10,7 @@ import (
 )
 
 // Init initializes Sentry with configuration from environment variables
-func Init(appName string) bool {
+func Init(appName string, debug bool) bool {
 	dsn := env.SentryDSN
 	if dsn == "" {
 		return false
@@ -21,6 +21,7 @@ func Init(appName string) bool {
 		Environment:      env.Environment,
 		Release:          env.Release,
 		AttachStacktrace: true,
+		Debug:            debug,
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if event.Tags == nil {
 				event.Tags = make(map[string]string)
@@ -33,10 +34,6 @@ func Init(appName string) bool {
 	}
 
 	return true
-}
-
-func isInitialized() bool {
-	return sentry.CurrentHub() != nil
 }
 
 // Recover recovers from panics and sends them to Sentry
@@ -53,8 +50,17 @@ func Recover() {
 				}
 			})
 		}
-		panic(err) // Re-panic after capturing
+		panic(err)
 	}
+}
+
+// Flush ensures all pending events are sent before program exits
+func Flush() {
+	sentry.Flush(2 * time.Second)
+}
+
+func isInitialized() bool {
+	return sentry.CurrentHub() != nil
 }
 
 // CaptureError captures an error to Sentry
@@ -66,6 +72,12 @@ func CaptureError(level sentry.Level, logKey string, err error, fields map[strin
 	sentry.CurrentHub().WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelError)
 		scope.SetTag("log_key", logKey)
+		scope.SetTag("panic", "false")
+
+		if user, ok := extractUser(fields); ok {
+			scope.SetUser(*user)
+		}
+
 		for k, v := range fields {
 			scope.SetExtra(k, v)
 		}
@@ -74,7 +86,27 @@ func CaptureError(level sentry.Level, logKey string, err error, fields map[strin
 	})
 }
 
-// Flush ensures all pending events are sent before program exits
-func Flush() {
-	sentry.Flush(2 * time.Second)
+// extractUser extracts the user from the fields map
+func extractUser(fields map[string]any) (*sentry.User, bool) {
+	if val, ok := fields["membership_id"]; ok {
+		id, ok := convertToInt64(val)
+		if !ok {
+			return nil, false
+		}
+		return &sentry.User{ID: id}, true
+	}
+
+	return nil, false
+}
+
+// convertToInt64 converts various numeric types to int64
+func convertToInt64(v any) (string, bool) {
+	switch val := v.(type) {
+	case int, int64:
+		return fmt.Sprintf("%d", val), true
+	case string:
+		return val, true
+	default:
+		return "", false
+	}
 }

@@ -12,8 +12,9 @@ const cheatCheckVersion = ""
 var logger = logging.NewLogger("FLAG_RESTRICTED_TOOL")
 
 func main() {
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
 	if err != nil {

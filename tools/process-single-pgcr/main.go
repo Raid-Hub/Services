@@ -13,8 +13,9 @@ var logger = logging.NewLogger("process-single-pgcr")
 func main() {
 	flag.Parse()
 
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	// Parse the instance ID from command line args
 	// Since flag.Parse() is used, the actual arguments start from flag.Arg(0)

@@ -139,8 +139,9 @@ func seedFile(db *sql.DB, filePath string) error {
 }
 
 func main() {
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	logger.Info("STARTING_SEED_TOOL", nil)
 

@@ -43,8 +43,9 @@ func refreshView(ctx context.Context, viewName string) bool {
 func main() {
 	flag.Parse()
 
-	sentryCleanup := logger.InitSentry()
-	defer sentryCleanup()
+	flushSentry, recoverSentry := logger.InitSentry()
+	defer flushSentry()
+	defer recoverSentry()
 
 	if flag.NArg() < 1 {
 		logger.Error("NO_VIEW_NAME", nil, map[string]any{"message": "No view name provided. Usage: ./bin/refresh-view <view_name>"})
