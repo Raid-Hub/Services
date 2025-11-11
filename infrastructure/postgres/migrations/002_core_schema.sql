@@ -1,9 +1,6 @@
 -- RaidHub Services - Core Schema Migration
 -- Core game data: players, instances, participation
 
--- Set search path to include all schemas
-SET search_path TO "core", "definitions", "clan", "flagging", "leaderboard", "extended", "raw", "cache", "public";
-
 -- =============================================================================
 -- CORE TABLES
 -- =============================================================================

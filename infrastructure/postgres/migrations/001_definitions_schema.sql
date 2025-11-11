@@ -206,6 +206,6 @@ CREATE TABLE "definitions"."activity_feat_definition" (
     "icon_path" TEXT NOT NULL,
     "description_short" TEXT NOT NULL,
     "modifier_power_contribution" INT NOT NULL,
-    "created_at" TIMESTAMPTZ(0) NOT NULL DEFAULT NOW()
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW()
 );
 

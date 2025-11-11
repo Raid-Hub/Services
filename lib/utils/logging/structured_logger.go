@@ -116,7 +116,11 @@ func (l *StructuredLogger) Warn(key string, err error, fields map[string]any) {
 		if fields == nil {
 			fields = make(map[string]any)
 		}
-		fields["error"] = err.Error()
+		if err != nil {
+			fields["error"] = err.Error()
+		} else {
+			fields["error"] = "<nil>"
+		}
 		l.log(WARN, key, fields)
 	}
 }
@@ -125,23 +129,35 @@ func (l *StructuredLogger) Error(key string, err error, fields map[string]any) {
 	if fields == nil {
 		fields = make(map[string]any)
 	}
-	fields["error"] = err.Error()
+	if err != nil {
+		fields["error"] = err.Error()
+	} else {
+		fields["error"] = "<nil>"
+	}
 	if ShouldLog(Error) {
 		l.log(ERROR, key, fields)
 	}
 
-	sentry.CaptureError(Error, key, err, fields)
+	if err != nil {
+		sentry.CaptureError(Error, key, err, fields)
+	}
 }
 
 func (l *StructuredLogger) Fatal(key string, err error, fields map[string]any) {
 	if fields == nil {
 		fields = make(map[string]any)
 	}
-	fields["error"] = err.Error()
+	if err != nil {
+		fields["error"] = err.Error()
+	} else {
+		fields["error"] = "<nil>"
+	}
 	if ShouldLog(Error) {
 		l.log(FATAL, key, fields)
 	}
-	sentry.CaptureError(Fatal, key, err, fields)
+	if err != nil {
+		sentry.CaptureError(Fatal, key, err, fields)
+	}
 
 	sentry.Flush()
 	os.Exit(1)

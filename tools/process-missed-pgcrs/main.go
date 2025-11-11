@@ -329,7 +329,6 @@ type Gap struct {
 }
 
 func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, found int, minFailed int64, maxFailed int64, gaps []Gap) {
-	// Message to be sent
 	message := fmt.Sprintf("Info: Processed %d missing PGCR(s). Failed on %d. Added %d to the dataset.", count, failed, found)
 
 	gapsStrWebhook := "None"
@@ -368,7 +367,17 @@ func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, 
 		Value: gapsStrWebhook,
 	}}
 
-	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{"message": message})
+	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{
+		"message": message,
+		"count":   count,
+		"failed":  failed,
+		"found":   found,
+		"minFailed": minFailed,
+		"maxFailed": maxFailed,
+		"range": maxFailed - minFailed + 1,
+		"gaps": gaps,
+	})
+
 	if len(gaps) > 0 {
 		logger.Info("GAPS_FOUND_IN_MISSED_LOG", map[string]any{logging.GAPS: gapsString})
 	}
