@@ -367,7 +367,16 @@ func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, 
 		Value: gapsStrWebhook,
 	}}
 
-	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{"message": message})
+	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{
+		"message": message,
+		"count":   count,
+		"failed":  failed,
+		"found":   found,
+		"minFailed": minFailed,
+		"maxFailed": maxFailed,
+		"range": maxFailed - minFailed + 1,
+		"gaps": gaps,
+	})
 
 	if len(gaps) > 0 {
 		logger.Info("GAPS_FOUND_IN_MISSED_LOG", map[string]any{logging.GAPS: gapsString})
@@ -379,21 +388,6 @@ func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, 
 			logging.RANGE:      maxFailed - minFailed + 1,
 		})
 	}
-
-	logFields := map[string]any{
-		logging.COUNT:      count,
-		logging.FAILED:     failed,
-		logging.SUCCESSFUL: found,
-	}
-	if failed > 0 {
-		logFields[logging.MIN_FAILED] = minFailed
-		logFields[logging.MAX_FAILED] = maxFailed
-	}
-	if gapsString != "" {
-		logFields[logging.GAPS] = gapsString
-	}
-
-	logger.Info("PROCESSED_MISSING_PGCRS", logFields)
 }
 
 func findGaps(failed []int64) []Gap {
