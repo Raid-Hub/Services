@@ -6,6 +6,9 @@ GO_BUILD = go build
 BIN_DIR = ./bin/
 TOOLS_DIR = ./tools/
 
+default: tools atlas hermes zeus
+
+
 tools:
 	mkdir -p $(BIN_DIR)
 	$(GO_BUILD) -o $(BIN_DIR) $(TOOLS_DIR)...

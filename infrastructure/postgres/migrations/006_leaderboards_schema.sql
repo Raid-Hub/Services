@@ -20,12 +20,6 @@ FROM "core"."player"
 WHERE clears > 0 AND NOT is_private AND cheat_level < 2;
 
 CREATE UNIQUE INDEX idx_global_leaderboard_cache_membership_id ON "cache"."_global_leaderboard_cache" (membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_clears ON "cache"."_global_leaderboard_cache" (clears DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_fresh_clears ON "cache"."_global_leaderboard_cache" (fresh_clears DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_sherpas ON "cache"."_global_leaderboard_cache" (sherpas DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_speed ON "cache"."_global_leaderboard_cache" (sum_of_best ASC NULLS LAST, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_time ON "cache"."_global_leaderboard_cache" (total_time_played_seconds DESC, membership_id ASC);
-CREATE INDEX idx_global_leaderboard_cache_wfr ON "cache"."_global_leaderboard_cache" (wfr_score DESC, membership_id ASC);
 
 -- Cache for raid leaderboard (filters once, reused by individual_raid_leaderboard)
 CREATE MATERIALIZED VIEW "cache"."_individual_activity_leaderboard_cache" AS
@@ -44,10 +38,6 @@ WHERE ps.clears > 0
   AND p.cheat_level < 2;
 
 CREATE UNIQUE INDEX idx_individual_activity_leaderboard_cache_activity_membership ON "cache"."_individual_activity_leaderboard_cache" (activity_id ASC, membership_id ASC);
-CREATE INDEX idx_individual_activity_leaderboard_cache_clears ON "cache"."_individual_activity_leaderboard_cache" (activity_id ASC, clears DESC, membership_id ASC);
-CREATE INDEX idx_individual_activity_leaderboard_cache_fresh_clears ON "cache"."_individual_activity_leaderboard_cache" (activity_id ASC, fresh_clears DESC, membership_id ASC);
-CREATE INDEX idx_individual_activity_leaderboard_cache_sherpas ON "cache"."_individual_activity_leaderboard_cache" (activity_id ASC, sherpas DESC, membership_id ASC);
-CREATE INDEX idx_individual_activity_leaderboard_cache_time ON "cache"."_individual_activity_leaderboard_cache" (activity_id ASC, total_time_played_seconds DESC, membership_id ASC);
 
 -- =============================================================================
 -- LEADERBOARD VIEWS
@@ -86,6 +76,12 @@ FROM ranked_players rp
 GROUP BY rp."group_id";
 
 CREATE UNIQUE INDEX idx_clan_leaderboard_group_id ON "leaderboard"."clan_leaderboard" (group_id);
+CREATE INDEX idx_clan_leaderboard_weighted_score ON "leaderboard"."clan_leaderboard" (weighted_contest_score DESC, group_id);
+CREATE INDEX idx_clan_leaderboard_total_contest_score ON "leaderboard"."clan_leaderboard" (total_contest_score DESC, group_id);
+CREATE INDEX idx_clan_leaderboard_total_sherpas ON "leaderboard"."clan_leaderboard" (sherpas DESC, group_id);
+CREATE INDEX idx_clan_leaderboard_total_fresh_clears ON "leaderboard"."clan_leaderboard" (fresh_clears DESC, group_id);
+CREATE INDEX idx_clan_leaderboard_total_clears ON "leaderboard"."clan_leaderboard" (clears DESC, group_id);
+CREATE INDEX idx_clan_leaderboard_total_time ON "leaderboard"."clan_leaderboard" (time_played_seconds DESC, group_id);
 
 -- World first contest leaderboard
 CREATE MATERIALIZED VIEW "leaderboard"."world_first_contest_leaderboard" AS

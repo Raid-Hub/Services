@@ -51,6 +51,14 @@ func NewPrometheusClient(port string) *PrometheusClient {
 
 // QueryRange executes a Prometheus query_range query
 func (c *PrometheusClient) QueryRange(query string, intervalMins int) (*QueryRangeResponse, error) {
+	if intervalMins <= 0 {
+		intervalMins = 1
+		clientLogger.Debug("PROMETHEUS_QUERY_INTERVAL_CLAMPED", map[string]any{
+			"query":        query,
+			"intervalMins": intervalMins,
+		})
+	}
+
 	params := url.Values{}
 	params.Add("query", query)
 	params.Add("start", time.Now().Add(time.Duration(-intervalMins)*time.Minute).Format(time.RFC3339))
@@ -69,11 +77,12 @@ func (c *PrometheusClient) QueryRange(query string, intervalMins int) (*QueryRan
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		clientLogger.Error("PROMETHEUS_QUERY_BAD_STATUS", err, map[string]any{
+		statusErr := fmt.Errorf("prometheus query failed with status %d", resp.StatusCode)
+		clientLogger.Error("PROMETHEUS_QUERY_BAD_STATUS", statusErr, map[string]any{
 			logging.ENDPOINT:    queryURL,
 			logging.STATUS_CODE: resp.StatusCode,
 		})
-		return nil, fmt.Errorf("prometheus query failed with status %d", resp.StatusCode)
+		return nil, statusErr
 	}
 
 	decoder := json.NewDecoder(resp.Body)

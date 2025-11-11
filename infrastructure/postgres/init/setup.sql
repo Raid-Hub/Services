@@ -13,6 +13,7 @@ GRANT ALL PRIVILEGES ON DATABASE raidhub TO dev;
 
 -- Set default session parameters
 ALTER DATABASE raidhub SET timezone TO 'UTC';
+ALTER DATABASE raidhub SET search_path TO "public","core","definitions","clan","flagging","leaderboard","extended","raw","cache";
 
 -- Create public schemas
 CREATE SCHEMA IF NOT EXISTS "core";
