@@ -65,9 +65,7 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -350,7 +348,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.15, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.15, sum(rate(pgcr_crawl_summary_lag_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -363,7 +361,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(pgcr_crawl_summary_lag_seconds_bucket[$__rate_interval])) by (le))",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -375,7 +373,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.75, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.75, sum(rate(pgcr_crawl_summary_lag_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -388,7 +386,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(pgcr_crawl_summary_lag_seconds_bucket[$__rate_interval])) by (le))",
           "hide": false,
           "instant": false,
           "legendFormat": "__auto",
@@ -659,23 +657,16 @@
       },
       "id": 5,
       "options": {
-        "displayLabels": [
-          "percent"
-        ],
+        "displayLabels": ["percent"],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": [
-            "value",
-            "percent"
-          ]
+          "values": ["value", "percent"]
         },
         "pieType": "donut",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -875,9 +866,7 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": [
-            "mean"
-          ],
+          "calcs": ["mean"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1051,9 +1040,7 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true

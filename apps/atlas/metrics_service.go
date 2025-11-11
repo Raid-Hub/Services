@@ -94,7 +94,7 @@ func getErrorFraction(intervalMins int) (float64, error) {
 }
 
 func getP20Lag(intervalMins int) (float64, error) {
-	query := `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_bucket_bucket[2m])) by (le))`
+	query := `histogram_quantile(0.20, sum(rate(pgcr_crawl_summary_lag_seconds_bucket[2m])) by (le))`
 	p20Lag, err := execWeightedQuery(query, intervalMins)
 	if err != nil {
 		return 0, err
