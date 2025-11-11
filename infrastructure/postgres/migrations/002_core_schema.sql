@@ -25,7 +25,7 @@ CREATE TABLE "core"."player" (
         END
     ) STORED, 
     "last_seen" TIMESTAMPTZ(3) NOT NULL,
-    "first_seen" TIMESTAMPTZ(3) NOT NULL,
+    "first_seen" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     "clears" INTEGER NOT NULL DEFAULT 0,
     "fresh_clears" INTEGER NOT NULL DEFAULT 0,
     "sherpas" INTEGER NOT NULL DEFAULT 0,
@@ -94,5 +94,6 @@ CREATE TABLE "core"."player_stats" (
     "total_time_played_seconds" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "player_stats_pkey" PRIMARY KEY ("membership_id","activity_id"),
     CONSTRAINT "player_membership_id_fkey" FOREIGN KEY ("membership_id") REFERENCES "core"."player"("membership_id") ON DELETE RESTRICT ON UPDATE NO ACTION,
+    CONSTRAINT "player_stats_activity_id_fkey" FOREIGN KEY ("activity_id") REFERENCES "definitions"."activity_definition"("id") ON DELETE RESTRICT ON UPDATE NO ACTION,
     CONSTRAINT "player_stats_fastest_instance_id_fkey" FOREIGN KEY ("fastest_instance_id") REFERENCES "core"."instance"("instance_id") ON DELETE SET NULL ON UPDATE CASCADE
 );

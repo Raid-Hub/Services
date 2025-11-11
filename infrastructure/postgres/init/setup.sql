@@ -11,6 +11,9 @@ GRANT ALL PRIVILEGES ON DATABASE raidhub TO dev;
 -- Grant schema usage
 \c raidhub
 
+-- Set default session parameters
+ALTER DATABASE raidhub SET timezone TO 'UTC';
+
 -- Create public schemas
 CREATE SCHEMA IF NOT EXISTS "core";
 CREATE SCHEMA IF NOT EXISTS "definitions";
@@ -18,8 +21,6 @@ CREATE SCHEMA IF NOT EXISTS "clan";
 CREATE SCHEMA IF NOT EXISTS "leaderboard";
 CREATE SCHEMA IF NOT EXISTS "extended";
 CREATE SCHEMA IF NOT EXISTS "raw";
-
--- Cache other schemas
 CREATE SCHEMA IF NOT EXISTS "flagging";
 CREATE SCHEMA IF NOT EXISTS "cache";
 
@@ -40,14 +41,7 @@ GRANT USAGE ON SCHEMA "clan" TO readonly;
 GRANT USAGE ON SCHEMA "leaderboard" TO readonly;
 GRANT USAGE ON SCHEMA "extended" TO readonly;
 GRANT USAGE ON SCHEMA "raw" TO readonly;
-
--- Grant SELECT on all existing and future tables in all schemas (for ClickHouse PostgreSQL engine)
-GRANT SELECT ON ALL TABLES IN SCHEMA "core" TO readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA "definitions" TO readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA "clan" TO readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA "leaderboard" TO readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA "extended" TO readonly;
-GRANT SELECT ON ALL TABLES IN SCHEMA "raw" TO readonly;
+GRANT USAGE ON SCHEMA "flagging" TO readonly;
 
 -- Set default privileges for future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA "core" GRANT SELECT ON TABLES TO readonly;
@@ -56,13 +50,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA "clan" GRANT SELECT ON TABLES TO readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA "leaderboard" GRANT SELECT ON TABLES TO readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA "extended" GRANT SELECT ON TABLES TO readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA "raw" GRANT SELECT ON TABLES TO readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "flagging" GRANT SELECT ON TABLES TO readonly;
 
 -- =============================================================================
 -- MIGRATION TRACKING
 -- =============================================================================
 
 -- Create migration tracking table
-CREATE TABLE IF NOT EXISTS _migrations (
+CREATE TABLE IF NOT EXISTS "public"."_migrations" (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     applied_at TIMESTAMP DEFAULT NOW()

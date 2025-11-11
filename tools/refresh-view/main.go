@@ -65,7 +65,7 @@ func main() {
 	case "individual_global_leaderboard":
 		cacheViews = []string{"_global_leaderboard_cache"}
 	case "individual_raid_leaderboard":
-		cacheViews = []string{"_raid_leaderboard_cache"}
+		cacheViews = []string{"_individual_activity_leaderboard_cache"}
 	}
 
 	// Step 1: Refresh caches first if they exist

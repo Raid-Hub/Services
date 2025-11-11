@@ -21,9 +21,8 @@ CREATE TABLE "flagging"."flag_instance" (
     "flagged_at" TIMESTAMPTZ DEFAULT NOW(),
     "cheat_probability" NUMERIC CHECK ("cheat_probability" >= 0 AND "cheat_probability" <= 1),
 
-    CONSTRAINT "flag_instance_pkey" PRIMARY KEY ("instance_id", "cheat_check_version")
-    -- Note: instance_id references instance table in core database
-    -- Cross-schema foreign keys not supported, handled at application level
+    CONSTRAINT "flag_instance_pkey" PRIMARY KEY ("instance_id", "cheat_check_version"),
+    CONSTRAINT "flag_instance_instance_id_fkey" FOREIGN KEY ("instance_id") REFERENCES "core"."instance"("instance_id") ON DELETE RESTRICT ON UPDATE NO ACTION
 );
 CREATE INDEX "flag_instance_flagged_at" ON "flagging"."flag_instance"("flagged_at" DESC);
 
@@ -36,9 +35,8 @@ CREATE TABLE "flagging"."flag_instance_player" (
     "flagged_at" TIMESTAMPTZ DEFAULT NOW(),
     "cheat_probability" NUMERIC CHECK ("cheat_probability" >= 0 AND "cheat_probability" <= 1),
 
-    CONSTRAINT "flag_instance_player_pkey" PRIMARY KEY ("instance_id", "membership_id", "cheat_check_version")
-    -- Note: instance_id, membership_id references instance_player table in core database
-    -- Cross-schema foreign keys not supported, handled at application level
+    CONSTRAINT "flag_instance_player_pkey" PRIMARY KEY ("instance_id", "membership_id", "cheat_check_version"),
+    CONSTRAINT "flag_instance_player_instance_id_membership_id_fkey" FOREIGN KEY ("instance_id", "membership_id") REFERENCES "core"."instance_player"("instance_id", "membership_id") ON DELETE RESTRICT ON UPDATE NO ACTION
 );
 CREATE INDEX "flag_instance_player_membership_id" ON "flagging"."flag_instance_player"("membership_id");
 CREATE INDEX "flag_instance_player_flagged_at" ON "flagging"."flag_instance_player"("flagged_at" DESC);
@@ -50,9 +48,8 @@ CREATE TABLE "flagging"."blacklist_instance" (
     "report_id" BIGINT,
     "cheat_check_version" TEXT,
     "reason" TEXT NOT NULL,
-    "created_at" TIMESTAMPTZ DEFAULT NOW()
-    -- Note: instance_id references instance table in core database
-    -- Cross-schema foreign keys not supported, handled at application level
+    "created_at" TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT "blacklist_instance_instance_id_fkey" FOREIGN KEY ("instance_id") REFERENCES "core"."instance"("instance_id") ON DELETE RESTRICT ON UPDATE NO ACTION
 );
 
 -- Blacklist instance players
@@ -62,8 +59,7 @@ CREATE TABLE "flagging"."blacklist_instance_player" (
     "reason" TEXT NOT NULL,
 
     CONSTRAINT "blacklist_instance_player_pkey" PRIMARY KEY ("instance_id", "membership_id"),
-    CONSTRAINT "blacklist_fkey" FOREIGN KEY ("instance_id") REFERENCES "flagging"."blacklist_instance"("instance_id") ON DELETE CASCADE ON UPDATE NO ACTION
-    -- Note: instance_id, membership_id references instance_player table in core database
-    -- Cross-schema foreign keys not supported, handled at application level
+    CONSTRAINT "blacklist_fkey" FOREIGN KEY ("instance_id") REFERENCES "flagging"."blacklist_instance"("instance_id") ON DELETE CASCADE ON UPDATE NO ACTION,
+    CONSTRAINT "blacklist_instance_player_instance_id_membership_id_fkey" FOREIGN KEY ("instance_id", "membership_id") REFERENCES "core"."instance_player"("instance_id", "membership_id") ON DELETE RESTRICT ON UPDATE NO ACTION
 );
 CREATE INDEX "blacklist_instance_player_membership_id" ON "flagging"."blacklist_instance_player"("membership_id");
