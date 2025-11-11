@@ -1,0 +1,116 @@
+body {
+  font-family: monospace;
+  margin: 20px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+h1 {
+  color: #4ec9b0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #252526;
+}
+th,
+td {
+  border: 1px solid #3e3e42;
+  padding: 8px;
+  text-align: left;
+}
+th {
+  background: #2d2d30;
+  color: #4ec9b0;
+}
+tr:hover {
+  background: #2a2d2e;
+}
+button {
+  background: #0e639c;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+button:hover {
+  background: #1177bb;
+}
+.command {
+  font-family: monospace;
+  color: #ce9178;
+}
+.schedule {
+  color: #9cdcfe;
+}
+.comment {
+  color: #6a9955;
+  font-style: italic;
+}
+a {
+  color: #4ec9b0;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+.log-viewer {
+  margin-top: 20px;
+  padding: 10px;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 3px;
+  max-height: 600px;
+  overflow-y: auto;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.log-viewer.empty {
+  color: #808080;
+}
+.log-viewer .stderr-line {
+  color: #f48771;
+  background-color: rgba(244, 135, 113, 0.1);
+}
+.log-viewer .stdout-line {
+  color: #d4d4d4;
+}
+.stream-complete {
+  margin-top: 10px;
+  padding: 10px;
+  background: #2d5a2d;
+  border: 1px solid #4ec9b0;
+  border-radius: 3px;
+  color: #6a9955;
+  font-weight: bold;
+  display: none;
+}
+.stream-complete.show {
+  display: block;
+}
+button.retry {
+  background: #569cd6;
+  margin-left: 10px;
+}
+button.retry:hover {
+  background: #4ec9b0;
+}
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid #3e3e42;
+  border-top-color: #4ec9b0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+

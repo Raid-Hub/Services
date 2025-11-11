@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Set up environment file
+        run: make env
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Build apps and tools
+        run: |
+          go build -o /dev/null ./apps/...
+          go build -o /dev/null ./tools/...
+          go build -o /dev/null ./infrastructure/cron/...
+          go build -o /dev/null ./infrastructure/clickhouse/migrate/...
+          go build -o /dev/null ./infrastructure/postgres/migrate/...
+
+      - name: Start Docker services
+        run: make infra
+
+      - name: Wait for services to be ready
+        run: |
+          sleep 10
+          docker compose ps
+
+      - name: Wait for databases to be ready
+        run: |
+          timeout 60 bash -c 'until docker compose exec -T postgres pg_isready -U dev; do sleep 1; done'
+          timeout 60 bash -c 'until docker compose exec -T clickhouse clickhouse-client --query "SELECT 1"; do sleep 1; done'
+
+      - name: Run migrations
+        run: make migrate
+
+      - name: Seed database
+        run: make seed
+
+      - name: Stop Docker services
+        if: always()
+        run: make down

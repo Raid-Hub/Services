@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- ClickHouse user configuration for development -->
+<clickhouse>
+    <users>
+        <default>
+            <password></password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+        </default>
+    </users>
+</clickhouse>
+

@@ -1,0 +1,73 @@
+# RaidHub Services - Cron Jobs
+#
+# Install this crontab with: crontab infrastructure/cron/jobs.crontab
+#
+# CRITICAL: Ensure .env file exists at ENV_PATH
+#
+# After editing this file:
+#   1. Update RAIDHUB_HOME below with your actual path
+#   2. Install: crontab infrastructure/cron/jobs.crontab
+#   3. Verify: crontab -l
+
+# Environment variables
+HOME=/RaidHub   
+ENV_PATH=/RaidHub/.env
+PATH=/RaidHub/bin:/usr/local/bin:/usr/bin:/bin
+STDOUT=/var/log/raidhub/cron.log
+STDERR=/var/log/raidhub/cron.err
+
+# ============================================================================
+# Database Materialized View Refreshes
+# ============================================================================
+
+# Individual Global Leaderboard - Daily at 10:05 AM UTC
+# id: refresh-view-individual-global-leaderboard
+# Uses Go tool (handles cache refresh + clear automatically)
+5 10 * * * refresh-view individual_global_leaderboard
+
+# Individual Raid Leaderboard - Daily at 9:05 AM UTC
+# id: refresh-view-individual-raid-leaderboard
+# Uses Go tool (handles cache refresh + clear automatically)
+5 9 * * * refresh-view individual_raid_leaderboard
+
+# World First Contest Leaderboard - Daily at 5:00 PM UTC
+# id: refresh-view-world-first-contest-leaderboard
+0 17 * * * refresh-view world_first_contest_leaderboard
+
+# Team Activity Version Leaderboard - Daily at 7:00 PM UTC
+# id: refresh-view-team-activity-version-leaderboard
+0 19 * * * refresh-view team_activity_version_leaderboard
+
+# ============================================================================
+# Process Missed PGCRs
+# ============================================================================
+
+# Process missed PGCRs every 15 minutes (with lock file to prevent overlapping runs)
+# id: process-missed-pgcrs
+*/15 * * * * flock -n /tmp/process-missed-pgcrs.lock -c "process-missed-pgcrs"
+
+# ============================================================================
+# Manifest Management
+# ============================================================================
+
+# Manifest Downloader - Checks the manifest more during peak hours
+# id: manifest-downloader
+*/5 17 * * * manifest-downloader --out="/RaidHub/defs"
+*/15 18 * * * manifest-downloader --out="/RaidHub/defs"
+0 */4 * * * manifest-downloader --out="/RaidHub/defs"
+
+# ============================================================================
+# Clan Crawl
+# ============================================================================
+
+# Leaderboard Clan Crawl - Clan crawl for top leaderboard players, weekly on Monday at 12:00 PM UTC
+# id: leaderboard-clan-crawl
+0 12 * * 1 leaderboard-clan-crawl
+
+# ============================================================================
+# Cheater Detection
+# ============================================================================
+
+# Cheat Detection - Cheater detection and account maintenance, 4 times daily at 5:30 AM, 1:30 PM, 7:30 PM, 11:30 PM UTC
+# id: cheat-detection
+30 5,13,19,23 * * * cheat-detection

@@ -1,6 +1,7 @@
 # Secrets
 .env
-prometheus.yml
+
+# Configuration files are now static and committed
 
 # Volumes
 volumes/
@@ -10,12 +11,16 @@ bin/
 
 # Logs
 *.log
+tilt.log
 
 # OS
 .DS_Store
 
 # tmp
-cmd/tmp
+/tmp
 
 # defs
 *.sqlite3
+
+# Local data
+.raidhub/

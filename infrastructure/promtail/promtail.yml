@@ -1,0 +1,102 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  # Local Loki (Docker Compose)
+  - url: http://loki:3100/loki/api/v1/push
+
+  # Remote Loki (uncomment and configure for remote/Grafana Cloud)
+  # - url: https://<user-id>:<api-key>@logs-prod-XXX.grafana.net/loki/api/v1/push
+  #   tenant_id: <tenant-id>  # Optional: for multi-tenant setups
+  #   basic_auth:
+  #     username: <user-id>
+  #     password: <api-key>
+  #   headers:
+  #     X-Scope-OrgID: <tenant-id>  # Alternative to tenant_id
+
+scrape_configs:
+  # Scrape Docker container logs via Docker service discovery
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels:
+          ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "source"
+      # - source_labels: ["__meta_docker_container_name"]
+      #   regex: "/(.*)"
+      #   target_label: "container"
+      # - source_labels:
+      #     ["__meta_docker_container_label_com_docker_compose_project"]
+      #   target_label: "project"
+    pipeline_stages:
+      # Match log format: [LEVEL][LOGGER] -- EVENT >> key=value key2=value2
+      # Docker timestamp is automatically extracted by promtail
+      - regex:
+          expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+      - template:
+          source: level
+          template: "{{ ToLower .level }}"
+          output: level
+      - labels:
+          level:
+          logger:
+          event:
+      - logfmt:
+          mapping:
+            kv: .
+
+  # Production mode: scrape log files from filesystem (when not using Docker)
+  # Uncomment and configure paths when running services as native processes
+  # - job_name: file_logs
+  #   static_configs:
+  #     - targets: [localhost]
+  #       labels:
+  #         job: file_logs
+  #         __path__: /var/log/raidhub/**/*.log
+  #   pipeline_stages:
+  #     - regex:
+  #         expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+  #     - template:
+  #         source: level
+  #         template: '{{ ToLower .level }}'
+  #         output: level
+  #     - labels:
+  #         level:
+  #         logger:
+  #         event:
+  #     - logfmt:
+  #         mapping:
+  #           kv: .
+
+  # Scrape systemd journal logs (useful when services run as systemd units)
+  # - job_name: journal
+  #   journal:
+  #     max_age: 12h
+  #     path: /var/log/journal
+  #     labels:
+  #       job: systemd-journal
+  #   relabel_configs:
+  #     - source_labels: ["__journal__systemd_unit"]
+  #       target_label: "unit"
+  #     - source_labels: ["__journal__hostname"]
+  #       target_label: "hostname"
+  #   pipeline_stages:
+  #     - regex:
+  #         expression: '^\[(?P<level>\w+)\]\[(?P<logger>[^\]]+)\] -- (?P<event>\S+)(?: >>\s*(?P<kv>.*))?$'
+  #     - template:
+  #         source: level
+  #         template: '{{ ToLower .level }}'
+  #         output: level
+  #     - labels:
+  #         level:
+  #         logger:
+  #         event:
+  #     - logfmt:
+  #         mapping:
+  #           kv: .

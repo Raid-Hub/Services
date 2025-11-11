@@ -1,0 +1,118 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+
+	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/publishing"
+	"raidhub/lib/messaging/routing"
+	"raidhub/lib/monitoring/atlas_metrics"
+	"raidhub/lib/services/instance_storage"
+	"raidhub/lib/services/pgcr_processing"
+	"raidhub/lib/utils/logging"
+	"raidhub/lib/web/bungie"
+	"raidhub/lib/web/discord"
+)
+
+// Run starts the worker processing loop
+func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
+	defer wg.Done()
+
+	randomVariation := retryDelayTime / 3
+
+	// Get API availability monitor for Destiny2
+	destiny2Monitor := bungie.GetAPIAvailabilityMonitor("Destiny2")
+	apiWG := destiny2Monitor.GetReadOnlyWaitGroup()
+
+	for instanceID := range ch {
+		// Wait for API availability if needed
+		if apiWG != nil {
+			apiWG.Wait()
+		}
+
+		startTime := time.Now()
+		notFoundCount := 0
+		errCount := 0
+		i := 0
+
+		for {
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
+
+			statusStr := fmt.Sprintf("%d", result)
+			attemptsStr := fmt.Sprintf("%d", i+1)
+
+			atlas_metrics.PGCRCrawlStatus.WithLabelValues(statusStr, attemptsStr).Inc()
+
+			// Handle the result
+			if result == pgcr_processing.NonRaid {
+				startDate, err := time.Parse(time.RFC3339, pgcr.Period)
+				if err != nil {
+					w.Error("TIME_PARSE_FAILURE", err, nil)
+					continue
+				}
+				endDate := pgcr_processing.CalculateDateCompleted(startDate, pgcr.Entries[0])
+
+				lag := time.Since(endDate)
+				if lag >= 0 {
+					atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+				}
+				break
+			} else if result == pgcr_processing.Success {
+				// Publish to queue for async storage
+				storeMessage := messages.NewPGCRStoreMessage(instance, pgcr)
+				err := publishing.PublishJSONMessage(context.Background(), routing.InstanceStore, storeMessage)
+				if err != nil {
+					errCount++
+					w.Warn("FAILED_TO_PUBLISH_INSTANCE_STORE_MESSAGE", err, nil)
+					time.Sleep(5 * time.Second)
+				} else {
+					endTime := time.Now()
+					workerTime := endTime.Sub(startTime)
+					lag := time.Since(instance.DateCompleted)
+					if lag >= 0 {
+						atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(float64(lag.Seconds()))
+					}
+					w.Info("PUBLISHED_INSTANCE", map[string]any{
+						logging.INSTANCE_ID: instanceID,
+						logging.ATTEMPT:     i + 1,
+						"duration":          fmt.Sprintf("%dms", workerTime.Milliseconds()),
+						"lag":               discord.FormatDuration(lag.Seconds()),
+					})
+					break
+				}
+			} else if result == pgcr_processing.NotFound {
+				notFoundCount++
+			} else if result == pgcr_processing.SystemDisabled {
+				atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
+				time.Sleep(60 * time.Second)
+				continue
+			} else if result == pgcr_processing.InsufficientPrivileges {
+				publishing.PublishJSONMessage(context.Background(), routing.PGCRRetry, fmt.Sprintf("%d", instanceID))
+				break
+			} else if result == pgcr_processing.BadFormat || result == pgcr_processing.ExternalError {
+				instance_storage.WriteMissedLog(instanceID)
+				if errCount > 0 {
+					w.offloadChannel <- instanceID
+					break
+				} else {
+					errCount++
+				}
+			}
+
+			// If we have not found the instance id after some time
+			if notFoundCount > 3 || errCount > 2 {
+				instance_storage.WriteMissedLog(instanceID)
+				w.offloadChannel <- instanceID
+				break
+			}
+
+			timeout := time.Duration((retryDelayTime - randomVariation + rand.Intn(retryDelayTime*(i+1)))) * time.Millisecond
+			time.Sleep(timeout)
+			i++
+		}
+	}
+}

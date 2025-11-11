@@ -1,0 +1,110 @@
+package queueworkers
+
+import (
+	"encoding/json"
+	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/processing"
+	"raidhub/lib/messaging/routing"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+// TEMPLATE LOGGER (copy to your domain package)
+// Each domain should have its own singleton logger in lib/{domain}/logger.go:
+//
+// package {domain}
+//
+// import (
+// 	"log"
+// 	"sync"
+// )
+//
+// var (
+// 	loggerSingleton Logger
+// 	loggerOnce      sync.Once
+// )
+//
+// type Logger interface {
+// 	Info(msg string, fields ...any)
+// 	Warn(msg string, fields ...any)
+// 	Error(msg string, fields ...any)
+// 	Debug(msg string, fields ...any)
+// }
+//
+// type defaultLogger struct { prefix string }
+//
+// func (l *defaultLogger) Info(msg string, fields ...any) {
+// 	log.Printf("[%s] INFO: %s %v", l.prefix, msg, fields)
+// }
+// // ... (Warn, Error, Debug methods)
+//
+// func getLogger() Logger {
+// 	loggerOnce.Do(func() {
+// 		loggerSingleton = &defaultLogger{prefix: "{domain}"}
+// 	})
+// 	return loggerSingleton
+// }
+//
+// func Info(msg string, fields ...any) { getLogger().Info(msg, fields...) }
+// func Warn(msg string, fields ...any) { getLogger().Warn(msg, fields...) }
+// func Error(msg string, fields ...any) { getLogger().Error(msg, fields...) }
+// func Debug(msg string, fields ...any) { getLogger().Debug(msg, fields...) }
+
+// TEMPLATE: Copy this file and modify for your new topic
+// Steps:
+// 1. Rename this file to your_topic_name.go
+// 2. Update the function names and config below
+// 3. Add your message type to lib/messaging/messages/ (create a new file)
+// 4. Add your queue constant to lib/messaging/routing/constants.go
+// 5. Add case to switch statement in apps/hermes/main.go
+
+// YourTopicName creates a new topic for your queue
+func YourTopicName() processing.Topic {
+	return processing.NewTopic(processing.TopicConfig{
+		QueueName:           routing.YourQueueName,        // Add to constants.go
+		MinWorkers:          1,                            // Adjust as needed
+		MaxWorkers:          10,                           // Adjust as needed
+		DesiredWorkers:      2,                            // Adjust as needed
+		ContestWeekendWorkers: 5,                          // Adjust as needed
+		KeepInReady:         true,                         // Usually true
+		PrefetchCount:       1,                            // Usually 1
+		ScaleUpThreshold:    100,                          // Default: scale up when queue has 100+ messages
+		ScaleDownThreshold:  10,                           // Default: scale down when queue has <10 messages
+		ScaleUpPercent:      0.2,                          // Default: add 20% more workers
+		ScaleDownPercent:    0.1,                          // Default: remove 10% of workers
+	}, processYourTopicName)
+}
+
+// processYourTopicName handles messages for your topic
+func processYourTopicName(worker processing.WorkerInterface, message amqp.Delivery) error {
+	// Option 1: JSON message
+	var request messages.YourMessageType  // Define in messages package
+	if err := json.Unmarshal(message.Body, &request); err != nil {
+		worker.Log("Failed to unmarshal message", "error", err)
+		return err
+	}
+	
+	worker.Log("Processing message", "id", request.ID)
+	
+	// Access resources via worker.TopicManagerContext:
+	// - worker.TopicManagerContext.Database for database operations
+	// - worker.TopicManagerContext.Publisher for sending messages
+	// - worker.TopicManagerContext.Context for cancellation/timeouts
+	// - worker.TopicManagerContext.Wg for coordinating API calls
+	
+	// TODO: Implement your business logic here
+	// - Database operations using worker.TopicManagerContext.Database
+	// - API calls  
+	// - Send follow-up messages via worker.TopicManagerContext.Publisher
+	//   worker.TopicManagerContext.Publisher.PublishMessage("route.name", data)
+	
+	return nil
+
+	// Option 2: Text message (uncomment if using text instead of JSON)
+	// messageText := string(message.Body)
+	// worker.Log("Processing message", "text", messageText)
+	// 
+	// // TODO: Implement your business logic here
+	// 
+	// return nil
+}

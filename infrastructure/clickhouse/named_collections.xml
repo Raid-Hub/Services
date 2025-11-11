@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Named collections for PostgreSQL engine -->
+<clickhouse>
+    <named_collections>
+        <postgres_creds>
+            <host>postgres</host>
+            <port>5432</port>
+            <user>readonly</user>
+            <password>password</password>
+            <database>raidhub</database>
+        </postgres_creds>
+    </named_collections>
+</clickhouse>
+
