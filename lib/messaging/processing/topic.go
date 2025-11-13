@@ -3,6 +3,7 @@ package processing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -31,9 +32,10 @@ func NewUnretryableError(err error) *UnretryableError {
 }
 
 // IsUnretryableError checks if an error is an UnretryableError
+// Uses errors.As to properly handle wrapped errors (e.g., fmt.Errorf with %w)
 func IsUnretryableError(err error) bool {
-	_, ok := err.(*UnretryableError)
-	return ok
+	var unretryableErr *UnretryableError
+	return errors.As(err, &unretryableErr)
 }
 
 // ProcessorFunc defines the function signature for processing messages

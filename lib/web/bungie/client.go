@@ -54,12 +54,14 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 func getInternal[T any](c *BungieClient, url string, operation string) (BungieHttpResult[T], error) {
 	startTime := time.Now()
 
+	fields := map[string]any{
+		logging.OPERATION: operation,
+		logging.ENDPOINT:  url,
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", err, map[string]any{
-			logging.OPERATION: operation,
-			logging.ENDPOINT:  url,
-		})
+		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", err, fields)
 		return makeNonStandardHttpResult[T](0), err
 	}
 	req.Header.Set("X-API-KEY", c.apiKey)
@@ -67,26 +69,19 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 	resp, err := c.httpClient.Do(req)
 	duration := time.Since(startTime).Milliseconds()
 	if err != nil {
-		clientLogger.Debug("BUNGIE_REQUEST_FAILED", map[string]any{
-			logging.OPERATION: operation,
-			logging.ENDPOINT:  url,
-			logging.ERROR:     err.Error(),
-			logging.DURATION:  fmt.Sprintf("%dms", duration),
-		})
+		fields["error"] = err.Error()
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_REQUEST_FAILED", fields)
 		return makeNonStandardHttpResult[T](0), err
 	}
+
+	fields[logging.STATUS_CODE] = resp.StatusCode
 
 	// first check if json header is present
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "application/json") {
 		err := fmt.Errorf("content-type is not application/json")
-		fields := map[string]any{
-			logging.OPERATION:   operation,
-			logging.ENDPOINT:    url,
-			logging.DURATION:    fmt.Sprintf("%dms", duration),
-			logging.STATUS_CODE: resp.StatusCode,
-			"content_type":      contentType,
-		}
+		fields["content_type"] = contentType
 
 		// If it's HTML, try to extract the title
 		// extractHTMLTitle will close the body
@@ -106,12 +101,8 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 	if resp.StatusCode != http.StatusOK {
 		error_response, err := decodeResponse[BungieError](resp)
 		if err != nil {
-			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, map[string]any{
-				logging.OPERATION:   operation,
-				logging.ENDPOINT:    url,
-				logging.STATUS_CODE: resp.StatusCode,
-				logging.DURATION:    fmt.Sprintf("%dms", duration),
-			})
+			fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, fields)
 			return makeNonStandardHttpResult[T](resp.StatusCode), err
 		}
 		result := BungieHttpResult[T]{
@@ -121,44 +112,47 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 			BungieErrorStatus: error_response.ErrorStatus,
 			Data:              nil,
 		}
-		clientLogger.Debug("BUNGIE_REQUEST_ERROR", map[string]any{
-			logging.OPERATION:     operation,
-			logging.ENDPOINT:      url,
-			logging.STATUS_CODE:   resp.StatusCode,
-			"bungie_error_code":   error_response.ErrorCode,
-			"bungie_error_status": error_response.ErrorStatus,
-			logging.DURATION:      fmt.Sprintf("%dms", duration),
-		})
+		fields["bungie_error_code"] = error_response.ErrorCode
+		fields["bungie_error_status"] = error_response.ErrorStatus
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_REQUEST_ERROR", fields)
 		return result, error_response
 	}
+
 	response, err := decodeResponse[BungieResponse[T]](resp)
 	if err != nil {
-		clientLogger.Error("BUNGIE_RESPONSE_DECODE_FAILED", err, map[string]any{
-			logging.OPERATION:   operation,
-			logging.ENDPOINT:    url,
-			logging.STATUS_CODE: resp.StatusCode,
-			logging.DURATION:    fmt.Sprintf("%dms", duration),
-		})
+		fields["error"] = err.Error()
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_RESPONSE_DECODE_FAILED", fields)
 		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
-	success := response.ErrorCode == Success
+	fields["bungie_error_code"] = response.ErrorCode
+	fields["bungie_error_status"] = response.ErrorStatus
+	fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+
+	// Invariant violation: HTTP 200 should mean Bungie ErrorCode == Success
+	if response.ErrorCode != Success {
+		err := fmt.Errorf("invariant violation: HTTP 200 but Bungie ErrorCode=%d (expected %d): %s", response.ErrorCode, Success, response.ErrorStatus)
+		clientLogger.Error("BUNGIE_RESPONSE_INVALID_STATE", err, fields)
+		return BungieHttpResult[T]{
+			Success:           false,
+			HttpStatusCode:    resp.StatusCode,
+			BungieErrorCode:   response.ErrorCode,
+			BungieErrorStatus: response.ErrorStatus,
+			Data:              &response.Response,
+		}, err
+	}
+
 	result := BungieHttpResult[T]{
-		Success:           success,
+		Success:           true,
 		HttpStatusCode:    resp.StatusCode,
 		BungieErrorCode:   response.ErrorCode,
 		BungieErrorStatus: response.ErrorStatus,
 		Data:              &response.Response,
 	}
 
-	clientLogger.Debug("BUNGIE_REQUEST_SUCCESS", map[string]any{
-		logging.OPERATION:     operation,
-		logging.ENDPOINT:      url,
-		logging.STATUS_CODE:   resp.StatusCode,
-		"bungie_error_code":   response.ErrorCode,
-		"bungie_error_status": response.ErrorStatus,
-		logging.DURATION:      fmt.Sprintf("%dms", duration),
-	})
+	clientLogger.Debug("BUNGIE_REQUEST_SUCCESS", fields)
 
 	return result, nil
 }
