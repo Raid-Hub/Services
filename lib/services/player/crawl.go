@@ -163,20 +163,18 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 		return defaultTime, true, nil
 	} else if historyResult.Success {
 		// Determine first_seen from oldest activity
-		if historyResult.Data != nil {
+		if historyResult.Data != nil && len(historyResult.Data.Activities) > 0 {
 			activities := historyResult.Data.Activities
-			if len(activities) > 0 {
-				// Activities are ordered newest first, so the last one is the oldest
-				oldestActivity := activities[len(activities)-1]
-				firstSeen, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
-				if parseErr != nil {
-					return defaultTime, false, parseErr
-				}
-				return firstSeen, false, nil
+			// Activities are ordered newest first, so the last one is the oldest
+			oldestActivity := activities[len(activities)-1]
+			firstSeen, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
+			if parseErr != nil {
+				return defaultTime, false, parseErr
 			}
-		} else {
-			return defaultTime, false, nil
+			return firstSeen, false, nil
 		}
+		// No activities found, but call was successful
+		return defaultTime, false, nil
 	} else if err != nil {
 		logFields := map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -191,9 +189,17 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 		// All other errors are transient by default - log as warning
 		logger.Warn("ACTIVITY_HISTORY_FETCH_FAILED", err, logFields)
 		return defaultTime, false, err
+	} else {
+		// Unsuccessful request, but err is nil: treat as unretryable error and log
+		logFields := map[string]any{
+			logging.MEMBERSHIP_ID:     membershipId,
+			"bungie_error_code":       historyResult.BungieErrorCode,
+			"http_status_code":        historyResult.HttpStatusCode,
+		}
+		errMsg := fmt.Errorf("activity history fetch failed: BungieErrorCode=%d, HttpStatusCode=%d", historyResult.BungieErrorCode, historyResult.HttpStatusCode)
+		logger.Error("ACTIVITY_HISTORY_FETCH_ERROR", errMsg, logFields)
+		return defaultTime, false, processing.NewUnretryableError(errMsg)
 	}
-
-	return defaultTime, false, nil
 }
 
 // needsUpdate checks if player data needs to be refreshed

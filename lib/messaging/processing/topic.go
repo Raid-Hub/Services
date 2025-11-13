@@ -28,6 +28,9 @@ func (e *UnretryableError) Unwrap() error {
 
 // NewUnretryableError wraps an error to indicate it should NOT be retried
 func NewUnretryableError(err error) *UnretryableError {
+	if err == nil {
+		return &UnretryableError{Err: errors.New("nil error")}
+	}
 	return &UnretryableError{Err: err}
 }
 
