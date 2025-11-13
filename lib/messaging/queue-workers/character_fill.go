@@ -25,6 +25,7 @@ func CharacterFillTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Destiny2", "D2Characters"},
+		MaxRetryCount:         4, // Character data is useful but not critical
 	}, processCharacterFill)
 }
 

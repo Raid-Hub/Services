@@ -24,6 +24,7 @@ func PlayerCrawlTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
+		MaxRetryCount:         12, // Important for player data collection
 	}, processPlayerCrawl)
 }
 

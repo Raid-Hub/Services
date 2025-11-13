@@ -38,6 +38,24 @@ func IsUnretryableError(err error) bool {
 	return errors.As(err, &unretryableErr)
 }
 
+// GetRetryCount extracts the retry count from a RabbitMQ message
+// Returns the number of times this message has been redelivered (nacked with requeue=true)
+// RabbitMQ tracks this in the x-death header, which is an array of death records
+func GetRetryCount(message amqp.Delivery) int {
+	if message.Headers == nil {
+		return 0
+	}
+
+	// x-death is an array of death records, one for each time the message was nacked
+	xDeath, ok := message.Headers["x-death"].([]any)
+	if !ok {
+		return 0
+	}
+
+	// Count the number of death records (each represents a nack with requeue=true)
+	return len(xDeath)
+}
+
 // ProcessorFunc defines the function signature for processing messages
 type ProcessorFunc func(worker WorkerInterface, message amqp.Delivery) error
 
@@ -115,6 +133,7 @@ type TopicConfig struct {
 	ConsecutiveChecksUp   int           // Consecutive checks above threshold before scaling up
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
+	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
 }
 
 // NewTopic creates a new topic with the given config and processor

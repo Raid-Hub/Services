@@ -34,7 +34,8 @@ type Worker struct {
 	wg          *utils.ReadOnlyWaitGroup // API availability wait group
 	channel     <-chan amqp.Delivery
 	processor   processing.ProcessorFunc
-	done        chan struct{} // Channel that closes when worker is finished
+	done        chan struct{}  // Channel that closes when worker is finished
+	currentMsg  *amqp.Delivery // Current message being processed (for retry count tracking)
 }
 
 // Run starts the worker and kicks off the polling
@@ -68,6 +69,23 @@ func (w *Worker) Run() {
 
 			err := w.ProcessMessage(msg)
 			if err != nil {
+				retryCount := processing.GetRetryCount(msg)
+				maxRetries := w.Topic.Config.MaxRetryCount
+
+				// Check if we've exceeded max retry count (0 means unlimited)
+				if maxRetries > 0 && retryCount >= maxRetries {
+					w.Error("MESSAGE_EXCEEDED_MAX_RETRIES", err, map[string]any{
+						"retry_count": retryCount,
+						"max_retries": maxRetries,
+						"action":      "sending_to_dlq",
+					})
+					// Force unretryable - send to DLQ
+					if err := msg.Nack(false, false); err != nil {
+						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+					}
+					continue
+				}
+
 				w.Warn("MESSAGE_PROCESSING_ERROR", err, nil)
 				// Record metrics for failed processing
 				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
@@ -122,6 +140,10 @@ func (w *Worker) ScaleIn() {
 }
 
 func (w *Worker) ProcessMessage(message amqp.Delivery) error {
+	// Store current message for retry count tracking in logs
+	w.currentMsg = &message
+	defer func() { w.currentMsg = nil }()
+
 	w.Debug("PROCESSING_MESSAGE_STARTED", nil)
 
 	startTime := time.Now()
@@ -140,6 +162,15 @@ func (w *Worker) addWorkerFields(fields map[string]any) map[string]any {
 	}
 	fields["queue"] = w.QueueName
 	fields["worker_id"] = w.ID
+
+	// Add retry count if we're currently processing a message
+	if w.currentMsg != nil {
+		retryCount := processing.GetRetryCount(*w.currentMsg)
+		if retryCount > 0 {
+			fields["retry_count"] = retryCount
+		}
+	}
+
 	return fields
 }
 

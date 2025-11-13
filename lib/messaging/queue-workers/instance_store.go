@@ -24,6 +24,7 @@ func InstanceStoreTopic() processing.Topic {
 		ScaleDownThreshold:    100,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
+		MaxRetryCount:         15, // Critical - storing data, but DB errors might be permanent
 	}, processInstanceStore)
 }
 

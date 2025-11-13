@@ -24,6 +24,7 @@ func ActivityHistoryTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Destiny2", "Activities", "D2Profiles"},
+		MaxRetryCount:         12, // Important for activity history data
 	}, processActivityHistory)
 }
 

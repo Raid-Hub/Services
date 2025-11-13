@@ -28,6 +28,7 @@ func PgcrCrawlTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Destiny2"},
+		MaxRetryCount:         20, // Critical - main functionality
 	}, processPgcrCrawl)
 }
 

@@ -24,6 +24,7 @@ func ClanCrawlTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Groups", "Clans", "Destiny2"},
+		MaxRetryCount:         8, // Less critical than player/instance data
 	}, processClanCrawl)
 }
 
