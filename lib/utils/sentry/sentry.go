@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"raidhub/lib/env"
@@ -63,6 +64,24 @@ func isInitialized() bool {
 	return sentry.CurrentHub() != nil
 }
 
+// errorWithLogKey wraps an error to include the log key in the error message
+// This ensures the log key appears in Sentry error titles
+type errorWithLogKey struct {
+	logKey string
+	err    error
+}
+
+func (e *errorWithLogKey) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("%s: %s", e.logKey, e.err.Error())
+	}
+	return fmt.Sprintf("%s: <nil>", e.logKey)
+}
+
+func (e *errorWithLogKey) Unwrap() error {
+	return e.err
+}
+
 // CaptureError captures an error to Sentry
 func CaptureError(level sentry.Level, logKey string, err error, fields map[string]any) {
 	if !isInitialized() {
@@ -79,10 +98,16 @@ func CaptureError(level sentry.Level, logKey string, err error, fields map[strin
 		}
 
 		for k, v := range fields {
-			scope.SetExtra(k, v)
+			scope.SetExtra(k, normalizeValueForSentry(v))
 		}
 
-		sentry.CurrentHub().CaptureException(err)
+		// Wrap error with log key to include it in Sentry error title
+		wrappedErr := &errorWithLogKey{
+			logKey: logKey,
+			err:    err,
+		}
+
+		sentry.CurrentHub().CaptureException(wrappedErr)
 	})
 }
 
@@ -108,5 +133,34 @@ func convertToInt64(v any) (string, bool) {
 		return val, true
 	default:
 		return "", false
+	}
+}
+
+// normalizeValueForSentry converts numeric types to strings to avoid JSON serialization issues
+// Sentry's SetExtra can have issues with large int64 values when serialized as JSON numbers
+func normalizeValueForSentry(v any) any {
+	switch val := v.(type) {
+	case int64:
+		return strconv.FormatInt(val, 10)
+	case int:
+		return strconv.FormatInt(int64(val), 10)
+	case int32:
+		return strconv.FormatInt(int64(val), 10)
+	case int16:
+		return strconv.FormatInt(int64(val), 10)
+	case int8:
+		return strconv.FormatInt(int64(val), 10)
+	case uint64:
+		return strconv.FormatUint(val, 10)
+	case uint:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(val), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(val), 10)
+	default:
+		return v
 	}
 }

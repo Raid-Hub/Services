@@ -192,9 +192,9 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 	} else {
 		// Unsuccessful request, but err is nil: treat as unretryable error and log
 		logFields := map[string]any{
-			logging.MEMBERSHIP_ID:     membershipId,
-			"bungie_error_code":       historyResult.BungieErrorCode,
-			"http_status_code":        historyResult.HttpStatusCode,
+			logging.MEMBERSHIP_ID: membershipId,
+			"bungie_error_code":   historyResult.BungieErrorCode,
+			"http_status_code":    historyResult.HttpStatusCode,
 		}
 		errMsg := fmt.Errorf("activity history fetch failed: BungieErrorCode=%d, HttpStatusCode=%d", historyResult.BungieErrorCode, historyResult.HttpStatusCode)
 		logger.Error("ACTIVITY_HISTORY_FETCH_ERROR", errMsg, logFields)
