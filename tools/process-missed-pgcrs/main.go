@@ -104,7 +104,10 @@ func ProcessMissedPGCRs() {
 		line := scanner.Text()
 		number, err := strconv.ParseInt(line, 10, 64)
 		if err != nil {
-			fmt.Printf("Error parsing line %s: %v\n", line, err)
+			logger.Warn("MISSED_PGCR_LINE_PARSE_ERROR", err, map[string]any{
+				logging.RAW:   line,
+				logging.REASON: "invalid_integer",
+			})
 			continue
 		}
 		uniqueNumbers[number] = true
@@ -368,14 +371,14 @@ func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, 
 	}}
 
 	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{
-		"message": message,
-		"count":   count,
-		"failed":  failed,
-		"found":   found,
+		"message":   message,
+		"count":     count,
+		"failed":    failed,
+		"found":     found,
 		"minFailed": minFailed,
 		"maxFailed": maxFailed,
-		"range": maxFailed - minFailed + 1,
-		"gaps": gaps,
+		"range":     maxFailed - minFailed + 1,
+		"gaps":      gaps,
 	})
 
 	if len(gaps) > 0 {

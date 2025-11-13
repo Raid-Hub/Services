@@ -73,7 +73,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	}
 	character := result.Data
 
-	if character == nil || character.Character.Data == nil {
+	if character == nil || character.Character == nil || character.Character.Data == nil {
 		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
