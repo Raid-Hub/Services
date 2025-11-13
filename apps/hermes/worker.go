@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -70,10 +71,20 @@ func (w *Worker) Run() {
 				w.Warn("MESSAGE_PROCESSING_ERROR", err, nil)
 				// Record metrics for failed processing
 				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
-				// NACK with requeue=false to prevent infinite retries on permanent failures
-				// The message will be sent to the dead letter queue if configured
-				if err := msg.Nack(false, false); err != nil {
-					w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+
+				// By default, errors are retryable (transient). Only unretryable errors should not be requeued.
+				if processing.IsUnretryableError(err) {
+					// NACK with requeue=false for unretryable errors (permanent failures)
+					// The message will be sent to the dead letter queue if configured
+					if err := msg.Nack(false, false); err != nil {
+						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+					}
+				} else {
+					// NACK with requeue=true for retryable errors (transient failures)
+					// Most errors are transient and should be retried
+					if err := msg.Nack(false, true); err != nil {
+						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+					}
 				}
 				continue
 			}
@@ -107,7 +118,7 @@ func (w *Worker) ScaleIn() {
 		logging.REASON: AUTOSCALE_IN,
 	})
 	// Use a specific error to distinguish autoscale from shutdown
-	w.cancel(fmt.Errorf(AUTOSCALE_IN))
+	w.cancel(errors.New(AUTOSCALE_IN))
 }
 
 func (w *Worker) ProcessMessage(message amqp.Delivery) error {

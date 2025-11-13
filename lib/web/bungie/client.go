@@ -16,7 +16,6 @@ import (
 
 var clientLogger = logging.NewLogger("BUNGIE_CLIENT")
 
-
 type BungieHttpResult[T any] struct {
 	Success           bool
 	Data              *T
@@ -174,14 +173,13 @@ func decodeResponse[T any](resp *http.Response) (*T, error) {
 	return &data, nil
 }
 
-
 var titleRegex = regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
 
 // extractHTMLTitle attempts to extract the title from an HTML response body
 // Reads up to 64KB to avoid memory issues
 func extractHTMLTitle(body io.ReadCloser) string {
 	defer body.Close()
-	
+
 	// Limit read to 64KB
 	limitedReader := io.LimitReader(body, 64*1024)
 	content, err := io.ReadAll(limitedReader)
@@ -194,6 +192,26 @@ func extractHTMLTitle(body io.ReadCloser) string {
 		return strings.TrimSpace(matches[1])
 	}
 	return ""
+}
+
+func IsTransientError(bungieErrorCode int, httpStatusCode int) bool {
+	switch bungieErrorCode {
+	case
+		Success,
+		CharacterNotFound,
+		PGCRNotFound,
+		GroupNotFound,
+		InvalidParameters,
+		DestinyPrivacyRestriction:
+		return false
+	}
+
+	if httpStatusCode == http.StatusBadRequest {
+		return false
+	}
+
+	// All other errors are considered transient and should be retried
+	return true
 }
 
 func (c *BungieClient) GetPGCR(instanceId int64) (BungieHttpResult[DestinyPostGameCarnageReport], error) {

@@ -10,6 +10,32 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// UnretryableError is an error that indicates the message should NOT be requeued
+// This is used for permanent failures that will not succeed on retry
+// By default, errors are treated as retryable (transient), so only mark permanent failures as UnretryableError
+type UnretryableError struct {
+	Err error
+}
+
+func (e *UnretryableError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *UnretryableError) Unwrap() error {
+	return e.Err
+}
+
+// NewUnretryableError wraps an error to indicate it should NOT be retried
+func NewUnretryableError(err error) *UnretryableError {
+	return &UnretryableError{Err: err}
+}
+
+// IsUnretryableError checks if an error is an UnretryableError
+func IsUnretryableError(err error) bool {
+	_, ok := err.(*UnretryableError)
+	return ok
+}
+
 // ProcessorFunc defines the function signature for processing messages
 type ProcessorFunc func(worker WorkerInterface, message amqp.Delivery) error
 

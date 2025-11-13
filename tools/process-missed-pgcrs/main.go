@@ -105,7 +105,7 @@ func ProcessMissedPGCRs() {
 		number, err := strconv.ParseInt(line, 10, 64)
 		if err != nil {
 			logger.Warn("MISSED_PGCR_LINE_PARSE_ERROR", err, map[string]any{
-				logging.RAW:   line,
+				"raw":          line,
 				logging.REASON: "invalid_integer",
 			})
 			continue

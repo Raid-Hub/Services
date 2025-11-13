@@ -28,7 +28,7 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 			logging.BUNGIE_ERROR_CODE: resp.BungieErrorCode,
 			logging.STATUS_CODE:       resp.HttpStatusCode,
 		}
-		
+
 		// Handle Bungie error codes
 		switch resp.BungieErrorCode {
 		case bungie.PGCRNotFound:
