@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -52,12 +54,14 @@ func get[T any](c *BungieClient, url string, operation string) (BungieHttpResult
 func getInternal[T any](c *BungieClient, url string, operation string) (BungieHttpResult[T], error) {
 	startTime := time.Now()
 
+	fields := map[string]any{
+		logging.OPERATION: operation,
+		logging.ENDPOINT:  url,
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", err, map[string]any{
-			logging.OPERATION: operation,
-			logging.ENDPOINT:  url,
-		})
+		clientLogger.Error("BUNGIE_REQUEST_CREATE_FAILED", err, fields)
 		return makeNonStandardHttpResult[T](0), err
 	}
 	req.Header.Set("X-API-KEY", c.apiKey)
@@ -65,36 +69,40 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 	resp, err := c.httpClient.Do(req)
 	duration := time.Since(startTime).Milliseconds()
 	if err != nil {
-		clientLogger.Debug("BUNGIE_REQUEST_FAILED", map[string]any{
-			logging.OPERATION: operation,
-			logging.ENDPOINT:  url,
-			logging.ERROR:     err.Error(),
-			logging.DURATION:  fmt.Sprintf("%dms", duration),
-		})
+		fields["error"] = err.Error()
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_REQUEST_FAILED", fields)
 		return makeNonStandardHttpResult[T](0), err
 	}
 
+	fields[logging.STATUS_CODE] = resp.StatusCode
+
 	// first check if json header is present
-	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
 		err := fmt.Errorf("content-type is not application/json")
-		clientLogger.Warn("BUNGIE_RESPONSE_NOT_PARSABLE", err, map[string]any{
-			logging.OPERATION:   operation,
-			logging.ENDPOINT:    url,
-			logging.DURATION:    fmt.Sprintf("%dms", duration),
-			logging.STATUS_CODE: resp.StatusCode,
-		})
+		fields["content_type"] = contentType
+
+		// If it's HTML, try to extract the title
+		// extractHTMLTitle will close the body
+		if strings.Contains(strings.ToLower(contentType), "html") {
+			if title := extractHTMLTitle(resp.Body); title != "" {
+				fields["html_title"] = title
+			}
+		} else {
+			// Close body for non-HTML non-JSON responses
+			resp.Body.Close()
+		}
+
+		clientLogger.Warn("BUNGIE_RESPONSE_NOT_PARSABLE", err, fields)
 		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		error_response, err := decodeResponse[BungieError](resp)
 		if err != nil {
-			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, map[string]any{
-				logging.OPERATION:   operation,
-				logging.ENDPOINT:    url,
-				logging.STATUS_CODE: resp.StatusCode,
-				logging.DURATION:    fmt.Sprintf("%dms", duration),
-			})
+			fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, fields)
 			return makeNonStandardHttpResult[T](resp.StatusCode), err
 		}
 		result := BungieHttpResult[T]{
@@ -104,44 +112,47 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 			BungieErrorStatus: error_response.ErrorStatus,
 			Data:              nil,
 		}
-		clientLogger.Debug("BUNGIE_REQUEST_ERROR", map[string]any{
-			logging.OPERATION:     operation,
-			logging.ENDPOINT:      url,
-			logging.STATUS_CODE:   resp.StatusCode,
-			"bungie_error_code":   error_response.ErrorCode,
-			"bungie_error_status": error_response.ErrorStatus,
-			logging.DURATION:      fmt.Sprintf("%dms", duration),
-		})
+		fields["bungie_error_code"] = error_response.ErrorCode
+		fields["bungie_error_status"] = error_response.ErrorStatus
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_REQUEST_ERROR", fields)
 		return result, error_response
 	}
+
 	response, err := decodeResponse[BungieResponse[T]](resp)
 	if err != nil {
-		clientLogger.Error("BUNGIE_RESPONSE_DECODE_FAILED", err, map[string]any{
-			logging.OPERATION:   operation,
-			logging.ENDPOINT:    url,
-			logging.STATUS_CODE: resp.StatusCode,
-			logging.DURATION:    fmt.Sprintf("%dms", duration),
-		})
+		fields["error"] = err.Error()
+		fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+		clientLogger.Debug("BUNGIE_RESPONSE_DECODE_FAILED", fields)
 		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
-	success := response.ErrorCode == Success
+	fields["bungie_error_code"] = response.ErrorCode
+	fields["bungie_error_status"] = response.ErrorStatus
+	fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
+
+	// Invariant violation: HTTP 200 should mean Bungie ErrorCode == Success
+	if response.ErrorCode != Success {
+		err := fmt.Errorf("invariant violation: HTTP 200 but Bungie ErrorCode=%d (expected %d): %s", response.ErrorCode, Success, response.ErrorStatus)
+		clientLogger.Error("BUNGIE_RESPONSE_INVALID_STATE", err, fields)
+		return BungieHttpResult[T]{
+			Success:           false,
+			HttpStatusCode:    resp.StatusCode,
+			BungieErrorCode:   response.ErrorCode,
+			BungieErrorStatus: response.ErrorStatus,
+			Data:              &response.Response,
+		}, err
+	}
+
 	result := BungieHttpResult[T]{
-		Success:           success,
+		Success:           true,
 		HttpStatusCode:    resp.StatusCode,
 		BungieErrorCode:   response.ErrorCode,
 		BungieErrorStatus: response.ErrorStatus,
 		Data:              &response.Response,
 	}
 
-	clientLogger.Debug("BUNGIE_REQUEST_SUCCESS", map[string]any{
-		logging.OPERATION:     operation,
-		logging.ENDPOINT:      url,
-		logging.STATUS_CODE:   resp.StatusCode,
-		"bungie_error_code":   response.ErrorCode,
-		"bungie_error_status": response.ErrorStatus,
-		logging.DURATION:      fmt.Sprintf("%dms", duration),
-	})
+	clientLogger.Debug("BUNGIE_REQUEST_SUCCESS", fields)
 
 	return result, nil
 }
@@ -154,6 +165,47 @@ func decodeResponse[T any](resp *http.Response) (*T, error) {
 		return nil, err
 	}
 	return &data, nil
+}
+
+var titleRegex = regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
+
+// extractHTMLTitle attempts to extract the title from an HTML response body
+// Reads up to 64KB to avoid memory issues
+func extractHTMLTitle(body io.ReadCloser) string {
+	defer body.Close()
+
+	// Limit read to 64KB
+	limitedReader := io.LimitReader(body, 64*1024)
+	content, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return ""
+	}
+
+	matches := titleRegex.FindStringSubmatch(string(content))
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	return ""
+}
+
+func IsTransientError(bungieErrorCode int, httpStatusCode int) bool {
+	switch bungieErrorCode {
+	case
+		Success,
+		CharacterNotFound,
+		PGCRNotFound,
+		GroupNotFound,
+		InvalidParameters,
+		DestinyPrivacyRestriction:
+		return false
+	}
+
+	if httpStatusCode == http.StatusBadRequest {
+		return false
+	}
+
+	// All other errors are considered transient and should be retried
+	return true
 }
 
 func (c *BungieClient) GetPGCR(instanceId int64) (BungieHttpResult[DestinyPostGameCarnageReport], error) {

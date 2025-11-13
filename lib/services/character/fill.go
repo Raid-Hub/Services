@@ -2,6 +2,7 @@ package character
 
 import (
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/messaging/processing"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 )
@@ -40,30 +41,30 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 
 	// Get character from Bungie API
 	result, err := bungie.Client.GetCharacter(membershipType, membershipId, characterId)
-	if err != nil {
-		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
-			logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
-				logging.MEMBERSHIP_ID: membershipId,
-				logging.CHARACTER_ID:  characterId,
-				logging.REASON:        "character_not_found",
-			})
+	if !result.Success {
+		fields := map[string]any{
+			logging.MEMBERSHIP_ID:     membershipId,
+			logging.CHARACTER_ID:      characterId,
+			logging.BUNGIE_ERROR_CODE: result.BungieErrorCode,
+			logging.STATUS_CODE:       result.HttpStatusCode,
+		}
+
+		if result.BungieErrorCode == bungie.CharacterNotFound {
+			fields["reason"] = "character_not_found"
+			logger.Warn(CHARACTER_NOT_FOUND, err, fields)
 			return nil
 		}
-		logger.Error("CHARACTER_FETCH_ERROR", err, map[string]any{
-			logging.MEMBERSHIP_ID: membershipId,
-			logging.CHARACTER_ID:  characterId,
-		})
+
+		if !bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
+			logger.Error("CHARACTER_FETCH_ERROR", err, fields)
+			return processing.NewUnretryableError(err)
+		}
+
+		// All other errors are transient and will be retried by default
+		logger.Warn("CHARACTER_FETCH_FAILED", err, fields)
 		return err
 	}
-	if !result.Success || result.Data == nil {
-		if result.BungieErrorCode == bungie.CharacterNotFound || result.HttpStatusCode == 404 {
-			logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
-				logging.MEMBERSHIP_ID: membershipId,
-				logging.CHARACTER_ID:  characterId,
-				logging.REASON:        "character_not_found_bungie_error",
-			})
-			return nil
-		}
+	if result.Data == nil {
 		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
@@ -73,7 +74,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	}
 	character := result.Data
 
-	if character == nil || character.Character.Data == nil {
+	if character == nil || character.Character == nil || character.Character.Data == nil {
 		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
@@ -85,19 +86,13 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	charData := character.Character.Data
 
 	// Update instance_character table with missing data
-	_, err = postgres.DB.Exec(`
-		UPDATE instance_character
-		SET class_hash = COALESCE(class_hash, $1),
-		    emblem_hash = COALESCE(emblem_hash, $2)
-		WHERE instance_id = $3
-		  AND membership_id = $4
-		  AND character_id = $5
-	`, charData.ClassHash, charData.EmblemHash, instanceId, membershipId, characterId)
-	if err != nil {
+	if err := updateInstanceCharacter(instanceId, membershipId, characterId, charData.ClassHash, charData.EmblemHash); err != nil {
 		logger.Error("CHARACTER_UPDATE_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			logging.CHARACTER_ID:  characterId,
 			logging.INSTANCE_ID:   instanceId,
+			"class_hash":          charData.ClassHash,
+			"emblem_hash":         charData.EmblemHash,
 		})
 		return err
 	}
@@ -109,4 +104,16 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	})
 
 	return nil
+}
+
+func updateInstanceCharacter(instanceId int64, membershipId int64, characterId int64, classHash uint32, emblemHash uint32) error {
+	_, err := postgres.DB.Exec(`
+		UPDATE instance_character
+		SET class_hash = COALESCE(class_hash, $1),
+		    emblem_hash = COALESCE(emblem_hash, $2)
+		WHERE instance_id = $3
+		  AND membership_id = $4
+		  AND character_id = $5
+	`, classHash, emblemHash, instanceId, membershipId, characterId)
+	return err
 }

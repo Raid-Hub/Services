@@ -314,6 +314,54 @@ Each topic has configurable scaling parameters:
 - **ScaleUpPercent/ScaleDownPercent**: Rate of scaling changes
 - **ScaleCheckInterval**: How often to check queue depth and Bungie API availability (default: 5 min)
 - **API Availability Monitoring**: Workers are blocked (not scaled down) when Bungie API is disabled
+- **MaxRetryCount**: Maximum number of retries before sending message to dead letter queue (0 = unlimited)
+
+### Error Handling and Retry Mechanisms
+
+The queue worker system implements sophisticated error handling with configurable retry limits:
+
+#### Retryable vs Unretryable Errors
+
+- **Retryable Errors (Default)**: Most errors are treated as transient and will be retried by requeuing the message
+
+  - Network failures, temporary API errors, rate limiting
+  - Messages are NACKed with `requeue=true` to retry later
+  - Retry count is tracked via RabbitMQ's `x-death` header
+
+- **Unretryable Errors**: Permanent failures that won't succeed on retry
+  - Use `processing.NewUnretryableError(err)` to wrap permanent failures
+  - Messages are NACKed with `requeue=false` and sent to dead letter queue (if configured)
+  - Examples: invalid data format, authentication failures, not found errors for deleted resources
+
+#### MaxRetryCount Configuration
+
+Each topic can configure a maximum retry count:
+
+- **MaxRetryCount = 0**: Unlimited retries (default for most queues)
+- **MaxRetryCount > 0**: After this many retries, message is sent to DLQ regardless of error type
+- **Per-Queue Configuration**: Each queue sets its own limit based on message importance:
+  - `instance_store`: 3 retries (critical data, but has DLQ fallback)
+  - `player_crawl`: 12 retries (important for data collection)
+  - `pgcr_crawl`: 20 retries (critical main functionality)
+  - `pgcr_blocked_retry`: 25 retries (designed for retries, but still needs limit)
+  - `character_fill`: 4 retries (useful but not critical)
+  - `clan_crawl`: 5 retries
+  - `activity_history`: 3 retries
+  - `instance_cheat_check`: 5 retries
+
+#### Retry Count Tracking
+
+- Retry count is extracted from RabbitMQ's `x-death` header
+- Each NACK with `requeue=true` increments the retry count
+- Retry count is logged in worker logs for debugging
+- When `MaxRetryCount` is exceeded, the message is automatically sent to DLQ with an error log
+
+#### Error Handling Best Practices
+
+- **Transient Errors**: Return the error directly - it will be retried automatically
+- **Permanent Errors**: Wrap with `processing.NewUnretryableError(err)` to skip retries
+- **Bungie API Errors**: Use `bungie.IsTransientError()` to determine if an error should be retried
+- **Logging**: Include retry count in logs when available for better debugging
 
 ## Data Flow Architecture
 

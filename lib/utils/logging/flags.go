@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	verbose      bool
-	logLevel     string
-	once         sync.Once
-	verboseFlag *bool
-	verboseLongFlag *bool
-	logLevelFlag *string
+	verbose          bool
+	logLevel         string
+	once             sync.Once
+	verboseFlag      *bool
+	verboseLongFlag  *bool
+	logLevelFlag     *string
 	logLevelLongFlag *string
 )
 
@@ -55,10 +55,10 @@ func init() {
 // and before accessing flag values or flag.Args()/flag.NArg().
 func ParseFlags() {
 	once.Do(func() {
-		if (!flag.Parsed()) {
+		if !flag.Parsed() {
 			flag.Parse()
 		}
-		
+
 		// Set verbose if either flag was provided (overrides log level for backwards compatibility)
 		if *verboseFlag || *verboseLongFlag {
 			verbose = true

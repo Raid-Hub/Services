@@ -3,12 +3,58 @@ package processing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+// UnretryableError is an error that indicates the message should NOT be requeued
+// This is used for permanent failures that will not succeed on retry
+// By default, errors are treated as retryable (transient), so only mark permanent failures as UnretryableError
+type UnretryableError struct {
+	Err error
+}
+
+func (e *UnretryableError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *UnretryableError) Unwrap() error {
+	return e.Err
+}
+
+// NewUnretryableError wraps an error to indicate it should NOT be retried
+func NewUnretryableError(err error) *UnretryableError {
+	return &UnretryableError{Err: err}
+}
+
+// IsUnretryableError checks if an error is an UnretryableError
+// Uses errors.As to properly handle wrapped errors (e.g., fmt.Errorf with %w)
+func IsUnretryableError(err error) bool {
+	var unretryableErr *UnretryableError
+	return errors.As(err, &unretryableErr)
+}
+
+// GetRetryCount extracts the retry count from a RabbitMQ message
+// Returns the number of times this message has been redelivered (nacked with requeue=true)
+// RabbitMQ tracks this in the x-death header, which is an array of death records
+func GetRetryCount(message amqp.Delivery) int {
+	if message.Headers == nil {
+		return 0
+	}
+
+	// x-death is an array of death records, one for each time the message was nacked
+	xDeath, ok := message.Headers["x-death"].([]any)
+	if !ok {
+		return 0
+	}
+
+	// Count the number of death records (each represents a nack with requeue=true)
+	return len(xDeath)
+}
 
 // ProcessorFunc defines the function signature for processing messages
 type ProcessorFunc func(worker WorkerInterface, message amqp.Delivery) error
@@ -87,6 +133,7 @@ type TopicConfig struct {
 	ConsecutiveChecksUp   int           // Consecutive checks above threshold before scaling up
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
+	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
 }
 
 // NewTopic creates a new topic with the given config and processor

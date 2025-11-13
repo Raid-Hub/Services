@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"raidhub/lib/messaging/processing"
 	"raidhub/lib/utils/logging"
-	"raidhub/lib/utils/network"
 	"raidhub/lib/web/bungie"
 )
 
@@ -87,7 +87,11 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	}
 
 	// Determine first_seen from oldest activity and check privacy (default to now for new players)
-	firstSeen, isPrivate := getFirstSeenAndPrivacy(userInfo.MembershipType, membershipId, profile.Characters.Data, now)
+	firstSeen, isPrivate, err := getFirstSeenAndPrivacy(userInfo.MembershipType, membershipId, profile.Characters.Data, now)
+	if err != nil {
+		// Return error so worker can retry (transient) or mark as unretryable
+		return err
+	}
 
 	// Create or update player
 	newPlayer := &Player{
@@ -138,12 +142,10 @@ func Crawl(ctx context.Context, membershipId int64) error {
 // getFirstSeenAndPrivacy fetches activity history once and determines both:
 // - first_seen time from the oldest activity
 // - privacy status from the API response
-func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersData *map[int64]bungie.DestinyCharacterComponent, defaultTime time.Time) (time.Time, bool) {
-	firstSeen := defaultTime
-	isPrivate := false
-
+// Returns error if the request failed and should be retried (transient) or failed permanently (unretryable)
+func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersData *map[int64]bungie.DestinyCharacterComponent, defaultTime time.Time) (time.Time, bool, error) {
 	if charactersData == nil || len(*charactersData) == 0 {
-		return firstSeen, isPrivate
+		return defaultTime, false, nil
 	}
 
 	// Get first character ID
@@ -156,34 +158,42 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 	// Fetch activities to determine first_seen and check privacy (single API call)
 	historyResult, err := bungie.Client.GetActivityHistoryPage(membershipType, membershipId, firstCharacterId, 250, 0, bungie.ModeStory)
 	// Check privacy from API response
-	if !historyResult.Success && historyResult.BungieErrorCode == bungie.DestinyPrivacyRestriction {
-		// Privacy restriction error - history is private
-		isPrivate = true
+	if historyResult.BungieErrorCode == bungie.DestinyPrivacyRestriction {
+		// Privacy restriction error - history is private (not an error, just private)
+		return defaultTime, true, nil
 	} else if historyResult.Success {
-		// Successfully fetched - history is not private
-		isPrivate = false
-
 		// Determine first_seen from oldest activity
 		if historyResult.Data != nil {
 			activities := historyResult.Data.Activities
 			if len(activities) > 0 {
 				// Activities are ordered newest first, so the last one is the oldest
 				oldestActivity := activities[len(activities)-1]
-				firstSeenParsed, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
-				if parseErr == nil {
-					firstSeen = firstSeenParsed
+				firstSeen, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
+				if parseErr != nil {
+					return defaultTime, false, parseErr
 				}
+				return firstSeen, false, nil
 			}
+		} else {
+			return defaultTime, false, nil
 		}
 	} else if err != nil {
-		// Network/request error - handle gracefully
-		logNetworkError(membershipId, err)
-		return firstSeen, isPrivate
+		logFields := map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+		}
+
+		// Check if this is a BungieError
+		if !bungie.IsTransientError(historyResult.BungieErrorCode, historyResult.HttpStatusCode) {
+			logger.Error("ACTIVITY_HISTORY_FETCH_ERROR", err, logFields)
+			return defaultTime, false, processing.NewUnretryableError(err)
+		}
+
+		// All other errors are transient by default - log as warning
+		logger.Warn("ACTIVITY_HISTORY_FETCH_FAILED", err, logFields)
+		return defaultTime, false, err
 	}
 
-	// If result is not successful and not a privacy error, we can't determine privacy or first_seen
-
-	return firstSeen, isPrivate
+	return defaultTime, false, nil
 }
 
 // needsUpdate checks if player data needs to be refreshed
@@ -198,29 +208,4 @@ func needsUpdate(p Player) bool {
 		})
 	}
 	return needs
-}
-
-// logNetworkError handles network errors gracefully using centralized network error handling
-func logNetworkError(membershipId int64, err error) {
-	netErr := network.CategorizeNetworkError(err)
-
-	if netErr == nil {
-		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", err, map[string]any{
-			logging.MEMBERSHIP_ID: membershipId,
-		})
-		return
-	}
-
-	logFields := map[string]any{
-		logging.MEMBERSHIP_ID: membershipId,
-	}
-
-	switch netErr.Type {
-	case network.ErrorTypeTimeout:
-		logger.Warn("ACTIVITY_HISTORY_FETCH_TIMEOUT", err, logFields)
-	case network.ErrorTypeConnection:
-		logger.Warn("ACTIVITY_HISTORY_NETWORK_ERROR", err, logFields)
-	case network.ErrorTypeUnknown:
-		logger.Error("UNKNOWN_ERROR_FETCHING_ACTIVITY_HISTORY", err, logFields)
-	}
 }

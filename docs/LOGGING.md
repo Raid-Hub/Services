@@ -159,6 +159,26 @@ export STDERR=./logs/errors.log
 - Logs are appended to existing files (no truncation)
 - If file creation fails, the application will panic on startup
 
+## Log Format
+
+### Timestamp Format
+
+All log entries include an RFC3339Nano timestamp at the beginning of each log line:
+
+```
+2024-01-15T10:30:45.123456789Z [INFO][SERVICE_NAME] -- MESSAGE key=value key2=value2
+```
+
+The timestamp format is `time.RFC3339Nano`, providing nanosecond precision for accurate timing analysis and correlation across services.
+
+### Error Field Handling
+
+The logging system handles errors gracefully:
+
+- **Non-nil errors**: Automatically added to fields with key `"error"` using `err.Error()`
+- **Nil errors**: Added to fields as `"error": "<nil>"` to maintain consistent log structure
+- This ensures all error fields are present in logs, making queries and filtering more reliable
+
 ## Log Levels
 
 ### DEBUG
@@ -377,7 +397,8 @@ if err := database.Connect(); err != nil {
 
 - `Warn()`, `Error()`, and `Fatal()` methods accept an `error` as the second parameter
 - If the error is not `nil`, it is automatically added to the fields map with the key `"error"` (using `err.Error()`)
-- You can pass `nil` if there's no error to log
+- If the error is `nil`, it is added to fields as `"error": "<nil>"` to maintain consistent log structure
+- You can pass `nil` if there's no error to log (useful for warnings that don't have an associated error)
 - The `fields` parameter can be `nil` if you only want to log the error
 
 **Parameters**:

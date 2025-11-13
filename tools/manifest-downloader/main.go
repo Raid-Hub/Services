@@ -23,7 +23,6 @@ import (
 
 var logger = logging.NewLogger("manifest-downloader")
 
-
 func main() {
 	out := flag.String("out", ".raidhub/defs", "where to store the sqlite (required)")
 	force := flag.Bool("f", false, "force the defs to be updated")
@@ -34,7 +33,6 @@ func main() {
 	if *out == "" {
 		logger.Fatal("MISSING_OUTPUT_DIRECTORY", nil, map[string]any{"message": "must specify an artifacts output directory with the -out flag"})
 	}
-
 
 	flushSentry, recoverSentry := logger.InitSentry()
 	defer flushSentry()
@@ -65,7 +63,6 @@ func main() {
 
 	wg.Wait()
 }
-
 
 // sanitizeVersionForFilename replaces filesystem-unsafe characters in version strings
 func sanitizeVersionForFilename(version string) string {

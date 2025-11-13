@@ -39,6 +39,7 @@ func PgcrBlockedTopic() processing.Topic {
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
 		BungieSystemDeps:      []string{"Destiny2"},
+		MaxRetryCount:         25, // Designed for retries, but still need a limit
 	}, processPgcrBlocked)
 }
 

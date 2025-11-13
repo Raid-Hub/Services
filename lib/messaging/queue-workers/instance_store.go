@@ -24,6 +24,7 @@ func InstanceStoreTopic() processing.Topic {
 		ScaleDownThreshold:    100,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
+		MaxRetryCount:         3, // We write to a dlq anyways, so we don't need to retry
 	}, processInstanceStore)
 }
 
