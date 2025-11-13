@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
@@ -21,8 +23,13 @@ func PlayerCrawlTopic() processing.Topic {
 		PrefetchCount:         1,
 		ScaleUpThreshold:      100,
 		ScaleDownThreshold:    10,
-		ScaleUpPercent:        0.2,
+		ScaleUpPercent:        0.5, // Add 50% more workers (more aggressive)
 		ScaleDownPercent:      0.1,
+		MinWorkersPerStep:     3,
+		MaxWorkersPerStep:     25,               // Can add up to 25 workers at once (more aggressive)
+		ConsecutiveChecksUp:   1,                // Scale up after just 1 check (immediate)
+		ConsecutiveChecksDown: 3,                // More conservative for scale-down
+		ScaleCooldown:         30 * time.Second, // Shorter cooldown for faster scaling
 		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
 		MaxRetryCount:         12, // Important for player data collection
 	}, processPlayerCrawl)

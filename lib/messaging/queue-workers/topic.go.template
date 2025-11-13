@@ -1,10 +1,12 @@
 package queueworkers
 
 import (
-	"encoding/json"
+	"time"
+
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
+	"raidhub/lib/utils/logging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -61,48 +63,75 @@ import (
 // YourTopicName creates a new topic for your queue
 func YourTopicName() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:           routing.YourQueueName,        // Add to constants.go
-		MinWorkers:          1,                            // Adjust as needed
-		MaxWorkers:          10,                           // Adjust as needed
-		DesiredWorkers:      2,                            // Adjust as needed
-		ContestWeekendWorkers: 5,                          // Adjust as needed
-		KeepInReady:         true,                         // Usually true
-		PrefetchCount:       1,                            // Usually 1
-		ScaleUpThreshold:    100,                          // Default: scale up when queue has 100+ messages
-		ScaleDownThreshold:  10,                           // Default: scale down when queue has <10 messages
-		ScaleUpPercent:      0.2,                          // Default: add 20% more workers
-		ScaleDownPercent:    0.1,                          // Default: remove 10% of workers
+		QueueName:             routing.YourQueueName,        // Add to constants.go
+		MinWorkers:            1,                            // Adjust as needed
+		MaxWorkers:            10,                           // Adjust as needed
+		DesiredWorkers:        2,                            // Adjust as needed
+		ContestWeekendWorkers: 5,                            // Adjust as needed
+		KeepInReady:           true,                         // Usually true
+		PrefetchCount:         1,                            // Usually 1
+		ScaleUpThreshold:      100,                          // Default: scale up when queue has 100+ messages
+		ScaleDownThreshold:    10,                           // Default: scale down when queue has <10 messages
+		ScaleUpPercent:        0.2,                          // Default: add 20% more workers
+		ScaleDownPercent:      0.1,                          // Default: remove 10% of workers
+		MinWorkersPerStep:     1,                            // Default: always add/remove at least 1 worker
+		MaxWorkersPerStep:     10,                           // Default: add/remove at most 10 workers per step
+		ConsecutiveChecksUp:   2,                            // Default: require 2 checks before scaling up
+		ConsecutiveChecksDown: 3,                            // Default: require 3 checks before scaling down
+		ScaleCooldown:         2 * time.Minute,              // Default: don't scale again within 2 minutes
+		BungieSystemDeps:      []string{},                   // Optional: Bungie API systems that must be available
+		MaxRetryCount:         0,                            // Default: 0 = unlimited retries. Set to limit retries before DLQ
 	}, processYourTopicName)
 }
 
 // processYourTopicName handles messages for your topic
 func processYourTopicName(worker processing.WorkerInterface, message amqp.Delivery) error {
-	// Option 1: JSON message
-	var request messages.YourMessageType  // Define in messages package
-	if err := json.Unmarshal(message.Body, &request); err != nil {
-		worker.Log("Failed to unmarshal message", "error", err)
-		return err
+	// Option 1: JSON message (recommended)
+	request, err := processing.ParseJSON[messages.YourMessageType](worker, message.Body)
+	if err != nil {
+		return err // ParseJSON already logs the error
 	}
 	
-	worker.Log("Processing message", "id", request.ID)
+	worker.Info("PROCESSING_MESSAGE", map[string]any{
+		"id": request.ID, // Adjust field names to match your message type
+	})
 	
-	// Access resources via worker.TopicManagerContext:
-	// - worker.TopicManagerContext.Database for database operations
-	// - worker.TopicManagerContext.Publisher for sending messages
-	// - worker.TopicManagerContext.Context for cancellation/timeouts
-	// - worker.TopicManagerContext.Wg for coordinating API calls
+	// Access resources via worker:
+	// - worker.Context() for cancellation/timeouts
+	// - Use domain services for business logic (e.g., player.Crawl, character.Fill)
 	
 	// TODO: Implement your business logic here
-	// - Database operations using worker.TopicManagerContext.Database
-	// - API calls  
-	// - Send follow-up messages via worker.TopicManagerContext.Publisher
-	//   worker.TopicManagerContext.Publisher.PublishMessage("route.name", data)
+	// - Call domain service functions
+	// - Handle errors appropriately:
+	//   - Return error for transient failures (will be retried)
+	//   - Return processing.NewUnretryableError(err) for permanent failures (goes to DLQ)
+	
+	// Example error handling:
+	// if err != nil {
+	//     worker.Error("OPERATION_FAILED", err, map[string]any{
+	//         logging.MEMBERSHIP_ID: request.MembershipId,
+	//     })
+	//     return err // Transient error - will retry
+	//     // OR: return processing.NewUnretryableError(err) // Permanent error - goes to DLQ
+	// }
 	
 	return nil
 
-	// Option 2: Text message (uncomment if using text instead of JSON)
-	// messageText := string(message.Body)
-	// worker.Log("Processing message", "text", messageText)
+	// Option 2: Int64 message (for simple ID-based messages) - uncomment to use
+	// id, err := processing.ParseInt64(worker, message.Body)
+	// if err != nil {
+	//     return err
+	// }
+	// 
+	// // TODO: Implement your business logic here
+	// 
+	// return nil
+
+	// Option 3: Text message - uncomment to use
+	// text, err := processing.ParseText(worker, message.Body)
+	// if err != nil {
+	//     return err
+	// }
 	// 
 	// // TODO: Implement your business logic here
 	// 

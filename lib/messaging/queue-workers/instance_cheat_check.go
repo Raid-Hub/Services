@@ -23,7 +23,7 @@ func InstanceCheatCheckTopic() processing.Topic {
 		ScaleDownThreshold:    10,
 		ScaleUpPercent:        0.2,
 		ScaleDownPercent:      0.1,
-		MaxRetryCount:         8, // Analysis task, less critical
+		MaxRetryCount:         5,
 	}, processInstanceCheatCheck)
 }
 
