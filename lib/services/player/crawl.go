@@ -189,7 +189,7 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 		}
 
 		// All other errors are transient by default - log as warning
-		logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", err, logFields)
+		logger.Warn("ACTIVITY_HISTORY_FETCH_FAILED", err, logFields)
 		return defaultTime, false, err
 	}
 
