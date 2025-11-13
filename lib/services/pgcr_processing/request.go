@@ -28,7 +28,7 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 			logging.BUNGIE_ERROR_CODE: resp.BungieErrorCode,
 			logging.STATUS_CODE:       resp.HttpStatusCode,
 		}
-
+		
 		// Handle Bungie error codes
 		switch resp.BungieErrorCode {
 		case bungie.PGCRNotFound:
@@ -52,6 +52,9 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 		case http.StatusForbidden:
 			logger.Warn("PGCR_FORBIDDEN_ERROR", err, fields)
 			return RateLimited, nil
+		case http.StatusBadGateway:
+			logger.Warn("PGCR_BAD_GATEWAY", err, fields)
+			return ExternalError, nil
 		case http.StatusServiceUnavailable:
 			logger.Warn("PGCR_SERVICE_UNAVAILABLE", err, fields)
 			return RateLimited, nil

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 )
 
 var clientLogger = logging.NewLogger("BUNGIE_CLIENT")
+
 
 type BungieHttpResult[T any] struct {
 	Success           bool
@@ -75,14 +78,29 @@ func getInternal[T any](c *BungieClient, url string, operation string) (BungieHt
 	}
 
 	// first check if json header is present
-	if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
 		err := fmt.Errorf("content-type is not application/json")
-		clientLogger.Warn("BUNGIE_RESPONSE_NOT_PARSABLE", err, map[string]any{
+		fields := map[string]any{
 			logging.OPERATION:   operation,
 			logging.ENDPOINT:    url,
 			logging.DURATION:    fmt.Sprintf("%dms", duration),
 			logging.STATUS_CODE: resp.StatusCode,
-		})
+			"content_type":      contentType,
+		}
+
+		// If it's HTML, try to extract the title
+		// extractHTMLTitle will close the body
+		if strings.Contains(strings.ToLower(contentType), "html") {
+			if title := extractHTMLTitle(resp.Body); title != "" {
+				fields["html_title"] = title
+			}
+		} else {
+			// Close body for non-HTML non-JSON responses
+			resp.Body.Close()
+		}
+
+		clientLogger.Warn("BUNGIE_RESPONSE_NOT_PARSABLE", err, fields)
 		return makeNonStandardHttpResult[T](resp.StatusCode), err
 	}
 
@@ -154,6 +172,28 @@ func decodeResponse[T any](resp *http.Response) (*T, error) {
 		return nil, err
 	}
 	return &data, nil
+}
+
+
+var titleRegex = regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
+
+// extractHTMLTitle attempts to extract the title from an HTML response body
+// Reads up to 64KB to avoid memory issues
+func extractHTMLTitle(body io.ReadCloser) string {
+	defer body.Close()
+	
+	// Limit read to 64KB
+	limitedReader := io.LimitReader(body, 64*1024)
+	content, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return ""
+	}
+
+	matches := titleRegex.FindStringSubmatch(string(content))
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	return ""
 }
 
 func (c *BungieClient) GetPGCR(instanceId int64) (BungieHttpResult[DestinyPostGameCarnageReport], error) {
