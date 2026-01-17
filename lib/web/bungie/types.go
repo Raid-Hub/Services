@@ -14,14 +14,22 @@ type BungieResponse[T any] struct {
 }
 
 type BungieError struct {
-	ErrorCode       int    `json:"ErrorCode"`
-	Message         string `json:"Message"`
-	ErrorStatus     string `json:"ErrorStatus"`
-	ThrottleSeconds int    `json:"ThrottleSeconds"`
+	operation       string         // Operation that caused the error, not present in the API response
+	ErrorCode       int            `json:"ErrorCode"`
+	Message         string         `json:"Message"`
+	ErrorStatus     string         `json:"ErrorStatus"`
+	ThrottleSeconds int            `json:"ThrottleSeconds"`
+	MessageData     map[string]any `json:"MessageData"`
 }
 
 func (b *BungieError) Error() string {
-	return fmt.Sprintf("%s [%d]: %s", b.ErrorStatus, b.ErrorCode, b.Message)
+	formattedMessage := fmt.Sprintf("%s: %s [%d]: %s", b.operation, b.ErrorStatus, b.ErrorCode, b.Message)
+	if len(b.MessageData) > 0 {
+		for key, value := range b.MessageData {
+			formattedMessage += fmt.Sprintf(" {%s: %v}", key, value)
+		}
+	}
+	return formattedMessage
 }
 
 type DestinyUserInfo struct {

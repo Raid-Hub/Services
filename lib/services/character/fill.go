@@ -1,6 +1,8 @@
 package character
 
 import (
+	"context"
+	"errors"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/utils/logging"
@@ -8,11 +10,11 @@ import (
 )
 
 var logger = logging.NewLogger("CHARACTER_SERVICE")
-var CHARACTER_NOT_FOUND = "CHARACTER_NOT_FOUND"
+var NO_PLAYER_CHARACTER_DATA = "NO_PLAYER_CHARACTER_DATA"
 
-// Fill fetches and fills missing character data
-func Fill(membershipId int64, characterId int64, instanceId int64) error {
-	logger.Info("CHARACTER_FILL_STARTED", map[string]any{
+// Fill fetches and fills missing character data, returns true if the character was found and filled, false if the character was not found
+func Fill(ctx context.Context, membershipId int64, characterId int64, instanceId int64) (bool, error) {
+	logger.Debug("CHARACTER_FILL_STARTED", map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
 		logging.CHARACTER_ID:  characterId,
 		logging.INSTANCE_ID:   instanceId,
@@ -25,14 +27,13 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	_ = postgres.DB.QueryRow("SELECT membership_type FROM player WHERE membership_id = $1", membershipId).Scan(&known)
 	if known == 0 {
 		// Resolve membership type using shared helper (tries known then all viable types)
-		resolvedType, _, err := bungie.ResolveProfile(membershipId, nil)
+		resolvedType, _, err := bungie.ResolveProfile(ctx, membershipId, 0)
 		if err != nil || resolvedType == 0 {
-			// fail here
-			logger.Error("COULD_NOT_DETERMINE_MEMBERSHIP_TYPE", err, map[string]any{
+			logger.Error("COULD_NOT_DETERMINE_CHARACTER_MEMBERSHIP_TYPE", err, map[string]any{
 				logging.MEMBERSHIP_ID: membershipId,
 				logging.CHARACTER_ID:  characterId,
 			})
-			return err
+			return false, err
 		}
 		membershipType = resolvedType
 	} else {
@@ -40,8 +41,8 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 	}
 
 	// Get character from Bungie API
-	result, err := bungie.Client.GetCharacter(membershipType, membershipId, characterId)
-	if !result.Success {
+	result, err := bungie.Client.GetCharacter(ctx, membershipType, membershipId, characterId)
+	if err != nil {
 		fields := map[string]any{
 			logging.MEMBERSHIP_ID:     membershipId,
 			logging.CHARACTER_ID:      characterId,
@@ -49,41 +50,47 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 			logging.STATUS_CODE:       result.HttpStatusCode,
 		}
 
-		if result.BungieErrorCode == bungie.CharacterNotFound {
-			fields["reason"] = "character_not_found"
-			logger.Warn(CHARACTER_NOT_FOUND, err, fields)
-			return nil
+		if bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
+			return false, err
 		}
 
-		if !bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
-			logger.Error("CHARACTER_FETCH_ERROR", err, fields)
-			return processing.NewUnretryableError(err)
+		var finalErr error
+		switch result.BungieErrorCode {
+		case bungie.CharacterNotFound:
+			fields[logging.REASON] = "character_not_found"
+			finalErr = nil
+		case bungie.DestinyAccountNotFound:
+			fields[logging.REASON] = "account_not_found"
+			finalErr = nil
+		default:
+			if result.BungieErrorStatus == "" {
+				fields[logging.REASON] = "unknown_error"
+			} else {
+				fields[logging.REASON] = result.BungieErrorStatus
+			}
+			logger.Warn("CHARACTER_FETCH_FAILED", err, fields)
+			finalErr = processing.NewUnretryableError(err)
 		}
 
-		// All other errors are transient and will be retried by default
-		logger.Warn("CHARACTER_FETCH_FAILED", err, fields)
-		return err
+		return false, finalErr
+
 	}
-	if result.Data == nil {
-		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
+	data := result.Data
+	if data == nil {
+		logger.Warn(NO_PLAYER_CHARACTER_DATA, errors.New("no data found in response"), map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.CHARACTER_ID:  characterId,
-			logging.REASON:        "no_api_data",
+			logging.REASON:        "no_data",
 		})
-		return nil
-	}
-	character := result.Data
-
-	if character == nil || character.Character == nil || character.Character.Data == nil {
-		logger.Warn(CHARACTER_NOT_FOUND, nil, map[string]any{
+		return false, nil
+	} else if data.Character == nil || data.Character.Data == nil {
+		logger.Warn(NO_PLAYER_CHARACTER_DATA, errors.New("no character data found in response"), map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.CHARACTER_ID:  characterId,
 			logging.REASON:        "no_character_data",
 		})
-		return nil
+		return false, nil
 	}
 
-	charData := character.Character.Data
+	charData := data.Character.Data
 
 	// Update instance_character table with missing data
 	if err := updateInstanceCharacter(instanceId, membershipId, characterId, charData.ClassHash, charData.EmblemHash); err != nil {
@@ -94,7 +101,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 			"class_hash":          charData.ClassHash,
 			"emblem_hash":         charData.EmblemHash,
 		})
-		return err
+		return false, err
 	}
 
 	logger.Debug("CHARACTER_FILL_COMPLETE", map[string]any{
@@ -103,7 +110,7 @@ func Fill(membershipId int64, characterId int64, instanceId int64) error {
 		logging.STATUS:       "success",
 	})
 
-	return nil
+	return true, nil
 }
 
 func updateInstanceCharacter(instanceId int64, membershipId int64, characterId int64, classHash uint32, emblemHash uint32) error {

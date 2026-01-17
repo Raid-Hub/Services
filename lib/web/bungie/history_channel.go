@@ -1,6 +1,7 @@
 package bungie
 
 import (
+	"context"
 	"fmt"
 	"raidhub/lib/utils/logging"
 	"sync"
@@ -21,18 +22,14 @@ type ActivityHistoryResult struct {
 
 // GetActivityHistoryInChannel fetches activity history pages and sends instance IDs to the output channel.
 // Returns an ActivityHistoryResult indicating if a privacy error occurred.
-func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) ActivityHistoryResult {
+func (c *BungieClient) GetActivityHistoryInChannel(ctx context.Context, membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) ActivityHistoryResult {
 	// Fetch first page to check for privacy errors
-	result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, 0, 4)
-	if err != nil {
+	result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, 0, 4)
+	if result.BungieErrorCode == DestinyPrivacyRestriction {
+		return ActivityHistoryResult{PrivacyErrorCode: result.BungieErrorCode}
+	} else if err != nil {
 		return ActivityHistoryResult{Error: err}
-	}
-
-	// Check for privacy restriction on first page
-	if !result.Success || result.Data == nil {
-		if result.BungieErrorCode == DestinyPrivacyRestriction {
-			return ActivityHistoryResult{PrivacyErrorCode: result.BungieErrorCode}
-		}
+	} else if result.Data == nil {
 		return ActivityHistoryResult{Error: fmt.Errorf("failed to fetch first page of activity history: %s [%d]", result.BungieErrorStatus, result.BungieErrorCode)}
 	}
 
@@ -54,7 +51,7 @@ func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershi
 			for {
 				select {
 				case page := <-pageChan:
-					result, err := c.GetActivityHistoryPage(membershipType, membershipId, characterId, 250, page, 4)
+					result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, page, 4)
 					if err != nil {
 						logger.Warn(API_ERROR, err, map[string]any{
 							logging.OPERATION: "fetch_activity_history",
@@ -63,7 +60,7 @@ func (c *BungieClient) GetActivityHistoryInChannel(membershipType int, membershi
 					}
 
 					// Stop if no success, no data, or no activities
-					if !result.Success || result.Data == nil || len(result.Data.Activities) == 0 {
+					if result.Data == nil || len(result.Data.Activities) == 0 {
 						select {
 						case done <- true:
 						default:

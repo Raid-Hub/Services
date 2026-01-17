@@ -1,7 +1,10 @@
 package pgcr_processing
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	netUrl "net/url"
 	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/utils/network"
@@ -10,9 +13,15 @@ import (
 )
 
 // fetchPGCR handles the HTTP request to Bungie API and processes error responses
-func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageReport) {
+// malformedRetryCount is optional - if > 0, adds "malformed_retry" query parameter
+func FetchPGCR(ctx context.Context, instanceID int64, malformedRetryCount int) (PGCRResult, *bungie.DestinyPostGameCarnageReport) {
+	var queryParams netUrl.Values
+	if malformedRetryCount > 0 {
+		queryParams = netUrl.Values{}
+		queryParams.Set("malformed_retry", fmt.Sprintf("%d", malformedRetryCount))
+	}
 	start := time.Now()
-	resp, err := bungie.PGCRClient.GetPGCR(instanceID)
+	resp, err := bungie.PGCRClient.GetPGCR(ctx, instanceID, queryParams)
 	duration := float64(time.Since(start).Milliseconds())
 
 	// Record metric for all responses
@@ -22,13 +31,12 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 		global_metrics.GetPostGameCarnageReportRequest.WithLabelValues(resp.BungieErrorStatus).Observe(duration)
 	}
 
-	if !resp.Success {
-		fields := map[string]any{
-			logging.INSTANCE_ID:       instanceID,
-			logging.BUNGIE_ERROR_CODE: resp.BungieErrorCode,
-			logging.STATUS_CODE:       resp.HttpStatusCode,
-		}
-
+	fields := map[string]any{
+		logging.INSTANCE_ID:       instanceID,
+		logging.BUNGIE_ERROR_CODE: resp.BungieErrorCode,
+		logging.STATUS_CODE:       resp.HttpStatusCode,
+	}
+	if err != nil {
 		// Handle Bungie error codes
 		switch resp.BungieErrorCode {
 		case bungie.PGCRNotFound:
@@ -42,8 +50,13 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 		case bungie.InsufficientPrivileges:
 			logger.Info("PGCR_INSUFFICIENT_PRIVILEGES", fields)
 			return InsufficientPrivileges, nil
+
+		// Transient errors, worth warning about
 		case bungie.DestinyThrottledByGameServer:
 			logger.Warn("PGCR_THROTTLED_BY_GAME_SERVER", err, fields)
+			return ExternalError, nil
+		case bungie.UnhandledException:
+			logger.Warn("PGCR_UNHANDLED_EXCEPTION", err, fields)
 			return ExternalError, nil
 		}
 
@@ -62,6 +75,12 @@ func FetchPGCR(instanceID int64) (PGCRResult, *bungie.DestinyPostGameCarnageRepo
 
 		logUnexpectedError(fields, err)
 		return ExternalError, nil
+	}
+
+	// Check if Data is nil (can happen if API returns Response: null)
+	if resp.Data == nil {
+		logger.Warn("PGCR_DATA_NIL", nil, fields)
+		return BadFormat, nil
 	}
 
 	return Success, resp.Data

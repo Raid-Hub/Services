@@ -37,10 +37,11 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 		startTime := time.Now()
 		notFoundCount := 0
 		errCount := 0
+		malformedRetryCount := 0
 		i := 0
 
 		for {
-			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceID, malformedRetryCount)
 
 			statusStr := fmt.Sprintf("%d", result)
 			attemptsStr := fmt.Sprintf("%d", i+1)
@@ -91,21 +92,26 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				time.Sleep(60 * time.Second)
 				continue
 			} else if result == pgcr_processing.InsufficientPrivileges {
-				publishing.PublishJSONMessage(context.Background(), routing.PGCRRetry, fmt.Sprintf("%d", instanceID))
+				publishing.PublishInt64Message(context.Background(), routing.PGCRRetry, instanceID)
 				break
+
+			} else if result == pgcr_processing.BadFormat {
+				instance_storage.WriteMissedLog(instanceID)
+				malformedRetryCount++
 			} else if result == pgcr_processing.BadFormat || result == pgcr_processing.ExternalError {
 				instance_storage.WriteMissedLog(instanceID)
-				if errCount > 0 {
-					w.offloadChannel <- instanceID
-					break
-				} else {
-					errCount++
-				}
+				errCount++
 			}
 
 			// If we have not found the instance id after some time
-			if notFoundCount > 3 || errCount > 2 {
+			if notFoundCount > 3 || errCount > 2 || malformedRetryCount > 2 {
 				instance_storage.WriteMissedLog(instanceID)
+				w.Info("WRITING_TO_OFFLOAD_CHANNEL", map[string]any{
+					logging.INSTANCE_ID:     instanceID,
+					"not_found_count":       notFoundCount,
+					"err_count":             errCount,
+					"malformed_retry_count": malformedRetryCount,
+				})
 				w.offloadChannel <- instanceID
 				break
 			}

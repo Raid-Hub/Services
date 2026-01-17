@@ -1,6 +1,7 @@
 package bungie
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -127,8 +128,8 @@ func (gm *globalAPIMonitor) updateAllSystems() {
 	gm.updateMutex.Lock()
 	defer gm.updateMutex.Unlock()
 
-	result, err := Client.GetCommonSettings()
-	if !result.Success || err != nil {
+	result, err := Client.GetCommonSettings(context.Background())
+	if err != nil {
 		globalMonitorLogger.Error("BUNGIE_SETTINGS_CHECK_ERROR", err, map[string]any{
 			logging.BUNGIE_ERROR_CODE: result.BungieErrorCode,
 			logging.ERROR_STATUS:      result.BungieErrorStatus,

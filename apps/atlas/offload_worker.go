@@ -11,6 +11,7 @@ import (
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/sentry"
 )
 
 var offloadLogger = logging.NewLogger("atlas::offloadWorker")
@@ -18,11 +19,13 @@ var offloadLogger = logging.NewLogger("atlas::offloadWorker")
 func offloadWorker(consumerConfig *ConsumerConfig) {
 	for id := range consumerConfig.OffloadChannel {
 		// Spawn a worker for each instanceId
-		go func(instanceId int64) {
+		instanceId := id // Capture for closure
+		sentry.Go(func() {
 			time.Sleep(15 * time.Second)
+			malformedRetryCount := 0
 			startTime := time.Now()
 			for i := 1; i <= 6; i++ {
-				result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
+				result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceId, malformedRetryCount)
 
 				if result == pgcr_processing.NonRaid {
 					return
@@ -48,8 +51,11 @@ func offloadWorker(consumerConfig *ConsumerConfig) {
 					time.Sleep(60 * time.Second)
 					continue
 				} else if result == pgcr_processing.InsufficientPrivileges {
-					publishing.PublishJSONMessage(context.Background(), routing.PGCRRetry, fmt.Sprintf("%d", instanceId))
+					publishing.PublishInt64Message(context.Background(), routing.PGCRRetry, instanceId)
 					return
+				} else if result == pgcr_processing.BadFormat {
+					malformedRetryCount++
+					continue
 				} else if result == pgcr_processing.ExternalError {
 					i--
 					continue
@@ -64,6 +70,6 @@ func offloadWorker(consumerConfig *ConsumerConfig) {
 			}
 
 			logMissedInstance(instanceId, startTime)
-		}(id)
+		})
 	}
 }

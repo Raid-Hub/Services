@@ -11,6 +11,7 @@ type Player struct {
 	BungieGlobalDisplayName     *string   `json:"bungieGlobalDisplayName"`
 	BungieGlobalDisplayNameCode *string   `json:"bungieGlobalDisplayNameCode"`
 	FirstSeen                   time.Time `json:"firstSeen"` // Not set by default
+	LastCrawled                 time.Time `json:"lastCrawled"`
 	HistoryLastCrawled          time.Time `json:"historyLastCrawled"`
 }
 

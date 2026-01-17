@@ -16,19 +16,18 @@ import (
 // PgcrCrawlTopic creates a new PGCR crawl topic
 func PgcrCrawlTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.PGCRCrawl,
-		MinWorkers:            1,
-		MaxWorkers:            20,
-		DesiredWorkers:        2,
-		ContestWeekendWorkers: 5,
-		KeepInReady:           true,
-		PrefetchCount:         1,
-		ScaleUpThreshold:      100,
-		ScaleDownThreshold:    10,
-		ScaleUpPercent:        0.2,
-		ScaleDownPercent:      0.1,
-		BungieSystemDeps:      []string{"Destiny2"},
-		MaxRetryCount:         20, // Critical - main functionality
+		QueueName:          routing.PGCRCrawl,
+		MinWorkers:         1,
+		MaxWorkers:         20,
+		DesiredWorkers:     2,
+		KeepInReady:        true,
+		PrefetchCount:      1,
+		ScaleUpThreshold:   100,
+		ScaleDownThreshold: 10,
+		ScaleUpPercent:     0.2,
+		ScaleDownPercent:   0.1,
+		BungieSystemDeps:   []string{"Destiny2"},
+		MaxRetryCount:      20, // Critical - main functionality
 	}, processPgcrCrawl)
 }
 
@@ -40,14 +39,16 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 		return err
 	}
 
-	worker.Debug("PGCR_CRAWL_STARTED", map[string]any{logging.INSTANCE_ID: instanceId})
+	fields := map[string]any{
+		logging.INSTANCE_ID: instanceId,
+	}
+
+	worker.Debug("PGCR_CRAWL_STARTED", fields)
 
 	// Check if instance already exists in database
 	exists, err := instance.CheckExists(instanceId)
 	if err != nil {
-		worker.Error("FAILED_TO_CHECK_PGCR_EXISTENCE", err, map[string]any{
-			logging.INSTANCE_ID: instanceId,
-		})
+		worker.Error("FAILED_TO_CHECK_PGCR_EXISTENCE", err, fields)
 		return err
 	}
 
@@ -57,7 +58,7 @@ func processPgcrCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 	}
 
 	// Fetch and process the PGCR from Bungie API
-	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
+	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(worker.Context(), instanceId, 0)
 
 	switch result {
 	case pgcr_processing.Success:

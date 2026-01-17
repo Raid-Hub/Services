@@ -1,8 +1,9 @@
 package main
 
 import (
-	"raidhub/lib/database/postgres"
+	"context"
 	"raidhub/lib/services/cheat_detection"
+	"raidhub/lib/services/instance"
 	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/utils/logging"
 )
@@ -16,41 +17,18 @@ func main() {
 	defer flushSentry()
 	defer recoverSentry()
 
-	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 and completed`, 3896382790)
+	instanceIds, err := instance.GetInstanceIdsByHash(3896382790)
 	if err != nil {
 		logger.Error("ERROR_QUERYING_INSTANCE_TABLE", err, map[string]any{})
+		return
 	}
-	defer rows.Close()
-
-	stmnt, err := postgres.DB.Prepare(
-		`INSERT INTO flag_instance (instance_id, cheat_check_version, cheat_check_bitmask, flagged_at, cheat_probability)
-		VALUES ($1, $2, $3, NOW(), $4)
-		ON CONFLICT DO NOTHING`,
-	)
-	if err != nil {
-		logger.Error("ERROR_PREPARING_INSERT_STATEMENT", err, map[string]any{})
-	}
-	defer stmnt.Close()
-
-	stmnt2, err := postgres.DB.Prepare(`INSERT INTO blacklist_instance (instance_id, report_source, cheat_check_version, reason)
-		VALUES ($1, 'Manual', $2, $3)
-        ON CONFLICT (instance_id)
-		DO UPDATE SET report_source = 'Manual', cheat_check_version = $2, reason = $3, created_at = NOW()`)
-	if err != nil {
-		logger.Error("ERROR_PREPARING_BLACKLIST_INSERT_STATEMENT", err, map[string]any{})
-	}
-	defer stmnt2.Close()
 
 	total := 0
 	badApples := 0
 
-	for rows.Next() {
-		var instanceId int64
-		if err := rows.Scan(&instanceId); err != nil {
-			logger.Error("ERROR_SCANNING_INSTANCE_ID", err, map[string]any{})
-		}
+	for _, instanceId := range instanceIds {
 
-		result, _, _ := pgcr_processing.FetchAndProcessPGCR(instanceId)
+		result, _, _ := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceId, 0)
 		total++
 
 		switch result {
@@ -60,18 +38,18 @@ func main() {
 			logger.Info("INSTANCE_NOT_RESTRICTED", map[string]any{"instance_id": instanceId})
 		default:
 			logger.Info("INSTANCE_UNEXPECTED_RESULT", map[string]any{"instance_id": instanceId, "result": result})
-			result, _, _ = pgcr_processing.FetchAndProcessPGCR(instanceId)
+			result, _, _ = pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceId, 0)
 		}
 
 		if result == pgcr_processing.InsufficientPrivileges {
 			badApples++
-			_, err = stmnt.Exec(instanceId, cheatCheckVersion, cheat_detection.RestrictedPGCR|cheat_detection.DesertPerpetual, 1.0)
+			err = cheat_detection.FlagInstanceManually(instanceId, cheatCheckVersion, cheat_detection.RestrictedPGCR|cheat_detection.DesertPerpetual, 1.0)
 			if err != nil {
 				logger.Warn("ERROR_FLAGGING_INSTANCE", err, map[string]any{"instance_id": instanceId})
 			} else {
 				logger.Info("INSTANCE_FLAGGED_AS_RESTRICTED", map[string]any{"instance_id": instanceId})
 			}
-			_, err = stmnt2.Exec(instanceId, cheatCheckVersion, "Restricted PGCR")
+			err = cheat_detection.BlacklistInstanceManually(instanceId, cheatCheckVersion, "Restricted PGCR")
 			if err != nil {
 				logger.Warn("ERROR_BLACKLISTING_INSTANCE", err, map[string]any{"instance_id": instanceId})
 			} else {

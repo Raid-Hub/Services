@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"raidhub/lib/monitoring/atlas_metrics"
+	"raidhub/lib/utils/sentry"
 )
 
 var workers = 0
@@ -27,10 +28,10 @@ func run(latestId int64, devSkip int, maxWorkersValue int) {
 	atlas_metrics.ActiveWorkers.Set(float64(workers))
 
 	// Start a goroutine to offload malformed or slowly resolving PGCRs
-	go offloadWorker(&consumerConfig)
+	sentry.Go(func() { offloadWorker(&consumerConfig) })
 
 	// check for gaps
-	go gapCheckWorker(&consumerConfig)
+	sentry.Go(func() { gapCheckWorker(&consumerConfig) })
 
 	periodLength := 10_000
 	for {
@@ -104,7 +105,7 @@ func spawnWorkers(countWorkers int, periodLength int, consumerConfig *ConsumerCo
 	wg.Add(countWorkers)
 	for i := 0; i < countWorkers; i++ {
 		worker := NewAtlasWorker(i, consumerConfig.OffloadChannel)
-		go worker.Run(&wg, ids)
+		sentry.Go(func() { worker.Run(&wg, ids) })
 	}
 
 	// Pass IDs to workers

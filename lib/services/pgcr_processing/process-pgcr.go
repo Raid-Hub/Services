@@ -1,6 +1,7 @@
 package pgcr_processing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"raidhub/lib/dto"
@@ -28,8 +29,8 @@ const (
 )
 
 // From an id, fetch the PGCR and process it into an Instance, returning the result, the instance, and the raw PGCR
-func FetchAndProcessPGCR(instanceID int64) (PGCRResult, *dto.Instance, *bungie.DestinyPostGameCarnageReport) {
-	result, rawPGCR := FetchPGCR(instanceID)
+func FetchAndProcessPGCR(ctx context.Context, instanceID int64, malformedRetryCount int) (PGCRResult, *dto.Instance, *bungie.DestinyPostGameCarnageReport) {
+	result, rawPGCR := FetchPGCR(ctx, instanceID, malformedRetryCount)
 	if result != Success {
 		return result, nil, nil
 	}
@@ -68,15 +69,33 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 		return nil, true, fmt.Errorf("malformed pgcr: invalid entry length: %d != %d", actualEntryCount, expectedEntryCount)
 	}
 
+	entriesMissingExtended := 0
+	entriesWithExtended := 0
 	noOnePlayed := true
 	for _, e := range report.Entries {
 		if getStat(e.Values, "activityDurationSeconds") != 0 {
 			noOnePlayed = false
 			break
 		}
+		if e.Player.DestinyUserInfo.MembershipId == 0 {
+			return nil, false, errors.New("malformed pgcr: player has no membership id")
+		}
+
+		if e.Extended == nil {
+			entriesMissingExtended++
+		} else {
+			entriesWithExtended++
+		}
 	}
 	if noOnePlayed {
 		return nil, false, errors.New("malformed pgcr: no one had any duration_seconds")
+	}
+
+	// Check for malformed PGCR: entries with null extended data
+	if entriesMissingExtended == len(report.Entries) {
+		return nil, true, errors.New("malformed pgcr: all entries missing extended data")
+	} else if entriesMissingExtended > 0 {
+		return nil, true, errors.New("malformed pgcr: mixed entries with and without extended data")
 	}
 
 	completionReason := getStat(report.Entries[0].Values, "completionReason")

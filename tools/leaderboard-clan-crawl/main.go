@@ -237,7 +237,7 @@ func fetchClansForPlayers(ctx context.Context, players []PlayerTransport, concur
 
 func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]bungie.GroupV2, error) {
 	for attempt := 0; attempt < 4; attempt++ {
-		result, err := bungie.Client.GetGroupsForMember(player.membershipType, player.membershipId)
+		result, err := bungie.Client.GetGroupsForMember(ctx, player.membershipType, player.membershipId)
 		if err != nil {
 			logger.Warn("GET_GROUPS_ERROR", err, map[string]any{
 				logging.MEMBERSHIP_ID: player.membershipId,
@@ -246,7 +246,7 @@ func fetchPlayerGroups(ctx context.Context, player PlayerTransport) (map[int64]b
 			time.Sleep(time.Second * time.Duration((attempt+1)*2))
 			continue
 		}
-		if !result.Success || result.Data == nil {
+		if result.Data == nil {
 			return nil, nil
 		}
 
@@ -469,8 +469,13 @@ func processClan(ctx context.Context, tx *sql.Tx, upsertClan, insertMember *sql.
 }
 
 func fetchClanMembersPage(ctx context.Context, groupId int64, page int) ([]bungie.GroupMember, bool, error) {
-	for attempt := 0; attempt < 4; attempt++ {
-		result, err := bungie.Client.GetMembersOfGroup(groupId, page)
+	for attempt := range 4 {
+		result, err := bungie.Client.GetMembersOfGroup(context.Background(), groupId, page)
+
+		if result.BungieErrorCode == bungie.GroupNotFound {
+			return nil, false, nil
+		}
+
 		if err != nil {
 			if attempt < 3 {
 				time.Sleep(time.Second * time.Duration((attempt+1)*2))
@@ -478,11 +483,7 @@ func fetchClanMembersPage(ctx context.Context, groupId int64, page int) ([]bungi
 			continue
 		}
 
-		if result.BungieErrorCode == bungie.GroupNotFound {
-			return nil, false, nil
-		}
-
-		if !result.Success || result.Data == nil {
+		if result.Data == nil {
 			return nil, false, nil
 		}
 

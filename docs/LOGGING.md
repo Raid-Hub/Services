@@ -512,6 +512,49 @@ var logger = logging.NewLogger("SERVICE_NAME")
 
 All logs are structured using logfmt format for easy querying and analysis. Logs respect the configured log level and can be redirected to files via `STDOUT` and `STDERR` environment variables.
 
+## Sentry Integration
+
+### Sentry Tags via `$` Prefix
+
+Fields prefixed with `$` in log entries are automatically converted to Sentry tags for better filtering and alerting. This allows you to add high-cardinality fields (like queue names) as tags without cluttering the "extra" data.
+
+**Usage**:
+
+```go
+logger.Error("PROCESSING_ERROR", err, map[string]any{
+    "$queue": "player_crawl",        // Becomes Sentry tag "queue"
+    "membership_id": membershipId,   // Remains in "extra" data
+    "retry_count": 3,                // Remains in "extra" data
+})
+```
+
+**Behavior**:
+
+- Fields with `$` prefix are extracted and set as Sentry tags
+- The `$` prefix is removed from the tag name (e.g., `$queue` becomes tag `queue`)
+- Tag fields are removed from the "extra" data to avoid duplication
+- Tags are useful for filtering and grouping errors in Sentry
+- Use tags for low-cardinality fields that you want to filter by (queue names, worker IDs, etc.)
+- Use regular fields for high-cardinality or detailed data that should remain in "extra"
+
+**Example**:
+
+```go
+// In worker.go
+fields := map[string]any{
+    "$queue": w.QueueName,           // Tag in Sentry
+    "membership_id": membershipId,   // Extra data in Sentry
+    "retry_count": retryCount,       // Extra data in Sentry
+}
+logger.Error("MESSAGE_PROCESSING_ERROR", err, fields)
+```
+
+**Note**: The `$queue` constant is defined in `lib/utils/sentry` for consistency, but any field starting with `$` will be treated as a tag.
+
+### Context Cancellation Errors
+
+`ContextCancelledError` (from retry operations) is automatically excluded from Sentry reporting since it's an expected condition when workers are shutting down or being scaled in. These errors are still logged but won't trigger Sentry alerts.
+
 ## Loki / Promtail / Grafana
 
 ### Local Development (Docker)

@@ -2,10 +2,13 @@ package bungie
 
 const (
 	Success                      = 1
-	SystemDisabled               = 5   // System is currently disabled
-	InsufficientPrivileges       = 12  // Used when PGCRs are blocked by Bungie
-	InvalidParameters            = 18  // Invalid input parameters
-	GroupNotFound                = 686 // Clan not found
+	UnhandledException           = 3    // Transient error - retryable
+	SystemDisabled               = 5    // System is currently disabled
+	ParameterInvalidRange        = 8    // Parameter outside valid range (e.g., invalid membership ID)
+	InsufficientPrivileges       = 12   // Used when PGCRs are blocked by Bungie
+	InvalidParameters            = 18   // Invalid input parameters
+	GroupNotFound                = 686  // Clan not found
+	DestinyAccountNotFound       = 1601 // Account not found
 	CharacterNotFound            = 1620
 	PGCRNotFound                 = 1653 // Standard 404 error for PGCRs
 	DestinyPrivacyRestriction    = 1665 // Privated resource

@@ -2,6 +2,7 @@ package player
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,20 +11,22 @@ import (
 	"raidhub/lib/web/bungie"
 )
 
+const NO_PLAYER_PROFILE_DATA = "NO_PLAYER_PROFILE_DATA"
+
 // Crawl fetches and processes player data
-func Crawl(ctx context.Context, membershipId int64) error {
+func Crawl(ctx context.Context, membershipId int64) (bool, error) {
 	// Get player from database
 	p, err := GetPlayer(membershipId)
 	if err != nil {
 		logger.Warn("PLAYER_GET_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
-		return err
+		return false, err
 	}
 
 	// If player doesn't exist or needs update, fetch from Bungie API
 	if p != nil && !(needsUpdate(*p)) {
-		return nil
+		return false, nil
 	}
 	logger.Debug("PLAYER_CRAWL_START", map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
@@ -31,48 +34,60 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	})
 	var result bungie.BungieHttpResult[bungie.DestinyProfileResponse]
 
-	var knownType *int
+	var knownType int
 	if p != nil && p.MembershipType != nil {
-		knownType = p.MembershipType
+		knownType = *p.MembershipType
 	}
-	_, result, err = bungie.ResolveProfile(membershipId, knownType)
+
+	_, result, err = bungie.ResolveProfile(ctx, membershipId, knownType)
 
 	if err != nil {
 		logger.Warn("BUNGIE_PROFILE_FETCH_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
-		return err
-	}
-	if !result.Success || result.Data == nil {
-		logger.Warn("NO_PROFILE_DATA", nil, map[string]any{
-			logging.MEMBERSHIP_ID: membershipId,
-			logging.REASON:        "bungie_api_empty_response",
-		})
-		if result.BungieErrorCode != bungie.Success {
-			return fmt.Errorf("bungie error: %s [%d]", result.BungieErrorStatus, result.BungieErrorCode)
+		if result.BungieErrorCode == bungie.DestinyAccountNotFound || result.BungieErrorCode == bungie.ParameterInvalidRange {
+			// Invalid membership ID - drop with warning
+			logger.Warn("INVALID_MEMBERSHIP_ID", err, map[string]any{
+				logging.MEMBERSHIP_ID:     membershipId,
+				logging.BUNGIE_ERROR_CODE: result.BungieErrorCode,
+			})
+			return false, nil
 		}
-		return fmt.Errorf("bungie api returned unsuccessful response")
+		if !bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
+			return false, processing.NewUnretryableError(err)
+		}
+		return false, err
 	}
-	profile := result.Data
 
-	// Extract user info from profile
-	if profile.Profile.Data == nil {
-		logger.Warn("NO_PROFILE_DATA", nil, map[string]any{
+	data := result.Data
+	if data == nil || data.Profile.Data == nil || data.Characters.Data == nil {
+		logger.Warn(NO_PLAYER_PROFILE_DATA, errors.New("no data found in response"), map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-			logging.REASON:        "empty_profile_data",
+			logging.REASON:        "no_data",
 		})
-		return nil
+		return false, nil
+	} else if data.Profile.Data == nil || data.Characters.Data == nil {
+		logger.Warn(NO_PLAYER_PROFILE_DATA, errors.New("no profiles component data found in response"), map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.REASON:        "no_profile_data",
+		})
+		return false, nil
+	} else if data.Characters.Data == nil {
+		logger.Warn(NO_PLAYER_PROFILE_DATA, errors.New("no characters component data found in response"), map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			logging.REASON:        "no_characters_data",
+		})
+		return false, nil
 	}
-
-	userInfo := profile.Profile.Data.UserInfo
 	now := time.Now()
 
 	// Find icon path from most recently played character
 	var iconPath *string = nil
 	var mostRecentDate time.Time = time.Time{}
 
-	if profile.Characters.Data != nil {
-		for _, character := range *profile.Characters.Data {
+	userInfo := data.Profile.Data.UserInfo
+	if data.Characters.Data != nil {
+		for _, character := range *data.Characters.Data {
 			if iconPath == nil || character.DateLastPlayed.After(mostRecentDate) {
 				icon := character.EmblemPath
 				iconPath = &icon
@@ -87,10 +102,10 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	}
 
 	// Determine first_seen from oldest activity and check privacy (default to now for new players)
-	firstSeen, isPrivate, err := getFirstSeenAndPrivacy(userInfo.MembershipType, membershipId, profile.Characters.Data, now)
+	firstSeen, isPrivate, err := getFirstSeenAndPrivacy(ctx, userInfo.MembershipType, membershipId, data.Characters.Data, now)
 	if err != nil {
 		// Return error so worker can retry (transient) or mark as unretryable
-		return err
+		return false, err
 	}
 
 	// Create or update player
@@ -101,7 +116,7 @@ func Crawl(ctx context.Context, membershipId int64) error {
 		IconPath:                    iconPath,
 		BungieGlobalDisplayName:     userInfo.BungieGlobalDisplayName,
 		BungieGlobalDisplayNameCode: bungie.FixBungieGlobalDisplayNameCode(userInfo.BungieGlobalDisplayNameCode),
-		LastSeen:                    now,
+		LastSeen:                    mostRecentDate,
 		FirstSeen:                   firstSeen, // SQL will preserve existing first_seen via LEAST() for updates
 	}
 
@@ -110,7 +125,7 @@ func Crawl(ctx context.Context, membershipId int64) error {
 		logger.Warn("PLAYER_UPSERT_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
-		return err
+		return false, err
 	}
 	fields := map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
@@ -132,18 +147,18 @@ func Crawl(ctx context.Context, membershipId int64) error {
 	}
 
 	// Update privacy status if it changed
-	if profile.Characters.Data != nil && len(*profile.Characters.Data) > 0 {
+	if data.Characters.Data != nil && len(*data.Characters.Data) > 0 {
 		checkAndUpdatePrivacy(membershipId, isPrivate)
 	}
 
-	return nil
+	return true, nil
 }
 
 // getFirstSeenAndPrivacy fetches activity history once and determines both:
 // - first_seen time from the oldest activity
 // - privacy status from the API response
 // Returns error if the request failed and should be retried (transient) or failed permanently (unretryable)
-func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersData *map[int64]bungie.DestinyCharacterComponent, defaultTime time.Time) (time.Time, bool, error) {
+func getFirstSeenAndPrivacy(ctx context.Context, membershipType int, membershipId int64, charactersData *map[int64]bungie.DestinyCharacterComponent, defaultTime time.Time) (time.Time, bool, error) {
 	if charactersData == nil || len(*charactersData) == 0 {
 		return defaultTime, false, nil
 	}
@@ -156,25 +171,11 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 	}
 
 	// Fetch activities to determine first_seen and check privacy (single API call)
-	historyResult, err := bungie.Client.GetActivityHistoryPage(membershipType, membershipId, firstCharacterId, 250, 0, bungie.ModeStory)
+	historyResult, err := bungie.Client.GetActivityHistoryPage(ctx, membershipType, membershipId, firstCharacterId, 250, 0, bungie.ModeStory)
 	// Check privacy from API response
 	if historyResult.BungieErrorCode == bungie.DestinyPrivacyRestriction {
 		// Privacy restriction error - history is private (not an error, just private)
 		return defaultTime, true, nil
-	} else if historyResult.Success {
-		// Determine first_seen from oldest activity
-		if historyResult.Data != nil && len(historyResult.Data.Activities) > 0 {
-			activities := historyResult.Data.Activities
-			// Activities are ordered newest first, so the last one is the oldest
-			oldestActivity := activities[len(activities)-1]
-			firstSeen, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
-			if parseErr != nil {
-				return defaultTime, false, parseErr
-			}
-			return firstSeen, false, nil
-		}
-		// No activities found, but call was successful
-		return defaultTime, false, nil
 	} else if err != nil {
 		logFields := map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -190,27 +191,31 @@ func getFirstSeenAndPrivacy(membershipType int, membershipId int64, charactersDa
 		logger.Warn("ACTIVITY_HISTORY_FETCH_FAILED", err, logFields)
 		return defaultTime, false, err
 	} else {
-		// Unsuccessful request, but err is nil: treat as unretryable error and log
-		logFields := map[string]any{
-			logging.MEMBERSHIP_ID: membershipId,
-			"bungie_error_code":   historyResult.BungieErrorCode,
-			"http_status_code":    historyResult.HttpStatusCode,
+		// Determine first_seen from oldest activity
+		if historyResult.Data != nil && len(historyResult.Data.Activities) > 0 {
+			activities := historyResult.Data.Activities
+			// Activities are ordered newest first, so the last one is the oldest
+			oldestActivity := activities[len(activities)-1]
+			firstSeen, parseErr := time.Parse(time.RFC3339, oldestActivity.Period)
+			if parseErr != nil {
+				return defaultTime, false, parseErr
+			}
+			return firstSeen, false, nil
 		}
-		errMsg := fmt.Errorf("activity history fetch failed: BungieErrorCode=%d, HttpStatusCode=%d", historyResult.BungieErrorCode, historyResult.HttpStatusCode)
-		logger.Error("ACTIVITY_HISTORY_FETCH_ERROR", errMsg, logFields)
-		return defaultTime, false, processing.NewUnretryableError(errMsg)
+		// No activities found, but call was successful
+		return defaultTime, false, nil
 	}
 }
 
 // needsUpdate checks if player data needs to be refreshed
 func needsUpdate(p Player) bool {
-	// Update if never crawled or last crawled more than a day ago
-	needs := p.HistoryLastCrawled.IsZero() ||
-		time.Since(p.HistoryLastCrawled) > 24*time.Hour
+	// Update if never crawled or last crawled more than an hour ago
+	needs := p.LastCrawled.IsZero() ||
+		time.Since(p.LastCrawled) > 1*time.Hour
 	if needs {
 		logger.Debug("PLAYER_NEEDS_UPDATE", map[string]any{
-			logging.MEMBERSHIP_ID:  p.MembershipId,
-			"history_last_crawled": p.HistoryLastCrawled,
+			logging.MEMBERSHIP_ID: p.MembershipId,
+			"last_crawled":        p.LastCrawled,
 		})
 	}
 	return needs

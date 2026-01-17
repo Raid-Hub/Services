@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"raidhub/lib/database/postgres"
@@ -15,18 +16,20 @@ var logger = logging.NewLogger("PLAYER_SERVICE")
 // GetPlayer retrieves a player by membership ID
 func GetPlayer(membershipId int64) (*Player, error) {
 	query := `
-		SELECT membership_id, membership_type, display_name, history_last_crawled
+		SELECT membership_id, membership_type, display_name, last_crawled, history_last_crawled
 		FROM player
 		WHERE membership_id = $1
 	`
 
 	var p Player
 	var membershipType *int
+	var lastCrawled *time.Time
 	var historyLastCrawled *time.Time
 	err := postgres.DB.QueryRow(query, membershipId).Scan(
 		&p.MembershipId,
 		&membershipType,
 		&p.DisplayName,
+		&lastCrawled,
 		&historyLastCrawled,
 	)
 	if err != nil {
@@ -38,6 +41,9 @@ func GetPlayer(membershipId int64) (*Player, error) {
 
 	if membershipType != nil {
 		p.MembershipType = membershipType
+	}
+	if lastCrawled != nil {
+		p.LastCrawled = *lastCrawled
 	}
 	if historyLastCrawled != nil {
 		p.HistoryLastCrawled = *historyLastCrawled
@@ -52,14 +58,11 @@ func CreateOrUpdatePlayer(p *Player) (*Player, bool, error) {
 	now := time.Now()
 
 	// Set default values for required fields if not provided
-	lastSeen := p.LastSeen
-	if lastSeen.IsZero() {
-		lastSeen = now
-	}
 	firstSeen := p.FirstSeen
 	if firstSeen.IsZero() {
 		firstSeen = now
 	}
+	lastSeen := p.LastSeen
 
 	// Check if player exists
 	var exists bool
@@ -220,43 +223,21 @@ func GetPlayersNeedingHistoryUpdate(limit int) ([]int64, error) {
 
 // GetPlayerCharacters retrieves all character IDs for a player from their profile
 // This function fetches character IDs from the Bungie API profile response
-func GetPlayerCharacters(membershipId int64) ([]Character, error) {
-	// Get membership type - try common membership types to find the correct one
-	membershipType := 0
-	membershipTypes := bungie.AllViableMembershipTypes
-
-	for _, mt := range membershipTypes {
-		result, err := bungie.Client.GetLinkedProfiles(mt, membershipId, true)
-		if err != nil {
-			continue
-		}
-		if !result.Success || result.Data == nil {
-			continue
-		}
-
-		// Check if any profile matches our membership ID
-		for _, profile := range result.Data.Profiles {
-			if profile.MembershipId == membershipId {
-				membershipType = profile.MembershipType
-				break
-			}
-		}
-
-		if membershipType != 0 {
-			break
-		}
+func GetPlayerCharacters(ctx context.Context, membershipId int64) ([]Character, error) {
+	// Try to get membership type from database first
+	var knownType int
+	var membershipType *int
+	err := postgres.DB.QueryRow("SELECT membership_type FROM player WHERE membership_id = $1", membershipId).Scan(&membershipType)
+	if err == nil && membershipType != nil {
+		knownType = *membershipType
 	}
 
-	if membershipType == 0 {
-		return nil, fmt.Errorf("could not determine membership type for membership ID: %d", membershipId)
-	}
-
-	// Fetch profile from Bungie API to get character IDs
-	result, err := bungie.Client.GetProfile(membershipType, membershipId, []int{100})
+	// Use ResolveProfile to get the profile (handles membership type resolution efficiently)
+	_, result, err := bungie.ResolveProfile(ctx, membershipId, knownType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch profile: %w", err)
+		return nil, fmt.Errorf("failed to resolve profile: %w", err)
 	}
-	if !result.Success || result.Data == nil {
+	if result.Data == nil {
 		return nil, fmt.Errorf("bungie api returned unsuccessful response")
 	}
 

@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"context"
 	"errors"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/utils/logging"
@@ -83,9 +84,9 @@ func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
 		})
 
 		// Try to fetch PGCR at mid point
-		result, _ := bungie.Client.GetPGCR(mid)
+		result, err := bungie.Client.GetPGCR(context.Background(), mid, nil) // GetPGCR still uses netUrl.Values
 
-		if result.Success {
+		if err == nil {
 			// PGCR exists, this is a valid instance ID
 			latestFound = mid
 			// Search in the upper half (higher instance IDs)
@@ -115,4 +116,23 @@ func GetLatestInstanceIdFromWeb(buffer int64) (int64, error) {
 	})
 
 	return latestFound - buffer, nil
+}
+
+// GetInstanceIdsByHash returns instance IDs for instances matching the given hash that are completed
+func GetInstanceIdsByHash(hash int64) ([]int64, error) {
+	rows, err := postgres.DB.Query(`SELECT instance_id FROM instance WHERE hash = $1 AND completed`, hash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var instanceIds []int64
+	for rows.Next() {
+		var instanceId int64
+		if err := rows.Scan(&instanceId); err != nil {
+			return nil, err
+		}
+		instanceIds = append(instanceIds, instanceId)
+	}
+	return instanceIds, rows.Err()
 }

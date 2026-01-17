@@ -14,9 +14,11 @@ type NetworkError struct {
 type NetworkErrorType string
 
 const (
-	ErrorTypeTimeout    NetworkErrorType = "timeout"
-	ErrorTypeConnection NetworkErrorType = "connection"
-	ErrorTypeUnknown    NetworkErrorType = "unknown"
+	ErrorTypeTimeout     NetworkErrorType = "timeout"
+	ErrorTypeCloudflare  NetworkErrorType = "cloudflare"
+	ErrorTypeConnection  NetworkErrorType = "connection"
+	ErrorTypeServerError NetworkErrorType = "server_error"
+	ErrorTypeUnknown     NetworkErrorType = "unknown"
 )
 
 // CategorizeNetworkError analyzes an error and returns a NetworkError with appropriate category
@@ -27,6 +29,15 @@ func CategorizeNetworkError(err error) *NetworkError {
 
 	errStr := strings.ToLower(err.Error())
 
+	// Check for Cloudflare errors
+	if strings.Contains(errStr, "cloudflare") {
+		return &NetworkError{
+			Type:    ErrorTypeCloudflare,
+			Message: "Cloudflare error",
+			Err:     err,
+		}
+	}
+
 	// Check for timeout errors
 	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline exceeded") {
 		return &NetworkError{
@@ -35,14 +46,14 @@ func CategorizeNetworkError(err error) *NetworkError {
 			Err:     err,
 		}
 	}
-
 	// Check for connection errors
 	if strings.Contains(errStr, "connection refused") ||
 		strings.Contains(errStr, "connection reset") ||
 		strings.Contains(errStr, "no such host") ||
 		strings.Contains(errStr, "connection closed") ||
 		strings.Contains(errStr, "broken pipe") ||
-		strings.Contains(errStr, "network is unreachable") {
+		strings.Contains(errStr, "network is unreachable") ||
+		strings.Contains(errStr, "unexpected eof") {
 		return &NetworkError{
 			Type:    ErrorTypeConnection,
 			Message: "Connection error",
@@ -50,10 +61,21 @@ func CategorizeNetworkError(err error) *NetworkError {
 		}
 	}
 
+	// Check for retryable server errors (502, 504, 520) - but not 503 (system disabled)
+	// 503 Service Unavailable typically means system disabled, which is not retryable
+	if strings.Contains(errStr, "502") || strings.Contains(errStr, "504") || strings.Contains(errStr, "520") ||
+		strings.Contains(errStr, "bad gateway") || strings.Contains(errStr, "gateway timeout") {
+		return &NetworkError{
+			Type:    ErrorTypeServerError,
+			Message: "Server error (5xx)",
+			Err:     err,
+		}
+	}
+
 	// Unknown error
 	return &NetworkError{
 		Type:    ErrorTypeUnknown,
-		Message: "Network error",
+		Message: "",
 		Err:     err,
 	}
 }
@@ -70,11 +92,10 @@ func IsConnectionError(err error) bool {
 	return netErr != nil && netErr.Type == ErrorTypeConnection
 }
 
-// ShouldRetry determines if an error is retryable
-// Timeout and connection errors are typically retryable
-func ShouldRetry(err error) bool {
+// IsCloudflareError checks if an error is a Cloudflare error
+func IsCloudflareError(err error) bool {
 	netErr := CategorizeNetworkError(err)
-	return netErr != nil && (netErr.Type == ErrorTypeTimeout || netErr.Type == ErrorTypeConnection)
+	return netErr != nil && netErr.Type == ErrorTypeCloudflare
 }
 
 // Unwrap implements the unwrap interface for error wrapping

@@ -363,6 +363,84 @@ Each topic can configure a maximum retry count:
 - **Bungie API Errors**: Use `bungie.IsTransientError()` to determine if an error should be retried
 - **Logging**: Include retry count in logs when available for better debugging
 
+### Retry Configuration
+
+The system uses a configurable retry mechanism with exponential backoff and jitter. Retry configurations are defined in `lib/utils/network/retry.go` and `lib/utils/retry/retry.go`.
+
+#### Available Retry Configurations
+
+**TransientNetworkErrorRetryConfig()**: Retries transient network errors (timeouts, connection errors, server errors 5xx)
+- **MaxAttempts**: 3
+- **InitialDelay**: 50ms
+- **MaxDelay**: 5s
+- **Multiplier**: 2.0
+- **Jitter**: 10%
+- **Retries**: Timeout, connection, and server errors (502, 504)
+
+**CloudflareRetryConfig(logger, loggingFields)**: Optimized for Cloudflare blocking errors
+- **MaxAttempts**: 6
+- **InitialDelay**: 3s
+- **MaxDelay**: 120s
+- **Multiplier**: 3.0
+- **Jitter**: 20%
+- **Retries**: Only Cloudflare errors (detected by error message content)
+- **Parameters**:
+  - `logger`: Logger instance for retry attempt logging
+  - `loggingFields`: Map of fields to include in retry logs (fields prefixed with `$` become Sentry tags)
+
+**PublishingRetryConfig**: Used for RabbitMQ message publishing
+- **MaxAttempts**: 5
+- **InitialDelay**: 500ms
+- **MaxDelay**: 5s
+- **Multiplier**: 1.25
+- **Jitter**: 5%
+- **Retries**: Timeout and connection errors
+
+#### Retry Behavior
+
+- **Context Cancellation**: All retry operations respect context cancellation. When a context is cancelled (e.g., worker shutdown), retries are immediately stopped and a `ContextCancelledError` is returned (this error is not sent to Sentry).
+- **Exponential Backoff**: Delays increase exponentially: `delay = initialDelay * multiplier^attempt`
+- **Jitter**: Random variation (±jitter percentage) prevents thundering herd problems
+- **Error Filtering**: Only errors that match the `ShouldRetry` function are retried
+
+#### Usage Example
+
+```go
+import (
+    "context"
+    "raidhub/lib/utils/network"
+    "raidhub/lib/utils/retry"
+)
+
+// Simple retry with transient network errors
+err := retry.WithRetry(ctx, network.TransientNetworkErrorRetryConfig(), func() error {
+    return someNetworkOperation()
+})
+
+// Retry with Cloudflare-specific configuration
+fields := map[string]any{
+    "$queue": queueName,
+    "operation": "get_profile",
+}
+err := retry.WithRetry(ctx, network.CloudflareRetryConfig(logger, fields), func() error {
+    return bungieAPI.GetProfile(...)
+})
+
+// Retry with result
+result, err := retry.WithRetryForResult(ctx, config, func() (ResultType, error) {
+    return someOperation()
+})
+```
+
+#### LoggingFields Parameter
+
+The `loggingFields` parameter in `CloudflareRetryConfig` is used to add context to retry logs:
+
+- Fields are copied to retry attempt logs
+- Fields prefixed with `$` are converted to Sentry tags (see [Sentry Integration](#sentry-integration))
+- The `attempt` number is automatically added to retry logs
+- Example: `{"$queue": "player_crawl", "operation": "get_profile"}` creates tags and extra data in Sentry
+
 ## Data Flow Architecture
 
 ### Primary PGCR Processing Flow
@@ -400,7 +478,8 @@ Services in `lib/services/` are organized by business domain with clear boundari
 
 #### `pgcr_processing/` - PGCR Domain
 
-- **FetchAndProcessPGCR()**: Coordinates API fetch and data transformation
+- **FetchAndProcessPGCR(ctx, instanceID)**: Coordinates API fetch and data transformation (requires context for cancellation)
+- **FetchPGCR(ctx, instanceID)**: Fetches PGCR from Bungie API (requires context for cancellation)
 - **ParsePGCRToInstance()**: Converts Bungie API format to internal structure
 - **CalculateDateCompleted()**: Determines instance completion timestamp
 - **Result Types**: Success, NotFound, NonRaid, SystemDisabled, etc.
@@ -422,11 +501,18 @@ Services in `lib/services/` are organized by business domain with clear boundari
 
 #### `player/` - Player Domain
 
-- **Crawl()**: Fetches player data from Bungie API
-- **UpdateActivityHistory()**: Processes player activity timeline
+- **Crawl(ctx, membershipId)**: Fetches player data from Bungie API (requires context for cancellation)
+- **UpdateActivityHistory(ctx, membershipId)**: Processes player activity timeline (requires context for cancellation)
+- **GetPlayerCharacters(ctx, membershipId)**: Retrieves character IDs from player profile (requires context for cancellation)
 - **Data Management**: Player profiles, characters, statistics
 
 #### `character/` - Character Domain
+
+- **Fill(ctx, membershipId, characterId, instanceId)**: Fetches and fills missing character data (requires context for cancellation)
+
+#### `clan/` - Clan Domain
+
+- **Crawl(ctx, groupId)**: Fetches and processes clan data (requires context for cancellation)
 
 - **Fill()**: Completes missing character information
 
