@@ -98,6 +98,14 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 		return nil, true, errors.New("malformed pgcr: mixed entries with and without extended data")
 	}
 
+	// Check for malformed PGCR: missing activityWasStartedFromBeginning (same heuristic as missing extended)
+	startUnix := startDate.Unix()
+	if startUnix >= witchQueenStart && report.ActivityWasStartedFromBeginning == nil {
+		return nil, true, errors.New("malformed pgcr: missing activityWasStartedFromBeginning")
+	} else if startUnix < witchQueenStart && report.StartingPhaseIndex == nil {
+		return nil, true, errors.New("malformed pgcr: missing startingPhaseIndex")
+	}
+
 	completionReason := getStat(report.Entries[0].Values, "completionReason")
 
 	result := dto.Instance{
@@ -325,22 +333,23 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 
 	if startUnix >= hauntedStart {
 		// Current case, working as normal, using ActivityWasStartedFromBeginning
-		result = &pgcr.ActivityWasStartedFromBeginning
+		result = pgcr.ActivityWasStartedFromBeginning
 	} else if startUnix < beyondLightStart {
 		// Pre beyond light, using StartingPhaseIndex
 		result = new(bool)
+		startingPhaseIndex := *pgcr.StartingPhaseIndex
 		// sotp
 		if pgcr.ActivityDetails.DirectorActivityHash == 548750096 || pgcr.ActivityDetails.DirectorActivityHash == 2812525063 {
-			*result = (pgcr.StartingPhaseIndex <= 1)
+			*result = (startingPhaseIndex <= 1)
 			// levi
 		} else if leviHashes[pgcr.ActivityDetails.DirectorActivityHash] {
-			*result = (pgcr.StartingPhaseIndex == 0 || pgcr.StartingPhaseIndex == 2)
+			*result = (startingPhaseIndex == 0 || startingPhaseIndex == 2)
 		} else {
-			*result = (pgcr.StartingPhaseIndex == 0)
+			*result = (startingPhaseIndex == 0)
 		}
-	} else if startUnix >= witchQueenStart && (pgcr.ActivityWasStartedFromBeginning || deathless) {
+	} else if startUnix >= witchQueenStart && (*pgcr.ActivityWasStartedFromBeginning  || deathless) {
 		// WQ: ActivityWasStartedFromBeginning erroneously false when a wipe happens
-		result = &pgcr.ActivityWasStartedFromBeginning
+		result = pgcr.ActivityWasStartedFromBeginning
 	}
 	// Beyond Light: ActivityWasStartedFromBeginning always false
 
