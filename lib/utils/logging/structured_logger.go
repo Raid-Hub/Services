@@ -3,6 +3,7 @@ package logging
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,14 @@ type StructuredLogger struct {
 // NewLogger creates a new logger with the given prefix
 func NewLogger(prefix string) *StructuredLogger {
 	return &StructuredLogger{prefix: prefix}
+}
+
+// formatLogfmtKey removes leading $
+func formatLogfmtKey(k string) string {
+	if after, ok := strings.CutPrefix(k, "$"); ok {
+		k = after
+	}
+	return k
 }
 
 // formatLogfmtValue formats a value according to logfmt spec
@@ -84,8 +93,14 @@ func (l *StructuredLogger) log(level string, key string, fields map[string]any) 
 	if len(fields) != 0 {
 		output = fmt.Sprintf("%s >>", output)
 		var logfmtParts []string
-		for k, v := range fields {
-			logfmtParts = append(logfmtParts, fmt.Sprintf("%s=%s", k, formatLogfmtValue(v)))
+		// Sort keys to ensure consistent field ordering
+		keys := make([]string, 0, len(fields))
+		for k := range fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			logfmtParts = append(logfmtParts, fmt.Sprintf("%s=%s", formatLogfmtKey(k), formatLogfmtValue(fields[k])))
 		}
 		if len(logfmtParts) > 0 {
 			output += " " + strings.Join(logfmtParts, " ")

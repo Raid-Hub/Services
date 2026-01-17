@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/env"
+	"raidhub/lib/messaging/publishing"
+	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/instance"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
@@ -166,8 +169,9 @@ func ProcessMissedPGCRs() {
 
 	var found []int64
 	var failed []int64
-	minFailed := int64(^uint64(0) >> 1) // Max int64 value
-	maxFailed := int64(0)
+	var minFailed int64
+	var maxFailed int64
+	minFailedSet := false
 	if len(numbers) > 0 {
 		var latestId int64
 		if !*force {
@@ -214,8 +218,14 @@ func ProcessMissedPGCRs() {
 			defer wg2.Done()
 			for id := range failures {
 				failed = append(failed, id)
-				minFailed = min(minFailed, id)
-				maxFailed = max(maxFailed, id)
+				if !minFailedSet {
+					minFailed = id
+					maxFailed = id
+					minFailedSet = true
+				} else {
+					minFailed = min(minFailed, id)
+					maxFailed = max(maxFailed, id)
+				}
 			}
 		}()
 
@@ -269,7 +279,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 		var errors = 0
 		var processed = false
 		for errors <= workerMaxRetries && !processed {
-			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceID)
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceID, 0)
 
 			if result == pgcr_processing.NonRaid {
 				processed = true
@@ -300,6 +310,13 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 				time.Sleep(5 * time.Second)
 				errors++
 				// continue loop to retry
+			} else if result == pgcr_processing.InsufficientPrivileges {
+				// send to retry queue
+				err := publishing.PublishInt64Message(context.Background(), routing.PGCRRetry, instanceID)
+				if err != nil {
+					logger.Error("FAILED_TO_PUBLISH_TO_RETRY_QUEUE", err, map[string]any{logging.INSTANCE_ID: instanceID})
+				}
+				processed = true
 			} else {
 				logger.Warn("COULD_NOT_RESOLVE_INSTANCE_ID", nil, map[string]any{logging.INSTANCE_ID: instanceID})
 				instance_storage.WriteMissedLog(instanceID)
@@ -370,19 +387,24 @@ func postResults(hadesAlerting *discord.DiscordAlerting, count int, failed int, 
 		Value: gapsStrWebhook,
 	}}
 
-	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", map[string]any{
-		"message":   message,
-		"count":     count,
-		"failed":    failed,
-		"found":     found,
-		"minFailed": minFailed,
-		"maxFailed": maxFailed,
-		"range":     maxFailed - minFailed + 1,
-		"gaps":      gaps,
-	})
+	payload := map[string]any{
+		"message": message,
+		"count":   count,
+		"failed":  failed,
+		"found":   found,
+		"gaps":    gaps,
+	}
+
+	if failed > 0 {
+		payload["minFailed"] = minFailed
+		payload["maxFailed"] = maxFailed
+		payload["range"] = maxFailed - minFailed + 1
+	}
+
+	hadesAlerting.SendInfo("Processed missing PGCRs", fields, "PROCESSED_MISSING_PGCRS", payload)
 
 	if len(gaps) > 0 {
-		logger.Info("GAPS_FOUND_IN_MISSED_LOG", map[string]any{logging.GAPS: gapsString})
+		logger.Info("GAPS_FOUND_IN_MISSED_LOG", map[string]any{logging.GAPS: len(gaps)})
 	}
 	if failed > 0 {
 		logger.Info("FAILED_RANGE_SUMMARY", map[string]any{

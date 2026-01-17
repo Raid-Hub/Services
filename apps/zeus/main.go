@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -138,6 +139,9 @@ func main() {
 		})
 	}
 
+	// Create a custom error logger that formats httputil errors properly
+	httputilLogger := log.New(&httputilLogWriter{logger: logger}, "[httputil] ", log.LstdFlags)
+
 	rp := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			r.URL.Scheme = "https"
@@ -150,6 +154,7 @@ func main() {
 			r.Header.Del("x-forwarded-for")
 		},
 		Transport: proxyTransport,
+		ErrorLog:  httputilLogger,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			// Handle context cancellation gracefully (client disconnect is normal)
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -275,4 +280,47 @@ func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 
 	return resp, err
+}
+
+// httputilLogWriter adapts our structured logger to work with httputil.ReverseProxy
+type httputilLogWriter struct {
+	logger logging.Logger
+}
+
+func (w *httputilLogWriter) Write(p []byte) (n int, err error) {
+	// Parse the httputil log message and convert it to structured logging
+	msg := strings.TrimSpace(string(p))
+
+	// Extract key information from the message
+	var logLevel string
+	var key string
+
+	if strings.Contains(msg, "connection reset by peer") {
+		logLevel = "debug"
+		key = "HTTPUTIL_CONNECTION_RESET"
+	} else if strings.Contains(msg, "read tcp") || strings.Contains(msg, "write tcp") {
+		logLevel = "warn"
+		key = "HTTPUTIL_NETWORK_ERROR"
+	} else {
+		logLevel = "warn"
+		key = "HTTPUTIL_ERROR"
+	}
+
+	// Log with structured format
+	switch logLevel {
+	case "debug":
+		w.logger.Debug(key, map[string]any{
+			"message": msg,
+		})
+	case "warn":
+		w.logger.Warn(key, errors.New(msg), map[string]any{
+			"message": msg,
+		})
+	default:
+		w.logger.Warn(key, errors.New(msg), map[string]any{
+			"message": msg,
+		})
+	}
+
+	return len(p), nil
 }

@@ -64,6 +64,11 @@ BEGIN
     ORDER BY "definitions"."season"."start_date" DESC
     LIMIT 1;
 
+    -- If no season found, raise an error - this indicates missing season data
+    IF season_id IS NULL THEN
+        RAISE EXCEPTION 'No season found for date %', start_date_utc;
+    END IF;
+
     RETURN season_id;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;

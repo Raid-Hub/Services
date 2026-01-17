@@ -64,8 +64,8 @@ const (
 	PlayerSuperKills
 	PlayerGrenadeKills
 	TooFast
-	TooFewPlayersFresh
 	TooFewPlayersCheckpoint
+	TooFewPlayersFresh
 )
 
 type ResultTuple struct {

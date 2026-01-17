@@ -13,18 +13,17 @@ import (
 // InstanceStoreTopic creates a new instance store topic
 func InstanceStoreTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.InstanceStore,
-		MinWorkers:            1,
-		MaxWorkers:            50,
-		DesiredWorkers:        10,
-		ContestWeekendWorkers: 20,
-		KeepInReady:           false,
-		PrefetchCount:         1,
-		ScaleUpThreshold:      1000,
-		ScaleDownThreshold:    100,
-		ScaleUpPercent:        0.2,
-		ScaleDownPercent:      0.1,
-		MaxRetryCount:         3, // We write to a dlq anyways, so we don't need to retry
+		QueueName:          routing.InstanceStore,
+		MinWorkers:         1,
+		MaxWorkers:         16,
+		DesiredWorkers:     4,
+		KeepInReady:        false,
+		PrefetchCount:      1,
+		ScaleUpThreshold:   1000,
+		ScaleDownThreshold: 100,
+		ScaleUpPercent:     0.2,
+		ScaleDownPercent:   0.1,
+		MaxRetryCount:      3, // We write to a dlq anyways, so we don't need to retry
 	}, processInstanceStore)
 }
 
@@ -34,7 +33,11 @@ func processInstanceStore(worker processing.WorkerInterface, message amqp.Delive
 	if err != nil {
 		return err
 	}
-	worker.Debug("PROCESSING_INSTANCE_STORE", map[string]any{logging.INSTANCE_ID: msg.Instance.InstanceId})
+
+	fields := map[string]any{
+		logging.INSTANCE_ID: msg.Instance.InstanceId,
+	}
+	worker.Debug("PROCESSING_INSTANCE_STORE", fields)
 
 	// Store the PGCR using the orchestrator
 	_, _, err = instance_storage.StorePGCR(&msg.Instance, &msg.PGCR)

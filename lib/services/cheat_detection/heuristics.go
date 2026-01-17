@@ -62,10 +62,14 @@ type ActivityHeuristic struct {
 var EpicDesertPerpetualHeuristic = ActivityHeuristic{
 	ActivityId:     16,
 	RaidBit:        EpicDesertPerpetual,
-	RaidName:       "The Epic Desert Perpetual",
-	CheckpointName: "Keregos, Fractured In Time",
+	RaidName:       "The Desert Perpetual (Epic)",
+	CheckpointName: "Koregos, Fractured In Time",
 	CheckpointLowman: map[int][]LowmanData{
 		Any: {
+			{
+				MinPlayers:    1,
+				CheatedChance: 0.10,
+			},
 			{
 				MinPlayers:    2,
 				CheatedChance: 0.05,
@@ -77,6 +81,13 @@ var EpicDesertPerpetualHeuristic = ActivityHeuristic{
 	},
 	FreshLowman: map[int][]LowmanData{
 		Any: {
+			{
+				MinPlayers:    1,
+				CheatedChance: 0.15,
+				Range: []DateRange{
+					{Start: time.Date(2025, time.December, 15, 17, 0, 0, 0, time.UTC), End: time.Date(2099, time.December, 31, 17, 0, 0, 0, time.UTC)},
+				},
+			},
 			{
 				MinPlayers:    2,
 				CheatedChance: 0.10,
@@ -97,7 +108,7 @@ var DesertPerpetualHeuristic = ActivityHeuristic{
 	ActivityId:     15,
 	RaidBit:        DesertPerpetual,
 	RaidName:       "The Desert Perpetual",
-	CheckpointName: "Keregos, The Worldline",
+	CheckpointName: "Koregos, The Worldline",
 	CheckpointLowman: map[int][]LowmanData{
 		Any: {
 			{
@@ -141,7 +152,7 @@ var SalvationsEdgeHeuristic = ActivityHeuristic{
 					{Start: time.Date(2025, time.March, 28, 14, 0, 0, 0, time.UTC), End: time.Date(2099, time.December, 31, 17, 0, 0, 0, time.UTC)},
 				},
 				CheatedChance: 0.20,
-				MinTime:       9 * time.Minute,
+				MinTime:       3 * time.Minute,
 			},
 			{
 				MinPlayers:    2,
@@ -159,6 +170,13 @@ var SalvationsEdgeHeuristic = ActivityHeuristic{
 	},
 	FreshLowman: map[int][]LowmanData{
 		Any: {
+			{
+				MinPlayers: 3,
+				Range: []DateRange{
+					{Start: time.Date(2025, time.December, 1, 17, 0, 0, 0, time.UTC), End: time.Date(2099, time.December, 31, 17, 0, 0, 0, time.UTC)},
+				},
+				CheatedChance: 0.03,
+			},
 			{
 				MinPlayers:    4,
 				CheatedChance: 0.04,

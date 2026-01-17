@@ -20,15 +20,17 @@ func init() {
 	httpClient := &http.Client{
 		Timeout: 15 * time.Second,
 	}
-	zeusURL := fmt.Sprintf("http://%s:%s", env.ZeusHost, env.ZeusPort)
+	zeusURL := fmt.Sprintf("%s:%s", env.ZeusHost, env.ZeusPort)
 	Client = &BungieClient{
+		scheme:     "http",
 		httpClient: httpClient,
-		baseURL:    zeusURL,
+		host:       zeusURL,
 		apiKey:     env.BungieAPIKey,
 	}
 	PGCRClient = &BungieClient{
+		scheme:     "http",
 		httpClient: httpClient,
-		baseURL:    zeusURL,
+		host:       zeusURL,
 		apiKey:     env.BungieAPIKey,
 	}
 }

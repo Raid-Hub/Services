@@ -1,6 +1,7 @@
 package cheat_detection
 
 import (
+	"context"
 	"math"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/utils/logging"
@@ -106,14 +107,14 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 		return -1, 0, data
 	}
 
-	result, err := bungie.Client.GetProfile(data.MembershipType, membershipId, []int{100})
+	result, err := bungie.Client.GetProfile(context.Background(), data.MembershipType, membershipId, []int{100})
 	if err != nil {
 		logger.Warn(PLAYER_PROFILE_ERROR, err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
 		return -1, 0, data
 	}
-	if !result.Success || result.Data == nil {
+	if result.Data == nil {
 		logger.Info(PLAYER_NO_DATA, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 			"reason":              "no_profile_data",

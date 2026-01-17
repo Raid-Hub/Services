@@ -84,13 +84,13 @@ func (h ActivityHeuristic) iterateLowmanData(key string, arr []LowmanData, insta
 				}
 				explanation = fmt.Sprintf("cleared %s (%s) with %d players, expected at least %d",
 					h.CheckpointName, key, instance.PlayerCount, data.MinPlayers)
-				reasonBit |= TooFewPlayersFresh
+				reasonBit |= TooFewPlayersCheckpoint
 			} else {
 				explanation = fmt.Sprintf(
 					"cleared fresh %s (%s) with %d players, expected at least %d",
 					h.RaidName, key, instance.PlayerCount, data.MinPlayers,
 				)
-				reasonBit |= TooFewPlayersCheckpoint
+				reasonBit |= TooFewPlayersFresh
 			}
 
 			return 0.995, reasonBit, explanation

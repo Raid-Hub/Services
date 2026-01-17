@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"raidhub/lib/services/instance_storage"
 	"raidhub/lib/services/pgcr_processing"
@@ -12,10 +13,6 @@ var logger = logging.NewLogger("process-single-pgcr")
 
 func main() {
 	logging.ParseFlags()
-
-	flushSentry, recoverSentry := logger.InitSentry()
-	defer flushSentry()
-	defer recoverSentry()
 
 	// Parse the instance ID from command line args
 	// Since logging.ParseFlags() is used, the actual arguments start from flag.Arg(0)
@@ -33,7 +30,7 @@ func main() {
 	logger.Info("PROCESSING_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// Fetch and process the PGCR
-	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(instanceId)
+	result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceId, 0)
 
 	if result != pgcr_processing.Success {
 		logger.Error("PGCR_FETCH_FAILED", nil, map[string]any{logging.INSTANCE_ID: instanceId, "result": result})

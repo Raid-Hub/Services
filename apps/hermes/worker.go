@@ -62,59 +62,61 @@ func (w *Worker) Run() {
 				return
 			}
 
-			// Wait for API availability if needed
-			if w.wg != nil {
-				w.wg.Wait()
+			w.handleMessage(msg)
+		}
+	}
+}
+
+func (w *Worker) handleMessage(msg amqp.Delivery) {
+	// Wait for API availability if needed
+	if w.wg != nil {
+		w.wg.Wait()
+	}
+
+	err := w.ProcessMessage(msg)
+	if err != nil {
+		retryCount := w.getRetryCount(msg)
+
+		// Check if we've exceeded max retry count
+		if w.shouldDeadLetter(retryCount) {
+			w.dropMessage(msg, retryCount, w.Topic.Config.MaxRetryCount, err)
+			return
+		}
+
+		// Extract original error details for logging
+		fields := make(map[string]any)
+		if originalErr := errors.Unwrap(err); originalErr != nil {
+			fields["original_error"] = originalErr.Error()
+		}
+		w.Warn("MESSAGE_PROCESSING_ERROR", err, fields)
+		// Record metrics for failed processing
+		hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
+
+		// Handle based on error type
+		if processing.IsUnretryableError(err) {
+			w.logUnretryableMessage(msg, err)
+			w.handleUnretryableError(msg)
+		} else {
+			// Increment retry count and republish for retryable errors
+			newRetryCount := retryCount + 1
+			if err := w.republishForRetry(msg, newRetryCount); err != nil {
+				w.Fatal("MESSAGE_REPUBLISH_ERROR", err, nil)
 			}
 
-			err := w.ProcessMessage(msg)
-			if err != nil {
-				retryCount := processing.GetRetryCount(msg)
-				maxRetries := w.Topic.Config.MaxRetryCount
-
-				// Check if we've exceeded max retry count (0 means unlimited)
-				if maxRetries > 0 && retryCount >= maxRetries {
-					w.Error("MESSAGE_EXCEEDED_MAX_RETRIES", err, map[string]any{
-						"retry_count": retryCount,
-						"max_retries": maxRetries,
-						"action":      "sending_to_dlq",
-					})
-					// Force unretryable - send to DLQ
-					if err := msg.Nack(false, false); err != nil {
-						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
-					}
-					continue
-				}
-
-				w.Warn("MESSAGE_PROCESSING_ERROR", err, nil)
-				// Record metrics for failed processing
-				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "error").Inc()
-
-				// By default, errors are retryable (transient). Only unretryable errors should not be requeued.
-				if processing.IsUnretryableError(err) {
-					// NACK with requeue=false for unretryable errors (permanent failures)
-					// The message will be sent to the dead letter queue if configured
-					if err := msg.Nack(false, false); err != nil {
-						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
-					}
-				} else {
-					// NACK with requeue=true for retryable errors (transient failures)
-					// Most errors are transient and should be retried
-					if err := msg.Nack(false, true); err != nil {
-						w.Fatal("MESSAGE_NACK_ERROR", err, nil)
-					}
-				}
-				continue
-			}
-
-			// Ack successful processing
+			// Ack the original message since we've republished it
 			if err := msg.Ack(false); err != nil {
-				w.Warn("MESSAGE_ACK_ERROR", err, nil)
-			} else {
-				// Record metrics for successful processing
-				hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "success").Inc()
+				w.Fatal("MESSAGE_ACK_ERROR", err, nil)
 			}
 		}
+		return
+	}
+
+	// Ack successful processing
+	if err := msg.Ack(false); err != nil {
+		w.Warn("MESSAGE_ACK_ERROR", err, nil)
+	} else {
+		// Record metrics for successful processing
+		hermes_metrics.QueueMessagesProcessed.WithLabelValues(w.QueueName, "success").Inc()
 	}
 }
 
@@ -156,19 +158,26 @@ func (w *Worker) ProcessMessage(message amqp.Delivery) error {
 	return err
 }
 
+func (w *Worker) getRetryCount(msg amqp.Delivery) int {
+	if count, ok := msg.Headers["x-retry-count"].(int32); ok && count > 0 {
+		return int(count)
+	} else if count, ok := msg.Headers["x-retry-count"].(int64); ok && count > 0 {
+		return int(count)
+	}
+	return 0
+}
+
 func (w *Worker) addWorkerFields(fields map[string]any) map[string]any {
 	if fields == nil {
 		fields = make(map[string]any)
 	}
-	fields["queue"] = w.QueueName
+	// Note: queue is set as Sentry tag in CaptureError when field key is "$queue"
+	fields["$queue"] = w.QueueName
 	fields["worker_id"] = w.ID
 
 	// Add retry count if we're currently processing a message
 	if w.currentMsg != nil {
-		retryCount := processing.GetRetryCount(*w.currentMsg)
-		if retryCount > 0 {
-			fields["retry_count"] = retryCount
-		}
+		fields["retry_count"] = w.getRetryCount(*w.currentMsg)
 	}
 
 	return fields
@@ -183,13 +192,98 @@ func (w *Worker) Info(key string, fields map[string]any) {
 }
 
 func (w *Worker) Warn(key string, err error, fields map[string]any) {
-	w.logger.Warn(key, err, w.addWorkerFields(fields))
+	fields = w.addWorkerFields(fields)
+	w.logger.Warn(key, err, fields)
 }
 
 func (w *Worker) Error(key string, err error, fields map[string]any) {
-	w.logger.Error(key, err, w.addWorkerFields(fields))
+	fields = w.addWorkerFields(fields)
+	w.logger.Error(key, err, fields)
 }
 
 func (w *Worker) Fatal(key string, err error, fields map[string]any) {
-	w.logger.Fatal(key, err, w.addWorkerFields(fields))
+	fields = w.addWorkerFields(fields)
+	w.logger.Fatal(key, err, fields)
+}
+
+// shouldDeadLetter checks if message should be dead-lettered based on retry count
+func (w *Worker) shouldDeadLetter(retryCount int) bool {
+	maxRetries := w.Topic.Config.MaxRetryCount
+	return maxRetries > 0 && retryCount >= maxRetries
+}
+
+// dropMessage permanently drops messages that exceed retry limits
+func (w *Worker) dropMessage(msg amqp.Delivery, retryCount int, maxRetries int, processingErr error) {
+	fields := map[string]any{
+		"retry_count":     retryCount,
+		"max_retries":     maxRetries,
+		"action":          "dropping_message",
+		"routing_key":     msg.RoutingKey,
+		"delivery_tag":    msg.DeliveryTag,
+		"unretryable_err": processing.IsUnretryableError(processingErr),
+	}
+	if msg.MessageId != "" {
+		fields["message_id"] = msg.MessageId
+	}
+	if msg.Exchange != "" {
+		fields["exchange"] = msg.Exchange
+	}
+	w.Error("MESSAGE_EXCEEDED_MAX_RETRIES", processingErr, fields)
+
+	// Nack with requeue=false to permanently drop the message
+	// This prevents infinite retry loops
+	if err := msg.Nack(false, false); err != nil {
+		w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+	}
+}
+
+// republishForRetry republishes message with incremented retry count
+func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
+	if msg.Headers == nil {
+		msg.Headers = amqp.Table{}
+	}
+	msg.Headers["x-retry-count"] = int32(newRetryCount)
+
+	// Republish the message to the same queue with updated headers
+	return w.amqpChannel.Publish(
+		msg.Exchange,   // exchange
+		msg.RoutingKey, // routing key (queue name)
+		false,          // mandatory
+		false,          // immediate
+		amqp.Publishing{
+			Headers:      msg.Headers,
+			ContentType:  msg.ContentType,
+			Body:         msg.Body,
+			DeliveryMode: msg.DeliveryMode,
+			Priority:     msg.Priority,
+		},
+	)
+}
+
+// handleUnretryableError handles permanent processing failures
+func (w *Worker) handleUnretryableError(msg amqp.Delivery) {
+	// NACK with requeue=false for unretryable errors (permanent failures)
+	// The message will be sent to the dead letter queue if configured
+	if err := msg.Nack(false, false); err != nil {
+		w.Fatal("MESSAGE_NACK_ERROR", err, nil)
+	}
+}
+
+func (w *Worker) logUnretryableMessage(msg amqp.Delivery, err error) {
+	fields := map[string]any{
+		"routing_key":  msg.RoutingKey,
+		"delivery_tag": msg.DeliveryTag,
+		logging.REASON: "processor_marked_unretryable",
+	}
+	if msg.MessageId != "" {
+		fields["message_id"] = msg.MessageId
+	}
+	if msg.Exchange != "" {
+		fields["exchange"] = msg.Exchange
+	}
+	// Extract original error details for logging
+	if originalErr := errors.Unwrap(err); originalErr != nil {
+		fields["original_error"] = originalErr.Error()
+	}
+	w.Error("MESSAGE_UNRETRYABLE", err, fields)
 }

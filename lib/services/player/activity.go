@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"sync"
 
 	"raidhub/lib/utils/logging"
@@ -8,7 +9,7 @@ import (
 )
 
 // UpdateActivityHistory updates the activity history for a player
-func UpdateActivityHistory(membershipId int64) error {
+func UpdateActivityHistory(ctx context.Context, membershipId int64) error {
 	// Parse membership ID
 	logger.Debug("ACTIVITY_HISTORY_UPDATE_STARTED", map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
@@ -30,7 +31,7 @@ func UpdateActivityHistory(membershipId int64) error {
 	}
 
 	// Get all characters for this player
-	characters, err := GetPlayerCharacters(membershipId)
+	characters, err := GetPlayerCharacters(ctx, membershipId)
 	if err != nil {
 		logger.Warn("CHARACTERS_GET_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -49,7 +50,7 @@ func UpdateActivityHistory(membershipId int64) error {
 		go func(characterId int64) {
 			defer wg.Done()
 			// Fetch activity history for this character
-			result := bungie.Client.GetActivityHistoryInChannel(2, membershipId, characterId, 5, instanceIds)
+			result := bungie.Client.GetActivityHistoryInChannel(ctx, 2, membershipId, characterId, 5, instanceIds)
 
 			if result.Error != nil {
 				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", result.Error, map[string]any{

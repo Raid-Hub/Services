@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"raidhub/lib/env"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/monitoring/hermes_metrics"
 	"raidhub/lib/utils"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/sentry"
 	"raidhub/lib/web/bungie"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -77,9 +77,6 @@ func (tm *TopicManager) Error(message string, err error, fields map[string]any) 
 
 // GetInitialWorkers returns the initial worker count for this topic
 func (tm *TopicManager) GetInitialWorkers() int {
-	if env.IsContestWeekend {
-		return tm.config.ContestWeekendWorkers
-	}
 	return tm.config.DesiredWorkers
 }
 
@@ -165,35 +162,22 @@ func startTopicManager(topic processing.Topic, ctx context.Context) (*TopicManag
 		apiWG: apiWG,
 	}
 
-	// Check if this is a contest weekend
-	isContestWeekend := env.IsContestWeekend
-	initialWorkers := topicConfig.DesiredWorkers
-	if isContestWeekend {
-		initialWorkers = topicConfig.ContestWeekendWorkers
-		topicManager.logger.Info("CONTEST_WEEKEND_SCALING", map[string]any{
-			logging.WORKER_COUNT: initialWorkers,
-		})
-	}
-
 	// Start with initial worker count
-	err := topicManager.scaleToInitial(initialWorkers)
+	err := topicManager.scaleToInitial(topicConfig.DesiredWorkers)
 	if err != nil {
 		return nil, err
 	}
 
 	// Export initial worker count metric
-	hermes_metrics.QueueWorkerCount.WithLabelValues(topicConfig.QueueName).Set(float64(initialWorkers))
+	hermes_metrics.QueueWorkerCount.WithLabelValues(topicConfig.QueueName).Set(float64(topicConfig.DesiredWorkers))
 
 	// Start goroutine to manually cancel all workers when TopicManager context is cancelled
 	go topicManager.handleShutdown()
 
 	// Start self-scaling monitor
-	// Skip autoscaling during contest weekends
-	if !env.IsContestWeekend {
-		go func() {
-			topicManager.monitorSelfScaling()
-		}()
-	}
+	go func() {
+		topicManager.monitorSelfScaling()
+	}()
 
 	return topicManager, nil
 }
@@ -282,6 +266,7 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		false, // no-wait
 		nil,   // arguments
 	)
+
 	if err != nil {
 		ch.Close()
 		return nil, err
@@ -331,7 +316,8 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		done:        make(chan struct{}),
 	}
 
-	go worker.Run()
+	// Start worker goroutine with panic recovery
+	sentry.Go(worker.Run)
 
 	return worker, nil
 }

@@ -67,7 +67,6 @@ func YourTopicName() processing.Topic {
 		MinWorkers:            1,                            // Adjust as needed
 		MaxWorkers:            10,                           // Adjust as needed
 		DesiredWorkers:        2,                            // Adjust as needed
-		ContestWeekendWorkers: 5,                            // Adjust as needed
 		KeepInReady:           true,                         // Usually true
 		PrefetchCount:         1,                            // Usually 1
 		ScaleUpThreshold:      100,                          // Default: scale up when queue has 100+ messages

@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"errors"
+	"sync"
 	"time"
 
 	"raidhub/lib/messaging/processing"
@@ -18,7 +20,6 @@ func PlayerCrawlTopic() processing.Topic {
 		MinWorkers:            5,
 		MaxWorkers:            70,
 		DesiredWorkers:        20,
-		ContestWeekendWorkers: 40,
 		KeepInReady:           true,
 		PrefetchCount:         1,
 		ScaleUpThreshold:      100,
@@ -42,9 +43,21 @@ func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery
 		return err
 	}
 
-	// Call player crawl logic
-	err = player.Crawl(worker.Context(), membershipId)
+	if !tryStartPlayerCrawl(membershipId) {
+		worker.Debug("PLAYER_CRAWL_DEDUPED", map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+			"reason":              "inflight",
+		})
+		return nil
+	}
+	defer finishPlayerCrawl(membershipId)
 
+	fields := map[string]any{
+		logging.MEMBERSHIP_ID: membershipId,
+	}
+	worker.Debug("PROCESSING_PLAYER_CRAWL", fields)
+
+	wasUpdated, err := player.Crawl(worker.Context(), membershipId)
 	if err != nil {
 		worker.Warn("PLAYER_CRAWL_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -52,9 +65,71 @@ func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery
 		return err
 	}
 
+	status := "success"
+	if !wasUpdated {
+		status = "not_updated"
+	}
+
 	worker.Debug("PLAYER_CRAWL_COMPLETE", map[string]any{
 		logging.MEMBERSHIP_ID: membershipId,
-		logging.STATUS:        "success",
+		logging.STATUS:        status,
 	})
 	return nil
+}
+
+const (
+	playerCrawlInflightTTL   = 10 * time.Second
+	playerCrawlSweepInterval = 30 * time.Second
+)
+
+type playerCrawlEntry struct {
+	expires time.Time
+}
+
+var (
+	playerCrawlInflight sync.Map
+)
+
+func tryStartPlayerCrawl(membershipId int64) bool {
+	now := time.Now()
+	if value, ok := playerCrawlInflight.Load(membershipId); ok {
+		entry := value.(playerCrawlEntry)
+		if now.Before(entry.expires) {
+			return false
+		}
+		playerCrawlInflight.Delete(membershipId)
+	}
+
+	playerCrawlInflight.Store(membershipId, playerCrawlEntry{
+		expires: now.Add(playerCrawlInflightTTL),
+	})
+	return true
+}
+
+func finishPlayerCrawl(membershipId int64) {
+	playerCrawlInflight.Delete(membershipId)
+}
+
+func init() {
+	logger := logging.NewLogger("PLAYER_CRAWL_CACHE")
+	go func() {
+		ticker := time.NewTicker(playerCrawlSweepInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			now := time.Now()
+			playerCrawlInflight.Range(func(key, value any) bool {
+				entry := value.(playerCrawlEntry)
+				if now.After(entry.expires) {
+					err := errors.New("item expired")
+					// ideally, all items should get cleaned up by the time they expire, but just in case, log a warning
+					logger.Warn("PLAYER_CRAWL_ITEM_EXPIRED", err, map[string]any{
+						logging.MEMBERSHIP_ID: key,
+						"expires":             entry.expires,
+					})
+					playerCrawlInflight.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
 }

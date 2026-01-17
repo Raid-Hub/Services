@@ -10,6 +10,7 @@ import (
 	"raidhub/lib/database/postgres"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // Cheat detection logging constants
@@ -349,4 +350,334 @@ func BlacklistFlaggedInstances() (int64, error) {
 	}
 
 	return rowsAffected, nil
+}
+
+// ClearPlayerFlagsAndBlacklists clears all flags and blacklists for a specific player
+// Returns the number of flags and blacklists cleared
+func ClearPlayerFlagsAndBlacklists(membershipId int64, currentVersion string) (int64, int64, int64, int64, []int64, error) {
+	tx, err := postgres.DB.Begin()
+	if err != nil {
+		return 0, 0, 0, 0, nil, err
+	}
+	defer tx.Rollback()
+
+	// Find all instance IDs where this player is blacklisted
+	var blacklistedInstanceIds []int64
+	instanceIdMap := make(map[int64]bool)
+
+	// First, get instances from blacklist_instance_player
+	rows, err := tx.Query(`
+		SELECT DISTINCT instance_id
+		FROM blacklist_instance_player
+		WHERE membership_id = $1
+	`, membershipId)
+	if err != nil {
+		return 0, 0, 0, 0, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var instanceId int64
+		if err := rows.Scan(&instanceId); err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		if !instanceIdMap[instanceId] {
+			blacklistedInstanceIds = append(blacklistedInstanceIds, instanceId)
+			instanceIdMap[instanceId] = true
+		}
+	}
+	rows.Close()
+
+	// Also get instances from blacklist_instance where the player participated
+	rows, err = tx.Query(`
+		SELECT DISTINCT bi.instance_id
+		FROM blacklist_instance bi
+		JOIN instance_player ip ON bi.instance_id = ip.instance_id
+		WHERE ip.membership_id = $1
+	`, membershipId)
+	if err != nil {
+		return 0, 0, 0, 0, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var instanceId int64
+		if err := rows.Scan(&instanceId); err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		if !instanceIdMap[instanceId] {
+			blacklistedInstanceIds = append(blacklistedInstanceIds, instanceId)
+			instanceIdMap[instanceId] = true
+		}
+	}
+	rows.Close()
+
+	// Remove blacklist_instance_player entries for this player
+	var blacklistPlayerDeleted int64
+	if len(blacklistedInstanceIds) > 0 {
+		result, err := tx.Exec(`
+			DELETE FROM blacklist_instance_player
+			WHERE membership_id = $1
+		`, membershipId)
+		if err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		blacklistPlayerDeleted, _ = result.RowsAffected()
+	}
+
+	// Remove blacklist_instance entries for those instances
+	var blacklistInstanceDeleted int64
+	if len(blacklistedInstanceIds) > 0 {
+		result, err := tx.Exec(`
+			DELETE FROM blacklist_instance
+			WHERE instance_id = ANY($1)
+		`, pq.Array(blacklistedInstanceIds))
+		if err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		blacklistInstanceDeleted, _ = result.RowsAffected()
+	}
+
+	// Clear flag_instance_player for all players in those instances (only if version differs from current)
+	var playerFlagsDeleted int64
+	if len(blacklistedInstanceIds) > 0 {
+		result, err := tx.Exec(`
+			DELETE FROM flag_instance_player
+			WHERE instance_id = ANY($1)
+			AND cheat_check_version != $2
+		`, pq.Array(blacklistedInstanceIds), currentVersion)
+		if err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		playerFlagsDeleted, _ = result.RowsAffected()
+	}
+
+	// Clear flag_instance for those instances (only if version differs from current)
+	var instanceFlagsDeleted int64
+	if len(blacklistedInstanceIds) > 0 {
+		result, err := tx.Exec(`
+			DELETE FROM flag_instance
+			WHERE instance_id = ANY($1)
+			AND cheat_check_version != $2
+		`, pq.Array(blacklistedInstanceIds), currentVersion)
+		if err != nil {
+			return 0, 0, 0, 0, nil, err
+		}
+		instanceFlagsDeleted, _ = result.RowsAffected()
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, 0, 0, nil, err
+	}
+
+	return instanceFlagsDeleted, playerFlagsDeleted, blacklistPlayerDeleted, blacklistInstanceDeleted, blacklistedInstanceIds, nil
+}
+
+// ClearFlagsByBitmap clears flags matching a specific bitmap pattern
+// Returns the number of flags cleared and affected instance IDs
+func ClearFlagsByBitmap(bitmap uint64, earliestDate time.Time, currentVersion string) (int64, int64, []int64, error) {
+	tx, err := postgres.DB.Begin()
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	defer tx.Rollback()
+
+	// Find affected instance IDs from flag_instance (only those NOT from current version)
+	var instanceIds []int64
+	rows, err := tx.Query(`
+		SELECT DISTINCT instance_id
+		FROM flag_instance
+		WHERE (cheat_check_bitmask & $1) = $1
+			AND flagged_at >= $2
+			AND cheat_check_version != $3
+	`, bitmap, earliestDate, currentVersion)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var instanceId int64
+		if err := rows.Scan(&instanceId); err != nil {
+			return 0, 0, nil, err
+		}
+		instanceIds = append(instanceIds, instanceId)
+	}
+	rows.Close()
+
+	// Find affected instance IDs from flag_instance_player (only those NOT from current version)
+	rows, err = tx.Query(`
+		SELECT DISTINCT instance_id
+		FROM flag_instance_player
+		WHERE (cheat_check_bitmask & $1) = $1
+			AND flagged_at >= $2
+			AND cheat_check_version != $3
+	`, bitmap, earliestDate, currentVersion)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	defer rows.Close()
+
+	instanceIdMap := make(map[int64]bool)
+	for _, id := range instanceIds {
+		instanceIdMap[id] = true
+	}
+
+	for rows.Next() {
+		var instanceId int64
+		if err := rows.Scan(&instanceId); err != nil {
+			return 0, 0, nil, err
+		}
+		if !instanceIdMap[instanceId] {
+			instanceIds = append(instanceIds, instanceId)
+			instanceIdMap[instanceId] = true
+		}
+	}
+	rows.Close()
+
+	// Clear flag_instance (only those NOT from current version)
+	result, err := tx.Exec(`
+		DELETE FROM flag_instance
+		WHERE (cheat_check_bitmask & $1) = $1
+			AND flagged_at >= $2
+			AND cheat_check_version != $3
+	`, bitmap, earliestDate, currentVersion)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	instanceFlagsDeleted, _ := result.RowsAffected()
+
+	// Clear flag_instance_player (only those NOT from current version)
+	result, err = tx.Exec(`
+		DELETE FROM flag_instance_player
+		WHERE (cheat_check_bitmask & $1) = $1
+			AND flagged_at >= $2
+			AND cheat_check_version != $3
+	`, bitmap, earliestDate, currentVersion)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	playerFlagsDeleted, _ := result.RowsAffected()
+
+	// Remove blacklist_instance_player for affected instances
+	result, err = tx.Exec(`
+		DELETE FROM blacklist_instance_player
+		WHERE instance_id = ANY($1)
+	`, pq.Array(instanceIds))
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	// Remove blacklist_instance for affected instances
+	result, err = tx.Exec(`
+		DELETE FROM blacklist_instance
+		WHERE instance_id = ANY($1)
+	`, pq.Array(instanceIds))
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, nil, err
+	}
+
+	return instanceFlagsDeleted, playerFlagsDeleted, instanceIds, nil
+}
+
+// FlagInstanceManually flags an instance manually with the given parameters
+func FlagInstanceManually(instanceId int64, cheatCheckVersion string, cheatCheckBitmask uint64, cheatProbability float64) error {
+	_, err := postgres.DB.Exec(`
+		INSERT INTO flag_instance (instance_id, cheat_check_version, cheat_check_bitmask, flagged_at, cheat_probability)
+		VALUES ($1, $2, $3, NOW(), $4)
+		ON CONFLICT DO NOTHING
+	`, instanceId, cheatCheckVersion, cheatCheckBitmask, cheatProbability)
+	return err
+}
+
+// BlacklistInstanceManually blacklists an instance manually with the given parameters
+func BlacklistInstanceManually(instanceId int64, cheatCheckVersion string, reason string) error {
+	_, err := postgres.DB.Exec(`
+		INSERT INTO blacklist_instance (instance_id, report_source, cheat_check_version, reason)
+		VALUES ($1, 'Manual', $2, $3)
+		ON CONFLICT (instance_id)
+		DO UPDATE SET report_source = 'Manual', cheat_check_version = $2, reason = $3, created_at = NOW()
+	`, instanceId, cheatCheckVersion, reason)
+	return err
+}
+
+// ResetPlayerCheatLevel resets the cheat level for one or more players
+func ResetPlayerCheatLevel(membershipIds []int64) (int64, error) {
+	if len(membershipIds) == 0 {
+		return 0, nil
+	}
+	result, err := postgres.DB.Exec(`
+		UPDATE player
+		SET cheat_level = 0
+		WHERE membership_id = ANY($1)
+	`, pq.Array(membershipIds))
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	return rowsAffected, err
+}
+
+// GetPlayerName retrieves the bungie_name for a player
+func GetPlayerName(membershipId int64) (string, error) {
+	var bungieName string
+	err := postgres.DB.QueryRow(`SELECT bungie_name FROM player WHERE membership_id = $1`, membershipId).Scan(&bungieName)
+	return bungieName, err
+}
+
+// GetPlayerNames retrieves bungie_names for multiple players
+func GetPlayerNames(membershipIds []int64) ([]string, error) {
+	if len(membershipIds) == 0 {
+		return []string{}, nil
+	}
+	rows, err := postgres.DB.Query(`
+		SELECT bungie_name
+		FROM player
+		WHERE membership_id = ANY($1)
+		ORDER BY bungie_name
+	`, pq.Array(membershipIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var playerNames []string
+	for rows.Next() {
+		var bungieName string
+		if err := rows.Scan(&bungieName); err != nil {
+			return nil, err
+		}
+		playerNames = append(playerNames, bungieName)
+	}
+	return playerNames, rows.Err()
+}
+
+// GetAffectedMembershipIds gets membership IDs for players in the given instances
+func GetAffectedMembershipIds(instanceIds []int64) ([]int64, error) {
+	if len(instanceIds) == 0 {
+		return []int64{}, nil
+	}
+	rows, err := postgres.DB.Query(`
+		SELECT DISTINCT membership_id
+		FROM instance_player
+		WHERE instance_id = ANY($1)
+	`, pq.Array(instanceIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var membershipIds []int64
+	for rows.Next() {
+		var membershipId int64
+		if err := rows.Scan(&membershipId); err != nil {
+			return nil, err
+		}
+		membershipIds = append(membershipIds, membershipId)
+	}
+	return membershipIds, rows.Err()
 }

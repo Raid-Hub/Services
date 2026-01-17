@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -83,7 +84,7 @@ func binarySearchForBlockStart(minCursor, maxCursor int64) (int64, error) {
 	hasFound := false
 	for minCursor < maxCursor {
 		mid := (minCursor + maxCursor) / 2
-		result, _ := pgcr_processing.FetchPGCR(mid)
+		result, _ := pgcr_processing.FetchPGCR(context.Background(), mid, 0)
 		switch result {
 		case pgcr_processing.Success:
 			hasFound = true

@@ -84,11 +84,11 @@ func DownloadManifest(out string, fromDisk bool, force bool) string {
 
 	var sqlitePath string
 	if !fromDisk {
-		result, err := bungie.Client.GetDestinyManifest()
+		result, err := bungie.Client.GetDestinyManifest(context.Background())
 		if err != nil {
 			logger.Fatal("ERROR_GETTING_MANIFEST", err, map[string]any{})
 		}
-		if !result.Success || result.Data == nil {
+		if result.Data == nil {
 			logger.Fatal("MANIFEST_FETCH_FAILED", nil, nil)
 		}
 		manifest := result.Data

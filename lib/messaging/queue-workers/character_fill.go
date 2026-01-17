@@ -13,19 +13,18 @@ import (
 // CharacterFillTopic creates a new character fill topic
 func CharacterFillTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:             routing.CharacterFill,
-		MinWorkers:            1,
-		MaxWorkers:            15,
-		DesiredWorkers:        3,
-		ContestWeekendWorkers: 8,
-		KeepInReady:           true,
-		PrefetchCount:         1,
-		ScaleUpThreshold:      100,
-		ScaleDownThreshold:    10,
-		ScaleUpPercent:        0.2,
-		ScaleDownPercent:      0.1,
-		BungieSystemDeps:      []string{"Destiny2", "D2Characters"},
-		MaxRetryCount:         4, // Character data is useful but not critical
+		QueueName:          routing.CharacterFill,
+		MinWorkers:         2,
+		MaxWorkers:         15,
+		DesiredWorkers:     3,
+		KeepInReady:        true,
+		PrefetchCount:      1,
+		ScaleUpThreshold:   100,
+		ScaleDownThreshold: 10,
+		ScaleUpPercent:     0.2,
+		ScaleDownPercent:   0.1,
+		BungieSystemDeps:   []string{"Destiny2", "D2Characters"},
+		MaxRetryCount:      4, // Character data is useful but not critical
 	}, processCharacterFill)
 }
 
@@ -35,12 +34,18 @@ func processCharacterFill(worker processing.WorkerInterface, message amqp.Delive
 	if err != nil {
 		return err
 	}
+	fields := map[string]any{
+		logging.MEMBERSHIP_ID: request.MembershipId,
+		logging.CHARACTER_ID:  request.CharacterId,
+		logging.INSTANCE_ID:   request.InstanceId,
+	}
+	worker.Debug("PROCESSING_CHARACTER_FILL", fields)
 
 	// Call character fill logic
-	err = character.Fill(request.MembershipId, request.CharacterId, request.InstanceId)
+	wasFilled, err := character.Fill(worker.Context(), request.MembershipId, request.CharacterId, request.InstanceId)
 
-	if err != nil {
-		worker.Error("FAILED_TO_UPDATE_CHARACTER", err, map[string]any{
+	if !wasFilled && err != nil {
+		worker.Warn("FAILED_TO_UPDATE_CHARACTER", err, map[string]any{
 			logging.MEMBERSHIP_ID: request.MembershipId,
 			logging.CHARACTER_ID:  request.CharacterId,
 			logging.INSTANCE_ID:   request.InstanceId,
