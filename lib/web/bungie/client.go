@@ -92,8 +92,9 @@ func (e *BungieResponseParseError) isKnownHTMLErrorPage() bool {
 }
 
 func get[T any](ctx context.Context, c *BungieClient, url netUrl.URL, operation string, params map[string]any) (BungieHttpResult[T], error) {
-	// Wraps the get in 2 layers of retry:
+	// Wraps the get in 3 layers of retry:
 	// Inner layer retries timeout and connection errors (excludes BungieError instances)
+	// Middle layer retries DestinyThrottledByGameServer with longer delays
 	// Outer layer retries Cloudflare errors
 	return retry.WithRetryForResult(ctx, network.CloudflareRetryConfig(clientLogger, params), func(attempt int) (BungieHttpResult[T], error) {
 		if attempt > 1 {
@@ -102,8 +103,10 @@ func get[T any](ctx context.Context, c *BungieClient, url netUrl.URL, operation 
 			queryValues.Add("retry", fmt.Sprintf("%d", attempt))
 			url.RawQuery = queryValues.Encode()
 		}
-		return retry.WithRetryForResult(ctx, BungieRetryConfig(), func(_ int) (BungieHttpResult[T], error) {
-			return getInternal[T](ctx, c, url.String(), operation, params)
+		return retry.WithRetryForResult(ctx, ThrottleRetryConfig(), func(_ int) (BungieHttpResult[T], error) {
+			return retry.WithRetryForResult(ctx, BungieRetryConfig(), func(_ int) (BungieHttpResult[T], error) {
+				return getInternal[T](ctx, c, url.String(), operation, params)
+			})
 		})
 	})
 }
@@ -276,6 +279,26 @@ func IsTransientError(bungieErrorCode int, httpStatusCode int) bool {
 
 	// All other errors are considered transient and should be retried
 	return true
+}
+
+// ThrottleRetryConfig provides a less aggressive retry configuration for rate limiting errors
+// Uses longer delays and fewer attempts to respect API rate limits
+func ThrottleRetryConfig() retry.RetryConfig {
+	return retry.RetryConfig{
+		MaxAttempts:  2,            // Fewer attempts for throttling
+		InitialDelay: 10 * time.Second, // Much longer initial delay
+		MaxDelay:     30 * time.Second, // Higher max delay
+		Multiplier:   2.0,
+		Jitter:       0.15, // 15% jitter for better distribution
+		OnRetry:      nil,
+		ShouldRetry: func(err error) bool {
+			var bungieErr *BungieError
+			if errors.As(err, &bungieErr) {
+				return bungieErr.ErrorCode == DestinyThrottledByGameServer
+			}
+			return false
+		},
+	}
 }
 
 // BungieRetryConfig retries transient network errors for Bungie API calls
