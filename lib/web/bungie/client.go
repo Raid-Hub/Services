@@ -93,9 +93,9 @@ func (e *BungieResponseParseError) isKnownHTMLErrorPage() bool {
 
 func get[T any](ctx context.Context, c *BungieClient, url netUrl.URL, operation string, params map[string]any) (BungieHttpResult[T], error) {
 	// Wraps the get in 3 layers of retry:
-	// Inner layer retries timeout and connection errors (excludes BungieError instances)
-	// Middle layer retries DestinyThrottledByGameServer with longer delays
 	// Outer layer retries Cloudflare errors
+	// Middle layer retries DestinyThrottledByGameServer with longer delays
+	// Inner layer retries timeout and connection errors (excludes BungieError instances)
 	return retry.WithRetryForResult(ctx, network.CloudflareRetryConfig(clientLogger, params), func(attempt int) (BungieHttpResult[T], error) {
 		if attempt > 1 {
 			// add a query parameter to the url to indicate the retry attempt
@@ -285,7 +285,7 @@ func IsTransientError(bungieErrorCode int, httpStatusCode int) bool {
 // Uses longer delays and fewer attempts to respect API rate limits
 func ThrottleRetryConfig() retry.RetryConfig {
 	return retry.RetryConfig{
-		MaxAttempts:  2,            // Fewer attempts for throttling
+		MaxAttempts:  2,                // 1 retry after initial attempt
 		InitialDelay: 10 * time.Second, // Much longer initial delay
 		MaxDelay:     30 * time.Second, // Higher max delay
 		Multiplier:   2.0,
