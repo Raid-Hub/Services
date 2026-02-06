@@ -17,6 +17,11 @@ import (
 const (
 	WORKER_STOPPING = "WORKER_STOPPING"
 	AUTOSCALE_IN    = "autoscaled_in"
+
+	// Retry backoff configuration
+	retryBaseDelayMs    = int64(1000) // 1 second base delay
+	retryDelayMultiplier = 2          // Double delay for each retry
+	maxRetryDelayMs     = int64(30000) // Cap at 30 seconds
 )
 
 // Worker represents a message processing worker with structured logging
@@ -245,15 +250,16 @@ func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	}
 	msg.Headers["x-retry-count"] = int32(newRetryCount)
 
-	// Calculate exponential backoff delay: base 1s * 2^(retryCount-1)
-	// Retry 1: 1s, Retry 2: 2s, Retry 3: 4s, Retry 4: 8s, Retry 5: 16s
-	// Cap at 30 seconds to avoid excessive delays
-	delayMs := int64(1000) // Start with 1 second
-	for i := 1; i < newRetryCount && i < 5; i++ {
-		delayMs *= 2
-	}
-	if delayMs > 30000 {
-		delayMs = 30000
+	// Calculate exponential backoff delay: base * multiplier^(retryCount-1)
+	// Retry 1: 1s, Retry 2: 2s, Retry 3: 4s, Retry 4: 8s, Retry 5+: 16s (capped at maxRetryDelayMs)
+	// The cap prevents delays from growing too large for higher retry counts
+	delayMs := retryBaseDelayMs
+	for i := 1; i < newRetryCount; i++ {
+		delayMs *= retryDelayMultiplier
+		if delayMs > maxRetryDelayMs {
+			delayMs = maxRetryDelayMs
+			break
+		}
 	}
 
 	// Add exponential backoff delay to the message header
