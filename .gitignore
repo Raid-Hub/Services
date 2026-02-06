@@ -8,6 +8,9 @@ volumes/
 
 # Binaries
 bin/
+atlas
+hermes
+zeus
 
 # Logs
 *.log
