@@ -288,8 +288,8 @@ func ThrottleRetryConfig() retry.RetryConfig {
 		MaxAttempts:  2,                // 1 retry after initial attempt
 		InitialDelay: 10 * time.Second, // Much longer initial delay
 		MaxDelay:     30 * time.Second, // Higher max delay
-		Multiplier:   2.0,
-		Jitter:       0.15, // 15% jitter for better distribution
+		Multiplier:   2.0,              // Not used with only 1 retry, but kept for consistency
+		Jitter:       0.15,             // 15% jitter for better distribution
 		OnRetry:      nil,
 		ShouldRetry: func(err error) bool {
 			var bungieErr *BungieError
