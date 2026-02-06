@@ -28,14 +28,15 @@ type Worker struct {
 	logger    logging.Logger
 
 	// Private fields (internal worker state)
-	ctx         context.Context          // Worker context that cancels on shutdown or autoscale
-	cancel      context.CancelCauseFunc  // Cancel function for worker context (with cause)
-	amqpChannel *amqp.Channel            // RabbitMQ channel for this worker
-	wg          *utils.ReadOnlyWaitGroup // API availability wait group
-	channel     <-chan amqp.Delivery
-	processor   processing.ProcessorFunc
-	done        chan struct{}  // Channel that closes when worker is finished
-	currentMsg  *amqp.Delivery // Current message being processed (for retry count tracking)
+	ctx                 context.Context          // Worker context that cancels on shutdown or autoscale
+	cancel              context.CancelCauseFunc  // Cancel function for worker context (with cause)
+	amqpChannel         *amqp.Channel            // RabbitMQ channel for this worker
+	wg                  *utils.ReadOnlyWaitGroup // API availability wait group
+	channel             <-chan amqp.Delivery
+	processor           processing.ProcessorFunc
+	done                chan struct{}  // Channel that closes when worker is finished
+	currentMsg          *amqp.Delivery // Current message being processed (for retry count tracking)
+	delayedExchangeName string         // Name of the delayed exchange for retry messages
 }
 
 // Run starts the worker and kicks off the polling
@@ -237,19 +238,36 @@ func (w *Worker) dropMessage(msg amqp.Delivery, retryCount int, maxRetries int, 
 	}
 }
 
-// republishForRetry republishes message with incremented retry count
+// republishForRetry republishes message with incremented retry count and exponential backoff delay
 func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	if msg.Headers == nil {
 		msg.Headers = amqp.Table{}
 	}
 	msg.Headers["x-retry-count"] = int32(newRetryCount)
 
-	// Republish the message to the same queue with updated headers
+	// Calculate exponential backoff delay: base 1s * 2^(retryCount-1)
+	// Retry 1: 1s, Retry 2: 2s, Retry 3: 4s, Retry 4: 8s, Retry 5: 16s
+	// Cap at 30 seconds to avoid excessive delays
+	delayMs := int64(1000) // Start with 1 second
+	for i := 1; i < newRetryCount && i < 5; i++ {
+		delayMs *= 2
+	}
+	if delayMs > 30000 {
+		delayMs = 30000
+	}
+
+	// Add exponential backoff delay to the message header
+	// This is used by the delayed exchange to schedule message delivery
+	msg.Headers["x-delay"] = delayMs
+
+	// Republish the message to the delayed exchange with the x-delay header
+	// The delayed exchange will hold the message for the specified delay period
+	// before routing it back to the queue
 	return w.amqpChannel.Publish(
-		msg.Exchange,   // exchange
-		msg.RoutingKey, // routing key (queue name)
-		false,          // mandatory
-		false,          // immediate
+		w.delayedExchangeName, // exchange - use delayed exchange for retry messages
+		w.QueueName,           // routing key (queue name)
+		false,                 // mandatory
+		false,                 // immediate
 		amqp.Publishing{
 			Headers:      msg.Headers,
 			ContentType:  msg.ContentType,
