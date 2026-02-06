@@ -293,11 +293,11 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 
 	// Bind queue to delayed exchange
 	err = ch.QueueBind(
-		q.Name,             // queue name
-		q.Name,             // routing key (same as queue name)
+		q.Name,              // queue name
+		q.Name,              // routing key (same as queue name)
 		delayedExchangeName, // exchange
-		false,              // no-wait
-		nil,                // args
+		false,               // no-wait
+		nil,                 // args
 	)
 	if err != nil {
 		ch.Close()
