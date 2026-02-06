@@ -209,7 +209,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, skipped ch
 			} else {
 				logger.Warn("COULD_NOT_PROCESS_PGCR", nil, map[string]any{
 					logging.INSTANCE_ID: instanceID,
-					"result":           result,
+					"result":            result,
 				})
 				failures <- instanceID
 				processed = true
@@ -225,4 +225,3 @@ func worker(ch chan int64, successes chan int64, failures chan int64, skipped ch
 		}
 	}
 }
-

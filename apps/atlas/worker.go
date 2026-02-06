@@ -91,6 +91,10 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 				atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
 				time.Sleep(60 * time.Second)
 				continue
+			} else if result == pgcr_processing.RateLimited {
+				atlas_metrics.PGCRCrawlLag.WithLabelValues(statusStr, attemptsStr).Observe(0)
+				// Back off when rate limited (e.g., ThrottledByGameServer)
+				time.Sleep(5 * time.Second)
 			} else if result == pgcr_processing.InsufficientPrivileges {
 				publishing.PublishInt64Message(context.Background(), routing.PGCRRetry, instanceID)
 				break
@@ -98,9 +102,10 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 			} else if result == pgcr_processing.BadFormat {
 				instance_storage.WriteMissedLog(instanceID)
 				malformedRetryCount++
-			} else if result == pgcr_processing.BadFormat || result == pgcr_processing.ExternalError {
+			} else if result == pgcr_processing.ExternalError {
 				instance_storage.WriteMissedLog(instanceID)
 				errCount++
+				time.Sleep(10 * time.Second)
 			}
 
 			// If we have not found the instance id after some time

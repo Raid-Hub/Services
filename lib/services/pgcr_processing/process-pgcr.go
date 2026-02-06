@@ -347,7 +347,7 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 		} else {
 			*result = (startingPhaseIndex == 0)
 		}
-	} else if startUnix >= witchQueenStart && (*pgcr.ActivityWasStartedFromBeginning  || deathless) {
+	} else if startUnix >= witchQueenStart && (*pgcr.ActivityWasStartedFromBeginning || deathless) {
 		// WQ: ActivityWasStartedFromBeginning erroneously false when a wipe happens
 		result = pgcr.ActivityWasStartedFromBeginning
 	}

@@ -9,7 +9,9 @@ const (
 	InvalidParameters            = 18   // Invalid input parameters
 	GroupNotFound                = 686  // Clan not found
 	DestinyAccountNotFound       = 1601 // Account not found
+	DestinyUnexpectedError       = 1618 // Unexpected error
 	CharacterNotFound            = 1620
+	DestinyInternalError         = 1626 // Internal server error
 	PGCRNotFound                 = 1653 // Standard 404 error for PGCRs
 	DestinyPrivacyRestriction    = 1665 // Privated resource
 	DestinyThrottledByGameServer = 1672 // Throttled by game server (expected throttling)

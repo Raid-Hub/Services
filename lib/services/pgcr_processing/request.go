@@ -54,9 +54,15 @@ func FetchPGCR(ctx context.Context, instanceID int64, malformedRetryCount int) (
 		// Transient errors, worth warning about
 		case bungie.DestinyThrottledByGameServer:
 			logger.Warn("PGCR_THROTTLED_BY_GAME_SERVER", err, fields)
-			return ExternalError, nil
+			return RateLimited, nil
 		case bungie.UnhandledException:
 			logger.Warn("PGCR_UNHANDLED_EXCEPTION", err, fields)
+			return ExternalError, nil
+		case bungie.DestinyUnexpectedError:
+			logger.Warn("PGCR_UNEXPECTED_ERROR", err, fields)
+			return ExternalError, nil
+		case bungie.DestinyInternalError:
+			logger.Warn("PGCR_INTERNAL_ERROR", err, fields)
 			return ExternalError, nil
 		}
 

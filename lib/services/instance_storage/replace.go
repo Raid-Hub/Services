@@ -107,7 +107,6 @@ func ReplacePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (
 	return &lag, isNew, nil
 }
 
-
 // ClearInstance clears an instance and all related data from the database
 // Clears in order: instance_character_weapon -> instance_character -> instance_player -> instance -> pgcr
 // This is used to clear existing data before replacing with new data

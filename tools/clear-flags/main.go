@@ -228,11 +228,11 @@ func main() {
 	// Note: blacklist deletions are handled inside ClearFlagsByBitmap
 	logger.Info("CLEAR_FLAGS_COMPLETE", map[string]any{
 		"instance_flags_deleted": instanceFlagsDeleted,
-		"player_flags_deleted":    playerFlagsDeleted,
-		"players_reset":           playersReset,
-		"instances_affected":      len(instanceIds),
-		"players_affected":         len(membershipIds),
-		"player_names":            playerNames,
-		"sample_instance_ids":     sampleInstanceIds,
+		"player_flags_deleted":   playerFlagsDeleted,
+		"players_reset":          playersReset,
+		"instances_affected":     len(instanceIds),
+		"players_affected":       len(membershipIds),
+		"player_names":           playerNames,
+		"sample_instance_ids":    sampleInstanceIds,
 	})
 }

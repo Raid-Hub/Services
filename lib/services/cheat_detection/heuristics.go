@@ -157,7 +157,7 @@ var SalvationsEdgeHeuristic = ActivityHeuristic{
 			{
 				MinPlayers:    2,
 				CheatedChance: 0.10,
-				MinTime:       4 * time.Minute,
+				MinTime:       3 * time.Minute,
 			},
 		},
 		Master: {

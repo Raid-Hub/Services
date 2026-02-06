@@ -124,7 +124,7 @@ func main() {
 		}
 		proxyTransport.rt = append(proxyTransport.rt, rt)
 		proxyTransport.statsRl = append(proxyTransport.statsRl, rate.NewLimiter(rate.Every(time.Second/40), 90))
-		proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/12), 25))
+		proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/8), 20))
 		logger.Info("IPV6_SINGLE_TRANSPORT_MODE", map[string]any{
 			"interface":   *ipv6interface,
 			"round_robin": false,
