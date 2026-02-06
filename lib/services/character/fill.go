@@ -50,15 +50,6 @@ func Fill(ctx context.Context, membershipId int64, characterId int64, instanceId
 			logging.STATUS_CODE:       result.HttpStatusCode,
 		}
 
-		// Treat throttling as unretryable at the message level since the internal Bungie client
-		// already handles retries with exponential backoff. Retrying the entire message would
-		// exponentially amplify API traffic during throttling periods.
-		if result.BungieErrorCode == bungie.DestinyThrottledByGameServer {
-			fields[logging.REASON] = "throttled_by_game_server"
-			logger.Warn("CHARACTER_FETCH_THROTTLED", err, fields)
-			return false, processing.NewUnretryableError(err)
-		}
-
 		if bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
 			return false, err
 		}

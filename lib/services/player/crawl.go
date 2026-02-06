@@ -53,12 +53,6 @@ func Crawl(ctx context.Context, membershipId int64) (bool, error) {
 			})
 			return false, nil
 		}
-		// Treat throttling as unretryable at the message level since the internal Bungie client
-		// already handles retries with exponential backoff. Retrying the entire message would
-		// exponentially amplify API traffic during throttling periods.
-		if result.BungieErrorCode == bungie.DestinyThrottledByGameServer {
-			return false, processing.NewUnretryableError(err)
-		}
 		if !bungie.IsTransientError(result.BungieErrorCode, result.HttpStatusCode) {
 			return false, processing.NewUnretryableError(err)
 		}
@@ -185,14 +179,6 @@ func getFirstSeenAndPrivacy(ctx context.Context, membershipType int, membershipI
 	} else if err != nil {
 		logFields := map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
-		}
-
-		// Treat throttling as unretryable at the message level since the internal Bungie client
-		// already handles retries with exponential backoff. Retrying the entire message would
-		// exponentially amplify API traffic during throttling periods.
-		if historyResult.BungieErrorCode == bungie.DestinyThrottledByGameServer {
-			logger.Error("ACTIVITY_HISTORY_THROTTLED", err, logFields)
-			return defaultTime, false, processing.NewUnretryableError(err)
 		}
 
 		// Check if this is a BungieError

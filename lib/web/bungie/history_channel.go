@@ -27,10 +27,6 @@ func (c *BungieClient) GetActivityHistoryInChannel(ctx context.Context, membersh
 	result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, 0, 4)
 	if result.BungieErrorCode == DestinyPrivacyRestriction {
 		return ActivityHistoryResult{PrivacyErrorCode: result.BungieErrorCode}
-	} else if result.BungieErrorCode == DestinyThrottledByGameServer {
-		// Throttling is handled by internal retry logic, but if we still get throttled after
-		// retries, we should not retry at the message level to avoid exponential amplification
-		return ActivityHistoryResult{Error: err}
 	} else if err != nil {
 		return ActivityHistoryResult{Error: err}
 	} else if result.Data == nil {
