@@ -204,15 +204,21 @@ func getInternal[T any](ctx context.Context, c *BungieClient, url string, operat
 
 	// Invariant violation: HTTP 200 should mean Bungie ErrorCode == Success
 	if response.ErrorCode != Success {
-		err := fmt.Errorf("invariant violation: HTTP 200 but Bungie ErrorCode=%d (expected %d): %s", response.ErrorCode, Success, response.ErrorStatus)
-		clientLogger.Error("BUNGIE_RESPONSE_INVALID_STATE", err, fields)
+		// Create a BungieError so it can be properly handled in request.go
+		bungieError := &BungieError{
+			operation:   operation,
+			ErrorCode:   response.ErrorCode,
+			Message:     response.Message,
+			ErrorStatus: response.ErrorStatus,
+		}
+		clientLogger.Warn("BUNGIE_RESPONSE_INVALID_STATE", bungieError, fields)
 		return BungieHttpResult[T]{
 			HttpStatusCode:    resp.StatusCode,
 			BungieErrorCode:   response.ErrorCode,
 			BungieErrorStatus: response.ErrorStatus,
 			Data:              &response.Response,
 			MessageData:       nil,
-		}, err
+		}, bungieError
 	}
 
 	result := BungieHttpResult[T]{
