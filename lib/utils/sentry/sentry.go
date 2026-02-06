@@ -132,6 +132,15 @@ func CaptureError(level sentry.Level, logKey string, err error, fields map[strin
 		return
 	}
 
+	// Skip sending MaxRetriesExceededError to Sentry if it's wrapping a known transient error
+	// (like Cloudflare errors) that has already been retried with exponential backoff
+	var maxRetriesErr *retry.MaxRetriesExceededError
+	if err != nil && errors.As(err, &maxRetriesErr) {
+		if isKnownTransientError(maxRetriesErr.LastError) {
+			return
+		}
+	}
+
 	sentry.CurrentHub().WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelError)
 
@@ -232,4 +241,43 @@ func normalizeValueForSentry(v any) any {
 	default:
 		return v
 	}
+}
+
+// isKnownTransientError checks if an error is a known transient error that should not be reported to Sentry
+// after max retries have been exhausted. This includes Cloudflare errors and other known HTML error pages.
+func isKnownTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+
+	// Check for Cloudflare-related errors
+	if strings.Contains(errStr, "cloudflare") {
+		return true
+	}
+
+	// Check for known transient HTTP error responses
+	// These are errors that indicate temporary service unavailability
+	knownTransientPhrases := []string{
+		"attention required",
+		"just a moment",
+		"checking your browser",
+		"ddos protection",
+		"access denied",
+		"503 service temporarily unavailable",
+		"502 bad gateway",
+		"504 gateway timeout",
+		"connection timeout",
+		"connection refused",
+		"network is unreachable",
+	}
+
+	for _, phrase := range knownTransientPhrases {
+		if strings.Contains(errStr, phrase) {
+			return true
+		}
+	}
+
+	return false
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"raidhub/lib/messaging/processing"
@@ -237,14 +238,22 @@ func (w *Worker) dropMessage(msg amqp.Delivery, retryCount int, maxRetries int, 
 	}
 }
 
-// republishForRetry republishes message with incremented retry count
+// republishForRetry republishes message with incremented retry count and exponential backoff delay
 func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	if msg.Headers == nil {
 		msg.Headers = amqp.Table{}
 	}
 	msg.Headers["x-retry-count"] = int32(newRetryCount)
 
-	// Republish the message to the same queue with updated headers
+	// Calculate exponential backoff delay (in milliseconds)
+	// Initial delay: 3s, multiplier: 2.5, max delay: 180s (3 minutes)
+	delay := calculateRetryDelay(newRetryCount)
+	
+	// Set the TTL for delayed retry
+	// RabbitMQ will automatically dead-letter the message after TTL expires
+	expiration := fmt.Sprintf("%d", delay.Milliseconds())
+
+	// Republish the message to the same queue with updated headers and TTL
 	return w.amqpChannel.Publish(
 		msg.Exchange,   // exchange
 		msg.RoutingKey, // routing key (queue name)
@@ -256,8 +265,30 @@ func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 			Body:         msg.Body,
 			DeliveryMode: msg.DeliveryMode,
 			Priority:     msg.Priority,
+			Expiration:   expiration, // TTL for delayed retry
 		},
 	)
+}
+
+// calculateRetryDelay computes exponential backoff delay for worker-level retries
+// This provides backoff at the message queue level, complementing the API-level retries
+func calculateRetryDelay(retryCount int) time.Duration {
+	// Initial delay: 3s, multiplier: 2.5, max delay: 180s (3 minutes)
+	const (
+		initialDelay = 3 * time.Second
+		multiplier   = 2.5
+		maxDelay     = 180 * time.Second
+	)
+	
+	// Calculate exponential backoff: initialDelay * multiplier^(retryCount-1)
+	// For retry count 1: 3s, 2: 7.5s, 3: 18.75s, 4: 46.875s, 5: 117.1875s, 6+: 180s
+	delay := float64(initialDelay) * math.Pow(multiplier, float64(retryCount-1))
+	
+	if delay > float64(maxDelay) {
+		return maxDelay
+	}
+	
+	return time.Duration(delay)
 }
 
 // handleUnretryableError handles permanent processing failures
