@@ -80,6 +80,11 @@ func (e *BungieResponseParseError) isKnownHTMLErrorPage() bool {
 		"checking your browser",
 		"ddos protection by cloudflare",
 		"access denied",
+		// Standard HTTP error pages
+		"500 internal server error",
+		"502 bad gateway",
+		"503 service unavailable",
+		"504 gateway timeout",
 	}
 
 	for _, knownPage := range knownPages {
