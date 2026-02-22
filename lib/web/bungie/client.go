@@ -176,9 +176,15 @@ func getInternal[T any](ctx context.Context, c *BungieClient, url string, operat
 	if resp.StatusCode != http.StatusOK {
 		error_response, err := decodeResponse[BungieError](resp)
 		if err != nil {
+			// If we can't decode the error response as JSON (e.g., unexpected EOF, malformed JSON),
+			// treat it as a parse error similar to non-JSON responses rather than a critical error.
+			// This is expected when Bungie returns 500 errors with empty or malformed JSON bodies.
 			fields[logging.DURATION] = fmt.Sprintf("%dms", duration)
-			clientLogger.Error("BUNGIE_ERROR_DECODE_FAILED", err, fields)
-			return makeNonStandardHttpResult[T](resp.StatusCode), err
+			fields["decode_error"] = err.Error()
+			parseError.ContentType = contentType
+			parseError.Title = fmt.Sprintf("JSON decode failed: %s", err.Error())
+			clientLogger.Warn("BUNGIE_ERROR_DECODE_FAILED", &parseError, fields)
+			return makeNonStandardHttpResult[T](resp.StatusCode), &parseError
 		}
 		error_response.operation = operation
 		result := BungieHttpResult[T]{
