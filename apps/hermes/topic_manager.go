@@ -143,6 +143,11 @@ func startTopicManager(topic processing.Topic, ctx context.Context) (*TopicManag
 		topicConfig.ConsecutiveChecksDown = 3 // Require 3 checks (15 minutes) before scaling down (more conservative)
 	}
 
+	// Ensure MinWorkers is at least 1 to prevent scaling to 0
+	if topicConfig.MinWorkers < 1 {
+		topicConfig.MinWorkers = 1
+	}
+
 	// Get API availability monitor if needed
 	var apiWG *utils.ReadOnlyWaitGroup
 	if len(topicConfig.BungieSystemDeps) > 0 {
