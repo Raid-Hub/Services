@@ -57,8 +57,18 @@ func (w *Worker) Run() {
 			return
 		case msg, ok := <-w.channel:
 			if !ok {
-				err := fmt.Errorf("channel_closed")
-				w.Error(WORKER_STOPPING, err, nil)
+				// Check if this is a natural shutdown (context cancelled) or unexpected channel closure
+				select {
+				case <-w.ctx.Done():
+					// Natural shutdown - context was cancelled (e.g., autoscale, app shutdown)
+					w.Debug(WORKER_STOPPING, map[string]any{
+						logging.REASON: "channel_closed",
+					})
+				default:
+					// Unexpected channel closure - report as error
+					err := fmt.Errorf("channel_closed")
+					w.Error(WORKER_STOPPING, err, nil)
+				}
 				return
 			}
 
