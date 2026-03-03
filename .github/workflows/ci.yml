@@ -25,6 +25,15 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
+      - name: Verify go fmt
+        run: |
+          diff=$(gofmt -s -l .)
+          if [ -n "$diff" ]; then
+            echo "The following files need formatting. Run: go fmt ./..."
+            echo "$diff"
+            exit 1
+          fi
+
       - name: Build apps and tools
         run: |
           go build -o /dev/null ./apps/...

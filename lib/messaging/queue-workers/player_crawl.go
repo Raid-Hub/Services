@@ -33,6 +33,7 @@ func PlayerCrawlTopic() processing.Topic {
 		ScaleCooldown:         30 * time.Second, // Shorter cooldown for faster scaling
 		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
 		MaxRetryCount:         5, // Reduced from 12 to prevent exponential retry amplification
+		RetryDelay:            5 * time.Minute,
 	}, processPlayerCrawl)
 }
 

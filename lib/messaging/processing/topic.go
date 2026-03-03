@@ -118,6 +118,7 @@ type TopicConfig struct {
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
 	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
+	RetryDelay            time.Duration // Delay between retries
 }
 
 // NewTopic creates a new topic with the given config and processor

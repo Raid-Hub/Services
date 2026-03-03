@@ -6,6 +6,7 @@ import (
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/character"
 	"raidhub/lib/utils/logging"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -25,6 +26,7 @@ func CharacterFillTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2", "D2Characters"},
 		MaxRetryCount:      4, // Character data is useful but not critical
+		RetryDelay:         5 * time.Minute,
 	}, processCharacterFill)
 }
 

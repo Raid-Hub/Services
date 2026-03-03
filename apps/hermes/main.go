@@ -67,6 +67,11 @@ func main() {
 	rabbit.Wait()
 	publishing.Wait()
 
+	if err := verifyDelayedMessageExchangePlugin(); err != nil {
+		HermesLogger.Fatal("DELAYED_EXCHANGE_PLUGIN_NOT_ACTIVE", err, nil)
+		return
+	}
+
 	topics := []processing.Topic{
 		qw.PlayerCrawlTopic(),
 		qw.PgcrBlockedTopic(),

@@ -17,6 +17,33 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// Shared delayed exchange for all retry messages; queues bind with routing key = queue name
+const delayedExchangeName = "hermes.delayed"
+
+// verifyDelayedMessageExchangePlugin ensures rabbitmq_delayed_message_exchange is active
+// by declaring the delayed exchange. Fails fast at startup if the plugin is not enabled.
+func verifyDelayedMessageExchangePlugin() error {
+	ch, err := rabbit.Conn.Channel()
+	if err != nil {
+		return fmt.Errorf("failed to get channel for delayed exchange verification: %w", err)
+	}
+	defer ch.Close()
+
+	err = ch.ExchangeDeclare(
+		delayedExchangeName,
+		"x-delayed-message",
+		true,
+		false,
+		false,
+		false,
+		amqp.Table{"x-delayed-type": "direct"},
+	)
+	if err != nil {
+		return fmt.Errorf("rabbitmq_delayed_message_exchange plugin is not active (enable with: rabbitmq-plugins enable rabbitmq_delayed_message_exchange): %w", err)
+	}
+	return nil
+}
+
 // scalingState tracks the state for dead zone and cooldown logic
 type scalingState struct {
 	lastScaleTime         time.Time
@@ -281,9 +308,7 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		return nil, err
 	}
 
-	// Declare delayed exchange for retry messages with exponential backoff
-	// This exchange enables the x-delay header to work properly
-	delayedExchangeName := tm.config.QueueName + ".delayed"
+	// Declare shared delayed exchange for retry messages (idempotent - first caller creates it)
 	err = ch.ExchangeDeclare(
 		delayedExchangeName,
 		"x-delayed-message", // type - requires rabbitmq_delayed_message_exchange plugin
@@ -300,13 +325,13 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		return nil, err
 	}
 
-	// Bind queue to delayed exchange
+	// Bind queue to shared delayed exchange (routing key = queue name for correct delivery)
 	err = ch.QueueBind(
-		q.Name,              // queue name
-		q.Name,              // routing key (same as queue name)
-		delayedExchangeName, // exchange
-		false,               // no-wait
-		nil,                 // args
+		q.Name,
+		q.Name,
+		delayedExchangeName,
+		false, // no-wait
+		nil,   // args
 	)
 	if err != nil {
 		ch.Close()

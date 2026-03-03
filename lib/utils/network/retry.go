@@ -35,10 +35,10 @@ func TransientNetworkErrorRetryConfig() retry.RetryConfig {
 // Params: logger: logger to use for logging, loggingFields: fields to add to the logging
 func CloudflareRetryConfig(logger logging.Logger, loggingFields map[string]any) retry.RetryConfig {
 	return retry.RetryConfig{
-		MaxAttempts:  8,
-		InitialDelay: 3 * time.Second,
-		MaxDelay:     120 * time.Second,
-		Multiplier:   3,   // Back off fast
+		MaxAttempts:  3,
+		InitialDelay: 1 * time.Second,
+		MaxDelay:     10 * time.Second,
+		Multiplier:   4,   // Back off fast
 		Jitter:       0.2, // 20% jitter for better distribution of retries
 		OnRetry: func(attempt int, err error) {
 			fields := map[string]any{

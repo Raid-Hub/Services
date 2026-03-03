@@ -19,9 +19,8 @@ const (
 	AUTOSCALE_IN    = "autoscaled_in"
 
 	// Retry backoff configuration
-	retryBaseDelayMs    = int64(5000) // 1 second base delay
-	retryDelayMultiplier = 3          // Double delay for each retry
-	maxRetryDelayMs     = int64(1800000) // Cap at 30 minutes
+	retryDelayMultiplier = 2              // Double delay for each retry
+	maxRetryDelayMs      = int64(1800000) // Cap at 30 minutes
 )
 
 // Worker represents a message processing worker with structured logging
@@ -93,8 +92,7 @@ func (w *Worker) handleMessage(msg amqp.Delivery) {
 	if err != nil {
 		retryCount := w.getRetryCount(msg)
 
-		// Check if we've exceeded max retry count
-		if w.shouldDeadLetter(retryCount) {
+		if w.shouldDeadLetter(msg, retryCount) {
 			w.dropMessage(msg, retryCount, w.Topic.Config.MaxRetryCount, err)
 			return
 		}
@@ -222,10 +220,11 @@ func (w *Worker) Fatal(key string, err error, fields map[string]any) {
 	w.logger.Fatal(key, err, fields)
 }
 
-// shouldDeadLetter checks if message should be dead-lettered based on retry count
-func (w *Worker) shouldDeadLetter(retryCount int) bool {
-	maxRetries := w.Topic.Config.MaxRetryCount
-	return maxRetries > 0 && retryCount >= maxRetries
+// shouldDeadLetter checks if message should be dead-lettered (only when from delayed exchange and max retries exceeded)
+func (w *Worker) shouldDeadLetter(msg amqp.Delivery, retryCount int) bool {
+	return (msg.Exchange == w.delayedExchangeName &&
+		w.Topic.Config.MaxRetryCount > 0 &&
+		retryCount >= w.Topic.Config.MaxRetryCount)
 }
 
 // dropMessage permanently drops messages that exceed retry limits
@@ -260,10 +259,10 @@ func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	}
 	msg.Headers["x-retry-count"] = int32(newRetryCount)
 
+	delayMs := max(w.Topic.Config.RetryDelay.Milliseconds(), 1000)
+
 	// Calculate exponential backoff delay: base * multiplier^(retryCount-1)
-	// Retry 1: 1s, Retry 2: 2s, Retry 3: 4s, Retry 4: 8s, Retry 5+: 16s (capped at maxRetryDelayMs)
-	// The cap prevents delays from growing too large for higher retry counts
-	delayMs := retryBaseDelayMs
+	// Cap prevents delays from growing too large for higher retry counts
 	for i := 1; i < newRetryCount; i++ {
 		delayMs *= retryDelayMultiplier
 		if delayMs > maxRetryDelayMs {
@@ -279,7 +278,7 @@ func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	// Republish the message to the delayed exchange with the x-delay header
 	// The delayed exchange will hold the message for the specified delay period
 	// before routing it back to the queue
-	return w.amqpChannel.Publish(
+	return w.amqpChannel.PublishWithContext(w.ctx,
 		w.delayedExchangeName, // exchange - use delayed exchange for retry messages
 		w.QueueName,           // routing key (queue name)
 		false,                 // mandatory
