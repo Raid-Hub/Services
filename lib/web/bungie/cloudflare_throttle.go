@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	// cloudflareThrottleDuration is how long all workers pause after a Cloudflare block is detected.
-	// Each subsequent detection resets the timer, so a sustained block extends the pause.
+	// cloudflareThrottleDuration is how long all workers pause after the throttle is activated.
 	cloudflareThrottleDuration = 60 * time.Second
 
 	// cloudflareThrottleWindow is the sliding window over which errors are counted.
@@ -25,7 +24,7 @@ var (
 	cloudflareThrottleMu  sync.Mutex
 	cloudflareThrottleCh  chan struct{} // closed when NOT throttled; open (blocks) when throttled
 	cloudflareIsThrottled bool
-	cloudflareGeneration  int       // incremented on each Signal to invalidate stale timer callbacks
+	cloudflareGeneration  int         // incremented on each new throttle activation; guards against stale timer callbacks
 	cloudflareErrorTimes  []time.Time // sliding window of recent Cloudflare error timestamps
 	cloudflareThrottleLog = logging.NewLogger("CLOUDFLARE_THROTTLE")
 )
@@ -39,7 +38,7 @@ func init() {
 // SignalCloudflareThrottle records a Cloudflare error and activates a global pause when
 // cloudflareThrottleMinErrors errors occur within cloudflareThrottleWindow.
 // All callers of WaitForCloudflareThrottle will block for cloudflareThrottleDuration.
-// If already throttled, the cooldown period is extended from now.
+// If the throttle is already active, this is a no-op.
 func SignalCloudflareThrottle() {
 	cloudflareThrottleMu.Lock()
 	defer cloudflareThrottleMu.Unlock()
@@ -55,28 +54,31 @@ func SignalCloudflareThrottle() {
 	}
 	cloudflareErrorTimes = cloudflareErrorTimes[start:]
 
-	// Only activate (or extend) the throttle once the threshold is reached.
+	// Only activate the throttle once the threshold is reached.
 	if len(cloudflareErrorTimes) < cloudflareThrottleMinErrors {
+		return
+	}
+
+	// If already throttled, nothing to do — the existing timer will clear it.
+	if cloudflareIsThrottled {
 		return
 	}
 
 	cloudflareGeneration++
 	gen := cloudflareGeneration
 
-	if !cloudflareIsThrottled {
-		// Replace the closed channel with a new open channel so waiters will block.
-		cloudflareIsThrottled = true
-		cloudflareThrottleCh = make(chan struct{})
-		cloudflareThrottleLog.Warn("CLOUDFLARE_THROTTLE_ACTIVATED", nil, map[string]any{
-			"duration_s":  int(cloudflareThrottleDuration.Seconds()),
-			"error_count": len(cloudflareErrorTimes),
-			"window_s":    int(cloudflareThrottleWindow.Seconds()),
-		})
-	}
+	// Replace the closed channel with a new open channel so waiters will block.
+	cloudflareIsThrottled = true
+	cloudflareThrottleCh = make(chan struct{})
+	cloudflareThrottleLog.Warn("CLOUDFLARE_THROTTLE_ACTIVATED", nil, map[string]any{
+		"duration_s":  int(cloudflareThrottleDuration.Seconds()),
+		"error_count": len(cloudflareErrorTimes),
+		"window_s":    int(cloudflareThrottleWindow.Seconds()),
+	})
 
 	// Capture the current channel so the timer callback releases the right set of waiters.
-	// Using a generation counter ensures only the latest timer callback fires; earlier callbacks
-	// (from previous or superseded signals) are no-ops because their generation no longer matches.
+	// The generation counter guards against the unlikely race where this timer fires after
+	// the throttle has already been cleared and a new throttle period has started.
 	ch := cloudflareThrottleCh
 	time.AfterFunc(cloudflareThrottleDuration, func() {
 		cloudflareThrottleMu.Lock()
