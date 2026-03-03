@@ -112,7 +112,7 @@ services:
     stop_signal: SIGTERM
 
   rabbitmq:
-    image: rabbitmq:3.8-management
+    image: rabbitmq:3.13-management
     environment:
       RABBITMQ_DEFAULT_USER: "dev"
       RABBITMQ_DEFAULT_PASS: "password"
@@ -123,6 +123,7 @@ services:
     volumes:
       - ./volumes/rabbitmq:/var/lib/rabbitmq
       - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infrastructure/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     stop_grace_period: 20s
     stop_signal: SIGTERM
 

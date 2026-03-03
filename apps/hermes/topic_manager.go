@@ -281,6 +281,38 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		return nil, err
 	}
 
+	// Declare delayed exchange for retry messages with exponential backoff
+	// This exchange enables the x-delay header to work properly
+	delayedExchangeName := tm.config.QueueName + ".delayed"
+	err = ch.ExchangeDeclare(
+		delayedExchangeName,
+		"x-delayed-message", // type - requires rabbitmq_delayed_message_exchange plugin
+		true,                // durable
+		false,               // auto-deleted
+		false,               // internal
+		false,               // no-wait
+		amqp.Table{
+			"x-delayed-type": "direct", // The actual exchange type to use after delay
+		},
+	)
+	if err != nil {
+		ch.Close()
+		return nil, err
+	}
+
+	// Bind queue to delayed exchange
+	err = ch.QueueBind(
+		q.Name,              // queue name
+		q.Name,              // routing key (same as queue name)
+		delayedExchangeName, // exchange
+		false,               // no-wait
+		nil,                 // args
+	)
+	if err != nil {
+		ch.Close()
+		return nil, err
+	}
+
 	// Set QoS if needed
 	if tm.config.KeepInReady {
 		prefetch := max(1, tm.config.PrefetchCount)
@@ -312,17 +344,18 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 	// Use the managerConfig which already has the API availability wait group if enabled
 
 	worker := &Worker{
-		ID:          workerID,
-		QueueName:   tm.config.QueueName,
-		wg:          tm.apiWG,
-		Topic:       tm.topic,
-		logger:      HermesLogger,
-		ctx:         workerCtx,
-		cancel:      workerCancel,
-		amqpChannel: ch,
-		channel:     msgs,
-		processor:   tm.topic.Processor,
-		done:        make(chan struct{}),
+		ID:                  workerID,
+		QueueName:           tm.config.QueueName,
+		wg:                  tm.apiWG,
+		Topic:               tm.topic,
+		logger:              HermesLogger,
+		ctx:                 workerCtx,
+		cancel:              workerCancel,
+		amqpChannel:         ch,
+		channel:             msgs,
+		processor:           tm.topic.Processor,
+		done:                make(chan struct{}),
+		delayedExchangeName: delayedExchangeName,
 	}
 
 	// Start worker goroutine with panic recovery
