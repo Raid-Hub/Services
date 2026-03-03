@@ -206,6 +206,10 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 	if targetWorkers < tm.config.MinWorkers {
 		targetWorkers = tm.config.MinWorkers
 	}
+	// CRITICAL SAFEGUARD: Never allow scaling to 0 workers under any circumstances
+	if targetWorkers < 1 {
+		targetWorkers = 1
+	}
 	if targetWorkers > tm.config.MaxWorkers {
 		targetWorkers = tm.config.MaxWorkers
 	}
