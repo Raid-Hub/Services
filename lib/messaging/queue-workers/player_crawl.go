@@ -20,7 +20,7 @@ func PlayerCrawlTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
 		QueueName:             routing.PlayerCrawl,
 		MinWorkers:            5,
-		MaxWorkers:            70,
+		MaxWorkers:            50,
 		DesiredWorkers:        20,
 		KeepInReady:           true,
 		PrefetchCount:         1,

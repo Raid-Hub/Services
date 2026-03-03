@@ -100,7 +100,7 @@ func main() {
 
 			// Initialize rate limiters per IP (always enabled)
 			proxyTransport.statsRl = append(proxyTransport.statsRl, rate.NewLimiter(rate.Every(time.Second/40), 90))
-			proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/8), 20))
+			proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/12), 25))
 			addr = addr.Next()
 		}
 		logger.Info("IPV6_LOAD_BALANCING_ENABLED", map[string]any{
@@ -133,7 +133,7 @@ func main() {
 		// No IPv6: use default transport (single transport)
 		proxyTransport.rt = append(proxyTransport.rt, http.DefaultTransport)
 		proxyTransport.statsRl = append(proxyTransport.statsRl, rate.NewLimiter(rate.Every(time.Second/40), 90))
-		proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/8), 20))
+		proxyTransport.wwwRl = append(proxyTransport.wwwRl, rate.NewLimiter(rate.Every(time.Second/12), 25))
 		logger.Info("USING_DEFAULT_TRANSPORT", map[string]any{
 			"round_robin": false,
 		})

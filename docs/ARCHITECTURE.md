@@ -155,7 +155,7 @@ These services run continuously and are started with `make up`:
 - IPv6 configuration: Optional via `ZEUS_IPV6` environment variable (base address)
 - Configurable IPv6 interface and address count via flags (`--interface`, `--v6_n`)
 - Stats API: 40 requests/second per IP, 90 burst
-- WWW API: 8 requests/second per IP, 20 burst
+- WWW API: 12 requests/second per IP, 25 burst
 - Development mode: `--dev` flag disables round robin but keeps rate limiting enabled (used by Tilt)
 
 #### Hermes - Queue Worker Manager
