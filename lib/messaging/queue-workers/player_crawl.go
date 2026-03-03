@@ -9,6 +9,8 @@ import (
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
 	"raidhub/lib/utils/logging"
+	"raidhub/lib/utils/network"
+	"raidhub/lib/web/bungie"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -44,6 +46,11 @@ func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery
 		return err
 	}
 
+	// Wait if a global Cloudflare throttle is active to avoid amplifying retry storms
+	if err := bungie.WaitForCloudflareThrottle(worker.Context()); err != nil {
+		return err
+	}
+
 	if !tryStartPlayerCrawl(membershipId) {
 		worker.Debug("PLAYER_CRAWL_DEDUPED", map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -63,6 +70,9 @@ func processPlayerCrawl(worker processing.WorkerInterface, message amqp.Delivery
 		worker.Warn("PLAYER_CRAWL_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
+		if network.IsCloudflareError(err) {
+			bungie.SignalCloudflareThrottle()
+		}
 		return err
 	}
 
