@@ -107,7 +107,7 @@ func getP20Lag(intervalMins int) (float64, error) {
 
 func get404Rate(intervalMins int) (float64, error) {
 	query := fmt.Sprintf(`sum(rate(pgcr_crawl_summary_status_count{status="3"}[%dm])) * %d * 60`, intervalMins, intervalMins)
-	res, err := prometheusClient.QueryRange(query, 0)
+	res, err := prometheusClient.QueryRange(query, intervalMins)
 	if err != nil {
 		return 0, err
 	}
