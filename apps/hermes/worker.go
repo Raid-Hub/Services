@@ -19,9 +19,9 @@ const (
 	AUTOSCALE_IN    = "autoscaled_in"
 
 	// Retry backoff configuration
-	retryBaseDelayMs    = int64(1000) // 1 second base delay
-	retryDelayMultiplier = 2          // Double delay for each retry
-	maxRetryDelayMs     = int64(30000) // Cap at 30 seconds
+	retryBaseDelayMs    = int64(5000) // 1 second base delay
+	retryDelayMultiplier = 3          // Double delay for each retry
+	maxRetryDelayMs     = int64(1800000) // Cap at 30 minutes
 )
 
 // Worker represents a message processing worker with structured logging
