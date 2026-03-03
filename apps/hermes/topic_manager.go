@@ -143,6 +143,11 @@ func startTopicManager(topic processing.Topic, ctx context.Context) (*TopicManag
 		topicConfig.ConsecutiveChecksDown = 3 // Require 3 checks (15 minutes) before scaling down (more conservative)
 	}
 
+	// Ensure MinWorkers is at least 1 to prevent scaling to 0
+	if topicConfig.MinWorkers < 1 {
+		topicConfig.MinWorkers = 1
+	}
+
 	// Get API availability monitor if needed
 	var apiWG *utils.ReadOnlyWaitGroup
 	if len(topicConfig.BungieSystemDeps) > 0 {
@@ -200,6 +205,10 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 	// Ensure we stay within min/max bounds
 	if targetWorkers < tm.config.MinWorkers {
 		targetWorkers = tm.config.MinWorkers
+	}
+	// CRITICAL SAFEGUARD: Never allow scaling to 0 workers under any circumstances
+	if targetWorkers < 1 {
+		targetWorkers = 1
 	}
 	if targetWorkers > tm.config.MaxWorkers {
 		targetWorkers = tm.config.MaxWorkers
