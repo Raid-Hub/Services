@@ -1,0 +1,78 @@
+// Stage 2 of the subscription pipeline: consume SubscriptionMatchMessage, run MatchEvent (rules +
+// hydrate), marshal each SubscriptionDeliveryMessage, publish N to subscription_delivery.
+// See lib/services/subscriptions/README.md.
+package queueworkers
+
+import (
+	"encoding/json"
+	"time"
+
+	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/processing"
+	"raidhub/lib/messaging/publishing"
+	"raidhub/lib/messaging/routing"
+	"raidhub/lib/services/subscriptions"
+	"raidhub/lib/utils/logging"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+func SubscriptionMatchTopic() processing.Topic {
+	return processing.NewTopic(processing.TopicConfig{
+		QueueName:          routing.SubscriptionMatch,
+		MinWorkers:         1,
+		MaxWorkers:         10,
+		DesiredWorkers:     2,
+		KeepInReady:        true,
+		PrefetchCount:      1,
+		ScaleUpThreshold:   100,
+		ScaleDownThreshold: 10,
+		ScaleUpPercent:     0.2,
+		ScaleDownPercent:   0.1,
+		MaxRetryCount:      10,
+		RetryDelay:         2 * time.Minute,
+	}, processSubscriptionMatch)
+}
+
+func processSubscriptionMatch(worker processing.WorkerInterface, message amqp.Delivery) error {
+	request, err := processing.ParseJSON[messages.SubscriptionMatchMessage](worker, message.Body)
+	if err != nil {
+		return err
+	}
+
+	worker.Info("PROCESSING_SUBSCRIPTION_MATCH", map[string]any{
+		logging.INSTANCE_ID: request.InstanceId,
+		logging.COUNT:       len(request.ParticipantData),
+	})
+
+	deliveryMessages, err := subscriptions.MatchEvent(worker.Context(), request)
+	if err != nil {
+		worker.Warn("SUBSCRIPTION_MATCH_FAILED", err, map[string]any{
+			logging.INSTANCE_ID: request.InstanceId,
+		})
+		return err
+	}
+
+	// Fan-out to subscription_delivery: marshal-then-publish-all avoids partial queue writes.
+	bodies := make([][]byte, 0, len(deliveryMessages))
+	for _, dm := range deliveryMessages {
+		b, err := json.Marshal(dm)
+		if err != nil {
+			worker.Warn("SUBSCRIPTION_DELIVERY_MARSHAL_FAILED", err, map[string]any{
+				logging.INSTANCE_ID: request.InstanceId,
+			})
+			return err
+		}
+		bodies = append(bodies, b)
+	}
+	for _, body := range bodies {
+		if err := publishing.PublishJSONBytes(worker.Context(), routing.SubscriptionDelivery, body); err != nil {
+			worker.Warn("FAILED_TO_PUBLISH_SUBSCRIPTION_DELIVERY", err, map[string]any{
+				logging.INSTANCE_ID: request.InstanceId,
+			})
+			return err
+		}
+	}
+
+	return nil
+}

@@ -26,6 +26,9 @@ func init() {
 				Username: env.ClickHouseUser,
 				Password: env.ClickHousePassword,
 			},
+			Settings: clickhouse.Settings{
+				"flatten_nested": 0,
+			},
 		})
 		if err != nil {
 			return err

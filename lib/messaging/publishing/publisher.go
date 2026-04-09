@@ -82,6 +82,17 @@ func PublishJSONMessage(ctx context.Context, queueName string, body any) error {
 	})
 }
 
+// PublishJSONBytes publishes pre-marshaled JSON with the same headers as PublishJSONMessage.
+func PublishJSONBytes(ctx context.Context, queueName string, jsonBody []byte) error {
+	return publishWithTracking(ctx, queueName, amqp.Publishing{
+		ContentType: "application/json",
+		Body:        jsonBody,
+		Headers: amqp.Table{
+			"x-retry-count": int32(0),
+		},
+	})
+}
+
 // PublishTextMessage publishes a text message to the specified queue
 func PublishTextMessage(ctx context.Context, queueName string, text string) error {
 	return publishWithTracking(ctx, queueName, amqp.Publishing{

@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw,cache"
+	searchPath := "public,core,definitions,clan,flagging,leaderboard,extended,raw,cache,subscriptions"
 	initDone = singleton.InitAsync("POSTGRES", 5, map[string]any{
 		"host":        env.PostgresHost,
 		"port":        env.PostgresPort,

@@ -7,6 +7,7 @@ import (
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring/global_metrics"
+	"raidhub/lib/services/subscriptions"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -102,6 +103,10 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 			}
 		}
 		publishing.PublishInt64Message(context.TODO(), routing.InstanceCheatCheck, inst.InstanceId)
+	}
+	if instanceIsNew {
+		// Subscription pipeline entry (stage 1 queue): see lib/services/subscriptions/README.md
+		publishing.PublishJSONMessage(context.TODO(), routing.InstanceParticipantRefresh, subscriptions.NewSubscriptionEvent(inst))
 	}
 
 	// Track overall storage duration and success

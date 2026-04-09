@@ -81,6 +81,9 @@ func main() {
 		qw.PgcrCrawlTopic(),
 		qw.InstanceCheatCheckTopic(),
 		qw.InstanceStoreTopic(),
+		qw.InstanceParticipantRefreshTopic(),
+		qw.SubscriptionMatchTopic(),
+		qw.SubscriptionDeliveryTopic(),
 	}
 
 	var topicManagers []*TopicManager

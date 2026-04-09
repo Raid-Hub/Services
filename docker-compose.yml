@@ -102,26 +102,29 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: "raidhub"
-      POSTGRES_USER: "dev"
-      POSTGRES_PASSWORD: "password"
+      POSTGRES_DB: "${POSTGRES_DB:-raidhub}"
+      POSTGRES_USER: "${POSTGRES_USER:-dev}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-password}"
     volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
     stop_grace_period: 20s
     stop_signal: SIGTERM
 
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: raidhub-rabbitmq
+    build:
+      context: ./infrastructure/rabbitmq
+      dockerfile: Dockerfile
     environment:
-      RABBITMQ_DEFAULT_USER: "dev"
-      RABBITMQ_DEFAULT_PASS: "password"
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-dev}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-password}"
       RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/definitions.json
     ports:
       - "${RABBITMQ_PORT:-5672}:5672" # AMQP
       - "${RABBITMQ_UI_PORT:-15672}:15672" # Management UI
     volumes:
-      - ./volumes/rabbitmq:/var/lib/rabbitmq
+      - rabbitmq_data:/var/lib/rabbitmq
       - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infrastructure/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     stop_grace_period: 20s
@@ -138,7 +141,7 @@ services:
       CLICKHOUSE_DB: "default"
     volumes:
       # Data
-      - ./volumes/clickhouse:/var/lib/clickhouse
+      - clickhouse_data:/var/lib/clickhouse
       # Config
       - ./infrastructure/clickhouse/named_collections.xml:/etc/clickhouse-server/config.d/named_collections.xml:ro
       - ./infrastructure/clickhouse/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
@@ -150,7 +153,7 @@ services:
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
-      - ./volumes/prometheus:/prometheus
+      - prometheus_data:/prometheus
       - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     stop_grace_period: 10s
     stop_signal: SIGTERM
@@ -162,7 +165,7 @@ services:
     ports:
       - "${LOKI_PORT:-3100}:3100"
     volumes:
-      - ./volumes/loki:/loki
+      - loki_data:/loki
       - ./infrastructure/loki/loki.yml:/etc/loki/loki.yml:ro
     stop_grace_period: 10s
     stop_signal: SIGTERM
@@ -186,10 +189,18 @@ services:
       - GF_SECURITY_ADMIN_USER="dev"
       - GF_SECURITY_ADMIN_PASSWORD="password"
     volumes:
-      - ./volumes/grafana:/var/lib/grafana
+      - grafana_data:/var/lib/grafana
       - ./infrastructure/grafana:/etc/grafana/provisioning:ro
     depends_on:
       - loki
       - prometheus
     stop_grace_period: 10s
     stop_signal: SIGTERM
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  clickhouse_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
