@@ -12,7 +12,8 @@ import (
 //  1. applySubscriptionRules — privacy, clan lookup, rules → one row per matched destination
 //  2. enrichDeliveryRaidContext — instance-wide raid fields on each row
 //  3. attachDestinationWebhooks — batch-load webhook URLs (Postgres; not repeated in stage 3)
-//  4. preloadDiscordEmbedData — batch-load embed body (activity, players, stats, clan names)
+//  4. preloadDiscordEmbedData — batch-load Discord embed body (activity, players, stats, feats)
+//  5. preloadHttpCallbackInstance — dto.Instance for http_callback (API-shaped JSON)
 func MatchEvent(ctx context.Context, message messages.SubscriptionMatchMessage) ([]messages.SubscriptionDeliveryMessage, error) {
 	deliveries, err := applySubscriptionRules(ctx, message)
 	if err != nil {
@@ -28,6 +29,9 @@ func MatchEvent(ctx context.Context, message messages.SubscriptionMatchMessage) 
 		return nil, err
 	}
 	if err := preloadDiscordEmbedData(ctx, deliveries); err != nil {
+		return nil, err
+	}
+	if err := preloadHttpCallbackInstance(ctx, deliveries); err != nil {
 		return nil, err
 	}
 	return deliveries, nil

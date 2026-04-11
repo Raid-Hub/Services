@@ -1,5 +1,5 @@
 // Stage 3 of the subscription pipeline: consume SubscriptionDeliveryMessage, SendSubscriptionDelivery
-// (HTTP POST). Messages must carry WebhookURL + EmbedPreload from subscription_match.
+// (HTTP POST). discord_webhook carries EmbedPreload; http_callback carries dto.Instance JSON.
 // See lib/services/subscriptions/README.md.
 package queueworkers
 
@@ -16,7 +16,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// SubscriptionDeliveryTopic POSTs Discord webhooks (payloads from subscription_match only).
+// SubscriptionDeliveryTopic POSTs outbound URLs (Discord webhooks or HTTPS JSON callbacks).
 func SubscriptionDeliveryTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
 		QueueName:          routing.SubscriptionDelivery,

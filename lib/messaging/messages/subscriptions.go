@@ -1,6 +1,10 @@
 package messages
 
-import "time"
+import (
+	"time"
+
+	"raidhub/lib/dto"
+)
 
 type ParticipantStatus string
 
@@ -17,6 +21,8 @@ type DeliveryChannelType string
 
 const (
 	DeliveryChannelDiscordWebhook DeliveryChannelType = "discord_webhook"
+	// DeliveryChannelHttpCallback POSTs application/json; body is dto.Instance (same JSON shape as api.raidhub.io/instance/:id).
+	DeliveryChannelHttpCallback DeliveryChannelType = "http_callback"
 )
 
 type ParticipantResult struct {
@@ -83,8 +89,10 @@ type SubscriptionDeliveryMessage struct {
 	DurationSeconds int       `json:"durationSeconds,omitempty"`
 	Completed       bool      `json:"completed,omitempty"`
 	PlayerCount     int       `json:"playerCount,omitempty"`
-	// EmbedPreload is filled in the match stage (DB + player/clan resolution). Required on subscription_delivery.
+	// EmbedPreload is filled in the match stage for discord_webhook delivery.
 	EmbedPreload *DiscordEmbedPreload `json:"embedPreload,omitempty"`
+	// Instance is filled in the match stage for http_callback (same JSON as api.raidhub.io/instance/:id).
+	Instance *dto.Instance `json:"instance,omitempty"`
 }
 
 // DiscordEmbedPreload is display data for the raid embed body (resolved before the delivery queue).

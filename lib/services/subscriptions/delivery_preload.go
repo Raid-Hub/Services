@@ -36,17 +36,40 @@ func attachDestinationWebhooks(ctx context.Context, deliveries []messages.Subscr
 			return fmt.Errorf("subscription destination %d not found or inactive", id)
 		}
 		if strings.TrimSpace(row.WebhookURL) == "" {
-			return fmt.Errorf("subscription destination %d has no webhook URL", id)
+			return fmt.Errorf("subscription destination %d has no URL", id)
 		}
+		switch row.ChannelType {
+		case string(messages.DeliveryChannelDiscordWebhook):
+			if err := ValidateDiscordWebhookURL(row.WebhookURL); err != nil {
+				return fmt.Errorf("subscription destination %d: %w", id, err)
+			}
+		case string(messages.DeliveryChannelHttpCallback):
+			if err := ValidateHTTPSCallbackURL(row.WebhookURL); err != nil {
+				return fmt.Errorf("subscription destination %d: %w", id, err)
+			}
+		default:
+			return fmt.Errorf("subscription destination %d: unsupported channel_type %q", id, row.ChannelType)
+		}
+		deliveries[i].ChannelType = messages.DeliveryChannelType(row.ChannelType)
 		deliveries[i].WebhookURL = row.WebhookURL
 	}
 	return nil
 }
 
 // preloadDiscordEmbedData loads activity metadata, fireteam profiles, instance stats, and instance feats
-// once per match batch (embed body only; URL is attached in attachDestinationWebhooks).
+// once per match batch for discord_webhook destinations (URL + channel type are set in attachDestinationWebhooks).
 func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.SubscriptionDeliveryMessage) error {
 	if len(deliveries) == 0 {
+		return nil
+	}
+	var needDiscord bool
+	for i := range deliveries {
+		if deliveries[i].ChannelType == messages.DeliveryChannelDiscordWebhook {
+			needDiscord = true
+			break
+		}
+	}
+	if !needDiscord {
 		return nil
 	}
 	d0 := deliveries[0]
@@ -108,6 +131,9 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 	}
 
 	for i := range deliveries {
+		if deliveries[i].ChannelType != messages.DeliveryChannelDiscordWebhook {
+			continue
+		}
 		deliveries[i].EmbedPreload = &messages.DiscordEmbedPreload{
 			ActivityName:     actName,
 			VersionName:      verName,
@@ -116,6 +142,33 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 			InstanceStats:    statsSlice,
 			StatsUnavailable: statsUnavailable,
 			Feats:            feats,
+		}
+	}
+	return nil
+}
+
+// preloadHttpCallbackInstance loads dto.Instance once per batch for http_callback destinations (same JSON shape as the public instance API).
+func preloadHttpCallbackInstance(ctx context.Context, deliveries []messages.SubscriptionDeliveryMessage) error {
+	if len(deliveries) == 0 {
+		return nil
+	}
+	var need bool
+	for i := range deliveries {
+		if deliveries[i].ChannelType == messages.DeliveryChannelHttpCallback {
+			need = true
+			break
+		}
+	}
+	if !need {
+		return nil
+	}
+	inst, err := LoadDTOInstanceFromPostgres(ctx, deliveries[0].InstanceId)
+	if err != nil {
+		return err
+	}
+	for i := range deliveries {
+		if deliveries[i].ChannelType == messages.DeliveryChannelHttpCallback {
+			deliveries[i].Instance = inst
 		}
 	}
 	return nil

@@ -30,6 +30,42 @@ func ValidateDiscordWebhookURL(raw string) error {
 	return nil
 }
 
+// ValidateHTTPSCallbackURL returns nil if the URL is suitable for subscriptions.destination http_callback (HTTPS POST, JSON body).
+func ValidateHTTPSCallbackURL(raw string) error {
+	u := strings.TrimSpace(raw)
+	if u == "" {
+		return fmt.Errorf("callback URL is empty")
+	}
+	if !strings.HasPrefix(u, "https://") {
+		return fmt.Errorf("callback URL must use https://")
+	}
+	return nil
+}
+
+// FindOrCreateDestinationByHTTPSCallback returns the subscriptions.destination id for this URL, inserting http_callback if none exists.
+func FindOrCreateDestinationByHTTPSCallback(ctx context.Context, callbackURL string) (id int64, created bool, err error) {
+	if err := ValidateHTTPSCallbackURL(callbackURL); err != nil {
+		return 0, false, err
+	}
+	u := strings.TrimSpace(callbackURL)
+	err = postgres.DB.QueryRowContext(ctx,
+		`SELECT id FROM subscriptions.destination WHERE webhook_url = $1`, u).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	err = postgres.DB.QueryRowContext(ctx, `
+		INSERT INTO subscriptions.destination (channel_type, webhook_url)
+		VALUES ('http_callback', $1)
+		RETURNING id`, u).Scan(&id)
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
 // FindOrCreateDestinationByWebhook returns the subscriptions.destination id for this webhook_url, inserting a row if none exists.
 func FindOrCreateDestinationByWebhook(ctx context.Context, webhookURL string) (id int64, created bool, err error) {
 	if err := ValidateDiscordWebhookURL(webhookURL); err != nil {

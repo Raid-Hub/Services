@@ -1,9 +1,14 @@
 package subscriptions
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
@@ -11,21 +16,56 @@ import (
 	"raidhub/lib/web/discord"
 )
 
-// SendSubscriptionDelivery POSTs the Discord webhook. Payloads must come from the subscription_match
-// stage (webhook URL + embed preload set). Any other shape is rejected without retry.
+var subscriptionHTTPDeliveryClient = &http.Client{Timeout: 60 * time.Second}
+
+// SendSubscriptionDelivery POSTs the destination URL. Discord uses Components V2 webhook payloads;
+// http_callback sends application/json dto.Instance (same shape as api.raidhub.io/instance/:id).
 func SendSubscriptionDelivery(ctx context.Context, message messages.SubscriptionDeliveryMessage) error {
 	webhookURL := strings.TrimSpace(message.WebhookURL)
-	if webhookURL == "" || message.EmbedPreload == nil {
+	if webhookURL == "" {
 		return processing.NewUnretryableError(fmt.Errorf(
-			"subscription delivery: missing webhookUrl or embedPreload (expected subscription_match output)"))
+			"subscription delivery: missing webhookUrl (expected subscription_match output)"))
 	}
 
-	if message.ChannelType != messages.DeliveryChannelDiscordWebhook {
+	switch message.ChannelType {
+	case messages.DeliveryChannelDiscordWebhook:
+		if message.EmbedPreload == nil {
+			return processing.NewUnretryableError(fmt.Errorf(
+				"subscription delivery: discord_webhook missing embedPreload"))
+		}
+		wh := buildRaidWebhookFromEmbedPreload(message)
+		return discord.SendWebhook(webhookURL, wh)
+	case messages.DeliveryChannelHttpCallback:
+		if message.Instance == nil {
+			return processing.NewUnretryableError(fmt.Errorf(
+				"subscription delivery: http_callback missing instance payload"))
+		}
+		return postSubscriptionInstanceJSON(ctx, webhookURL, message.Instance)
+	default:
 		return fmt.Errorf("unsupported channel type %q", message.ChannelType)
 	}
+}
 
-	wh := buildRaidWebhookFromEmbedPreload(message)
-	return discord.SendWebhook(webhookURL, wh)
+func postSubscriptionInstanceJSON(ctx context.Context, targetURL string, inst any) error {
+	payload, err := json.Marshal(inst)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := subscriptionHTTPDeliveryClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return fmt.Errorf("http_callback POST %s: status %d: %s", targetURL, resp.StatusCode, strings.TrimSpace(string(body)))
 }
 
 func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) *discord.Webhook {

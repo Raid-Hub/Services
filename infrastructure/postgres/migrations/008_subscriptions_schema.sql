@@ -3,7 +3,7 @@
 
 CREATE SCHEMA IF NOT EXISTS "subscriptions";
 
--- Outbound channel (e.g. Discord webhook). Primary key is the stable destination id.
+-- Outbound channel: Discord webhook URL, or HTTPS URL for JSON callbacks (dto.Instance body). Primary key is the stable destination id.
 CREATE TABLE "subscriptions"."destination" (
     "id" BIGSERIAL PRIMARY KEY,
     "channel_type" TEXT NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE "subscriptions"."destination" (
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
-    CONSTRAINT "destination_channel_type_chk" CHECK ("channel_type" IN ('discord_webhook'))
+    CONSTRAINT "destination_channel_type_chk" CHECK ("channel_type" IN ('discord_webhook', 'http_callback'))
 );
 
 -- Match rule: watch a player membership id and/or a clan group id.
