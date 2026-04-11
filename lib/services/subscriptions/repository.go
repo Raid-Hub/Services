@@ -83,20 +83,6 @@ type destinationRow struct {
 	ChannelType string
 }
 
-func loadDestination(ctx context.Context, destinationID int64) (*destinationRow, error) {
-	var d destinationRow
-	err := postgres.DB.QueryRowContext(ctx, `
-		SELECT webhook_url, channel_type
-		FROM subscriptions.destination
-		WHERE id = $1 AND is_active`,
-		destinationID,
-	).Scan(&d.WebhookURL, &d.ChannelType)
-	if err != nil {
-		return nil, err
-	}
-	return &d, nil
-}
-
 // loadActiveDestinationsByIDs returns active destinations keyed by id. Missing ids are omitted.
 func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (map[int64]destinationRow, error) {
 	if len(destinationIDs) == 0 {

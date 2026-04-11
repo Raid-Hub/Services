@@ -7,13 +7,13 @@ When a **new raid instance** is stored, subscribed players/clans can get a **Dis
 ## Why three stages (and not one worker)
 
 1. **Different work, different scaling**  
-   Stage 1 may need **Bungie-related APIs** (participant identity / clan resolution gates in Hermes). Stage 2 does **Postgres rules + batching**. Stage 3 is **only HTTP** to Discord. Putting everything in one topic would couple retry policy, concurrency, and “is Bungie up?” to plain webhook POSTs.
+   Stage 1 may need **Bungie-related APIs** (participant identity / clan resolution gates in Hermes). Stage 2 does **Postgres rules + batching**.    Stage 3 is **only HTTP** to Discord. Putting everything in one topic would couple retry policy, concurrency, and “is Bungie up?” to plain webhook POSTs.
 
 2. **Fan-out is natural at match**  
    One instance can match **several destinations** (several rules). The **subscription_match** stage produces **N** `SubscriptionDeliveryMessage` values and publishes **N** queue messages. That “one logical event, many webhooks” belongs after rules are evaluated, not in storage.
 
 3. **Delivery stays dumb on the happy path**  
-   If stage 2 puts **everything needed to POST** on the message (`WebhookURL`, `EmbedPreload`), stage 3 does not need **Postgres** or heavy domain calls. That keeps **outbound webhook latency and failure modes** separate from **rule matching and DB reads**, and makes it obvious what still hits the DB (stages 1-2 only, plus legacy fallbacks in `SendSubscriptionDelivery`).
+   Stage 2 puts **everything needed to POST** on the message (`WebhookURL`, `EmbedPreload`); stage 3 only **HTTP POST**s to Discord (no Postgres). That keeps **outbound webhook latency and failure modes** separate from **rule matching and DB reads** (stages 1–2 only).
 
 4. **Retries are per destination**  
    A failed Discord POST should retry **that webhook**, not re-run the whole match for the instance. Separate queues give **per-delivery retries** without redoing rule evaluation for other destinations.
@@ -39,7 +39,7 @@ Stage 2  subscription_match
     |  publish N times  ->  queue: SubscriptionDelivery
     v
 Stage 3  subscription_delivery
-    |  SendSubscriptionDelivery: HTTP POST (pipeline messages: URL + preload already set)
+    |  SendSubscriptionDelivery: HTTP POST (webhook URL + embed preload from stage 2)
     v
     done
 ```

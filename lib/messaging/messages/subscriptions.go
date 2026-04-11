@@ -71,7 +71,7 @@ type SubscriptionDeliveryMessage struct {
 	InstanceId           int64               `json:"instanceId,string"`
 	DestinationChannelId int64               `json:"destinationChannelId,string"`
 	ChannelType          DeliveryChannelType `json:"channelType"`
-	// WebhookURL is set in the match stage so delivery workers only POST (no DB lookup). Omitted for legacy/tool messages.
+	// WebhookURL is set in the match stage so delivery workers only POST (no DB lookup).
 	WebhookURL           string              `json:"webhookUrl,omitempty"`
 	DedupeKey            string              `json:"dedupeKey"`
 	Scope                DeliveryScope       `json:"scope"`
@@ -83,7 +83,7 @@ type SubscriptionDeliveryMessage struct {
 	DurationSeconds int       `json:"durationSeconds,omitempty"`
 	Completed       bool      `json:"completed,omitempty"`
 	PlayerCount     int       `json:"playerCount,omitempty"`
-	// EmbedPreload is filled in the match stage (DB + player/clan resolution). If nil, delivery falls back to loading embed data (legacy / tools).
+	// EmbedPreload is filled in the match stage (DB + player/clan resolution). Required on subscription_delivery.
 	EmbedPreload *DiscordEmbedPreload `json:"embedPreload,omitempty"`
 }
 

@@ -1,5 +1,5 @@
 // Stage 3 of the subscription pipeline: consume SubscriptionDeliveryMessage, SendSubscriptionDelivery
-// (HTTP POST). Pipeline messages carry WebhookURL + EmbedPreload from stage 2.
+// (HTTP POST). Messages must carry WebhookURL + EmbedPreload from subscription_match.
 // See lib/services/subscriptions/README.md.
 package queueworkers
 
@@ -16,8 +16,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// SubscriptionDeliveryTopic POSTs Discord webhooks. Match-stage messages carry WebhookURL + EmbedPreload
-// so the hot path is HTTP-only; legacy/tool messages may still hit Postgres inside SendSubscriptionDelivery.
+// SubscriptionDeliveryTopic POSTs Discord webhooks (payloads from subscription_match only).
 func SubscriptionDeliveryTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
 		QueueName:          routing.SubscriptionDelivery,
@@ -31,7 +30,8 @@ func SubscriptionDeliveryTopic() processing.Topic {
 		ScaleUpPercent:     0.2,
 		ScaleDownPercent:   0.1,
 		MaxRetryCount:      100,
-		RetryDelay:         5 * time.Minute,
+		// Base delay before the first republish after failure; Hermes doubles this each retry (cap 30m).
+		RetryDelay: 30 * time.Second,
 	}, processSubscriptionDelivery)
 }
 

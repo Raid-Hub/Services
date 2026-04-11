@@ -2,8 +2,6 @@ package subscriptions
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +10,7 @@ import (
 
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/messages"
+	"raidhub/lib/messaging/processing"
 	"raidhub/lib/services/clan"
 	"raidhub/lib/services/player"
 	"raidhub/lib/utils/logging"
@@ -280,51 +279,24 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 	return nil
 }
 
-// SendSubscriptionDelivery POSTs the Discord webhook. When WebhookURL is set (match pipeline), no
-// Postgres is used. Otherwise the destination row is loaded (legacy / manual publishes).
+// SendSubscriptionDelivery POSTs the Discord webhook. Payloads must come from the subscription_match
+// stage (webhook URL + embed preload set). Any other shape is rejected without retry.
 func SendSubscriptionDelivery(ctx context.Context, message messages.SubscriptionDeliveryMessage) error {
 	webhookURL := strings.TrimSpace(message.WebhookURL)
-	if webhookURL == "" && message.DestinationChannelId <= 0 {
-		logger.Info("SUBSCRIPTIONS_SKIP_LEGACY_OR_INVALID_DESTINATION", map[string]any{
-			logging.INSTANCE_ID: message.InstanceId,
-			"channel_id":        message.DestinationChannelId,
-		})
-		return nil
-	}
-
-	if webhookURL == "" {
-		dest, err := loadDestination(ctx, message.DestinationChannelId)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("subscription destination %d not found or inactive", message.DestinationChannelId)
-			}
-			return err
-		}
-		webhookURL = strings.TrimSpace(dest.WebhookURL)
-		if webhookURL == "" {
-			return fmt.Errorf("subscription destination %d has no webhook URL", message.DestinationChannelId)
-		}
+	if webhookURL == "" || message.EmbedPreload == nil {
+		return processing.NewUnretryableError(fmt.Errorf(
+			"subscription delivery: missing webhookUrl or embedPreload (expected subscription_match output)"))
 	}
 
 	if message.ChannelType != messages.DeliveryChannelDiscordWebhook {
 		return fmt.Errorf("unsupported channel type %q", message.ChannelType)
 	}
 
-	wh, err := buildRaidSubscriptionWebhook(ctx, message)
-	if err != nil {
-		return err
-	}
+	wh := buildRaidWebhookFromEmbedPreload(message)
 	return discord.SendWebhook(webhookURL, wh)
 }
 
-func buildRaidSubscriptionWebhook(ctx context.Context, msg messages.SubscriptionDeliveryMessage) (*discord.Webhook, error) {
-	if msg.EmbedPreload != nil {
-		return buildRaidWebhookFromEmbedPreload(msg)
-	}
-	return buildRaidSubscriptionWebhookLegacy(ctx, msg)
-}
-
-func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) (*discord.Webhook, error) {
+func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) *discord.Webhook {
 	pre := msg.EmbedPreload
 	profiles := make([]player.PlayerProfileForDelivery, 0, len(pre.FireteamProfiles))
 	for _, p := range pre.FireteamProfiles {
@@ -344,42 +316,7 @@ func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) 
 		}
 	}
 	return assembleRaidDiscordEmbed(msg, pre.ActivityName, pre.VersionName, pre.PathSegment, pre.ClanFieldMarkdown,
-		profiles, statsMap, pre.StatsUnavailable), nil
-}
-
-func buildRaidSubscriptionWebhookLegacy(ctx context.Context, msg messages.SubscriptionDeliveryMessage) (*discord.Webhook, error) {
-	meta, err := loadActivityRaidMeta(ctx, msg.ActivityHash)
-	if err != nil {
-		return nil, err
-	}
-
-	fireteamProfiles, err := player.PlayerProfilesForDelivery(ctx, msg.FireteamMembershipIds)
-	if err != nil {
-		return nil, err
-	}
-	clanNames, err := clan.NamesByGroupIDs(ctx, msg.Scope.ClanGroupIds)
-	if err != nil {
-		return nil, err
-	}
-
-	activityName := ""
-	versionName := ""
-	pathSeg := ""
-	if meta != nil {
-		activityName = meta.ActivityName
-		versionName = meta.VersionName
-		pathSeg = meta.PathSegment
-	}
-	clanField := formatClanFieldLines(msg.Scope.ClanGroupIds, clanNames)
-
-	statsMap, statsErr := loadInstancePlayerStats(ctx, msg.InstanceId)
-	if statsErr != nil {
-		logger.Warn("SUBSCRIPTIONS_INSTANCE_STATS_UNAVAILABLE", statsErr, map[string]any{
-			logging.INSTANCE_ID: msg.InstanceId,
-		})
-	}
-	return assembleRaidDiscordEmbed(msg, activityName, versionName, pathSeg, clanField,
-		fireteamProfiles, statsMap, statsErr != nil), nil
+		profiles, statsMap, pre.StatsUnavailable)
 }
 
 func assembleRaidDiscordEmbed(
