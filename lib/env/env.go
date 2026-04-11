@@ -48,6 +48,8 @@ var (
 	NemesisWebhookURL    string
 	GMReportWebhookURL   string
 	GMReportWebhookAuth  string
+	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs (required).
+	SubscriptionHTTPWebhookSecret string
 
 	// Other
 	IsContestWeekend      bool
@@ -131,6 +133,8 @@ func init() {
 	HadesWebhookURL = getEnv("HADES_WEBHOOK_URL")
 	CheatCheckWebhookURL = getEnv("CHEAT_CHECK_WEBHOOK_URL")
 	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
+
+	SubscriptionHTTPWebhookSecret = requireEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
