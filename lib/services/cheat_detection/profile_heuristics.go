@@ -57,6 +57,7 @@ type PlayerAccountData struct {
 	BungieName        string
 	CurrentCheatLevel int
 	IsPrivate         bool
+	IsWhitelisted     bool
 	FlawlessRatio     float64
 	LowmanRatio       float64
 	SoloRatio         float64
@@ -78,10 +79,11 @@ func GetCheaterAccountChance(membershipId int64) (float64, uint64, PlayerAccount
 			icon_path,
 			bungie_name,
 			cheat_level,
-			is_private
+			is_private,
+			is_whitelisted
 		FROM player
 		WHERE membership_id = $1
-	`, membershipId).Scan(&data.AgeInDays, &data.Clears, &data.MembershipType, &data.IconPath, &data.BungieName, &data.CurrentCheatLevel, &data.IsPrivate)
+	`, membershipId).Scan(&data.AgeInDays, &data.Clears, &data.MembershipType, &data.IconPath, &data.BungieName, &data.CurrentCheatLevel, &data.IsPrivate, &data.IsWhitelisted)
 	if err != nil {
 		logger.Warn(PLAYER_INFO_ERROR, err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
@@ -244,6 +246,9 @@ func GetMinimumCheatLevel(flag PlayerInstanceFlagStats, cheaterAccountChance flo
 
 func UpdatePlayerCheatLevel(flag PlayerInstanceFlagStats) (int, float64, uint64) {
 	cheaterAccountChance, bitFlags, data := GetCheaterAccountChance(flag.MembershipId)
+	if data.IsWhitelisted {
+		return -1, cheaterAccountChance, bitFlags
+	}
 
 	minCheatLevel := GetMinimumCheatLevel(flag, cheaterAccountChance)
 

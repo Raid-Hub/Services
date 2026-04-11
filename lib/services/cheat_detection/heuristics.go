@@ -358,6 +358,17 @@ var VaultOfGlassHeuristic = ActivityHeuristic{
 			},
 		},
 		Master: {
+			// Solo fresh Master VoG: before this block, the only Master rule was MinPlayers 2, so solo hit
+			// the "< MinPlayers" branch at 0.995. Treat legit solo fresh Master as possible only from the
+			// first verified non-cheated clear: NAPainter#8697, instance 16578164246 @ 2025-10-07 UTC
+			// (membership_id 4611686018466927122). Earlier solo Master VoG fresh clears in DB are not given this path.
+			{
+				MinPlayers: 1,
+				Range: []DateRange{
+					{Start: time.Date(2025, time.October, 7, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.December, 7, 0, 0, 0, 0, time.UTC)},
+				},
+				CheatedChance: 0.25,
+			},
 			{
 				MinPlayers:    2,
 				CheatedChance: 0.04,

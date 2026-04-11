@@ -216,6 +216,7 @@ func GetRecentlyPlayedBlacklistedPlayers(since time.Time) ([]BlacklistedPlayerDT
 		FROM player
 		WHERE cheat_level = 4
 			AND last_seen >= $1
+			AND NOT is_whitelisted
 	`, since)
 	if err != nil {
 		return nil, fmt.Errorf("error querying recently blacklisted players: %w", err)
@@ -338,6 +339,14 @@ func BlacklistFlaggedInstances() (int64, error) {
 		JOIN instance USING (instance_id)
 		WHERE fi.cheat_probability >= 0.95
 			AND fi.flagged_at >= NOW() - INTERVAL '60 days'
+			AND NOT instance.is_whitelisted
+			AND NOT EXISTS (
+				SELECT 1
+				FROM instance_player ip
+				JOIN player p ON p.membership_id = ip.membership_id
+				WHERE ip.instance_id = fi.instance_id
+					AND p.is_whitelisted
+			)
 		ORDER BY instance_id, fi.flagged_at DESC
 		ON CONFLICT DO NOTHING;
 	`)
@@ -613,6 +622,23 @@ func ResetPlayerCheatLevel(membershipIds []int64) (int64, error) {
 	result, err := postgres.DB.Exec(`
 		UPDATE player
 		SET cheat_level = 0
+		WHERE membership_id = ANY($1)
+	`, pq.Array(membershipIds))
+	if err != nil {
+		return 0, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	return rowsAffected, err
+}
+
+// SetPlayerWhitelisted marks players as whitelisted for cheat detection (excluded from automated flag aggregation).
+func SetPlayerWhitelisted(membershipIds []int64) (int64, error) {
+	if len(membershipIds) == 0 {
+		return 0, nil
+	}
+	result, err := postgres.DB.Exec(`
+		UPDATE player
+		SET is_whitelisted = true
 		WHERE membership_id = ANY($1)
 	`, pq.Array(membershipIds))
 	if err != nil {

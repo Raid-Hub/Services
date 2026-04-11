@@ -122,9 +122,10 @@ func main() {
 			sampleInstanceIds = sampleInstanceIds[:10]
 		}
 
-		// Check cheat level
+		// Check cheat level and whitelist status
 		var cheatLevel int
-		err = tx.QueryRow(`SELECT cheat_level FROM player WHERE membership_id = $1`, membershipId).Scan(&cheatLevel)
+		var wasWhitelisted bool
+		err = tx.QueryRow(`SELECT cheat_level, is_whitelisted FROM player WHERE membership_id = $1`, membershipId).Scan(&cheatLevel, &wasWhitelisted)
 		if err != nil {
 			logger.Fatal("QUERY_CHEAT_LEVEL_ERROR", err, map[string]any{})
 		}
@@ -185,6 +186,7 @@ func main() {
 			"blacklisted_instances":             len(blacklistedInstanceIds),
 			"sample_instance_ids":               sampleInstanceIds,
 			"current_cheat_level":               cheatLevel,
+			"current_is_whitelisted":            wasWhitelisted,
 			"flag_instance_removed":             wouldDeleteFlags,
 			"flag_instance_player_removed":      wouldDeleteFpis,
 			"blacklist_instance_player_removed": wouldDeleteBls,
@@ -192,6 +194,7 @@ func main() {
 			"would_remove_blacklist":            true,
 			"would_clear_flags":                 true,
 			"would_reset_cheat_level":           true,
+			"would_whitelist_player":            true,
 		})
 		return
 	}
@@ -208,6 +211,11 @@ func main() {
 		logger.Fatal("RESET_CHEAT_LEVEL_ERROR", err, map[string]any{})
 	}
 
+	whitelisted, err := cheat_detection.SetPlayerWhitelisted([]int64{membershipId})
+	if err != nil {
+		logger.Fatal("WHITELIST_PLAYER_ERROR", err, map[string]any{})
+	}
+
 	// Get sample instance IDs (first 10)
 	sampleInstanceIds := blacklistedInstanceIds
 	if len(sampleInstanceIds) > 10 {
@@ -222,6 +230,7 @@ func main() {
 		"blacklist_instance_player_removed": blacklistPlayerDeleted,
 		"blacklist_instance_removed":        blacklistInstanceDeleted,
 		"cheat_level_reset":                 cheatLevelReset,
+		"player_whitelisted":                whitelisted,
 		"instances_affected":                len(blacklistedInstanceIds),
 		"sample_instance_ids":               sampleInstanceIds,
 	})

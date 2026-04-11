@@ -127,7 +127,8 @@ func main() {
 	rows, err := postgres.DB.Query(`SELECT DISTINCT instance_id 
 		FROM instance_player 
 		JOIN player USING (membership_id)
-		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'`)
+		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'
+			AND NOT player.is_whitelisted`)
 	if err != nil {
 		logger.Warn("BLACKLIST_QUERY_ERROR", err, map[string]any{
 			logging.OPERATION: "query_blacklisted_instances",
