@@ -66,6 +66,7 @@ type PlayerProfileForDelivery struct {
 	MembershipID int64
 	DisplayName  string
 	IconURL      string // empty if unknown; otherwise https://www.bungie.net…
+	ClassHash    uint32
 }
 
 // PlayerProfilesForDelivery returns one row per id in the same order as ids (omitted ids get empty name).

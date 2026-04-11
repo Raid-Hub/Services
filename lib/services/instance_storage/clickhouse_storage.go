@@ -11,9 +11,10 @@ import (
 // with the players Nested column populated. Materialized views (e.g. weapon_meta_by_hour_mv)
 // read from instance and populate analytics tables.
 //
-// The players shape is []map[string]interface{} (nested: players[i].characters[j].weapons[k])
-// so that clickhouse-go can serialize it to the Nested columns, matching the old pgcr_clickhouse
-// format that used batch.Append(..., instance["players"]).
+// With flatten_nested=0 on the connection, clickhouse-go expects one []map per Nested column
+// (Array(Tuple(...)) — see lib/column/nested.go and examples/clickhouse_api/nested.go NestedUnFlattened).
+// Do not pass separate arrays per Nested field here; that only matches flattened mode and breaks
+// batch.Append with "expected N arguments, got M".
 func StoreToClickHouse(inst *dto.Instance) error {
 	conn := clickhouse.DB
 	ctx := context.Background()
@@ -35,7 +36,7 @@ func StoreToClickHouse(inst *dto.Instance) error {
 		}
 	}
 
-	playerMembershipIds, playerCompleted, playerTimePlayedSeconds, playerSherpas, playerIsFirstClear, playerCharacters := buildPlayersNested(inst.Players)
+	players := buildPlayersMaps(inst.Players)
 
 	batch, err := conn.PrepareBatch(ctx, "INSERT INTO instance")
 	if err != nil {
@@ -55,12 +56,7 @@ func StoreToClickHouse(inst *dto.Instance) error {
 		uint16(inst.MembershipType),
 		uint32(inst.DurationSeconds),
 		int32(inst.Score),
-		playerMembershipIds,
-		playerCompleted,
-		playerTimePlayedSeconds,
-		playerSherpas,
-		playerIsFirstClear,
-		playerCharacters,
+		players,
 	)
 	if err != nil {
 		return err
@@ -75,23 +71,10 @@ func boolToUInt8(v bool) uint8 {
 	return 0
 }
 
-// buildPlayersNested builds the flattened top-level players.* arrays plus the
-// players.characters Array(Nested(...)) shape expected by ClickHouse.
-func buildPlayersNested(pl []dto.InstancePlayer) ([]int64, []uint8, []uint32, []uint32, []uint8, [][]map[string]interface{}) {
-	membershipIds := make([]int64, 0, len(pl))
-	completed := make([]uint8, 0, len(pl))
-	timePlayedSeconds := make([]uint32, 0, len(pl))
-	sherpas := make([]uint32, 0, len(pl))
-	isFirstClear := make([]uint8, 0, len(pl))
-	charactersByPlayer := make([][]map[string]interface{}, 0, len(pl))
-
+// buildPlayersMaps returns one map per player for the players Nested column (flatten_nested=0).
+func buildPlayersMaps(pl []dto.InstancePlayer) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(pl))
 	for _, p := range pl {
-		membershipIds = append(membershipIds, p.Player.MembershipId)
-		completed = append(completed, boolToUInt8(p.Finished))
-		timePlayedSeconds = append(timePlayedSeconds, uint32(p.TimePlayedSeconds))
-		sherpas = append(sherpas, uint32(p.Sherpas))
-		isFirstClear = append(isFirstClear, boolToUInt8(p.IsFirstClear))
-
 		characters := make([]map[string]interface{}, 0, len(p.Characters))
 		for _, c := range p.Characters {
 			classHash := uint32(0)
@@ -129,7 +112,14 @@ func buildPlayersNested(pl []dto.InstancePlayer) ([]int64, []uint8, []uint32, []
 			instanceCharacter["weapons"] = weapons
 			characters = append(characters, instanceCharacter)
 		}
-		charactersByPlayer = append(charactersByPlayer, characters)
+		out = append(out, map[string]interface{}{
+			"membership_id":       p.Player.MembershipId,
+			"completed":           boolToUInt8(p.Finished),
+			"time_played_seconds": uint32(p.TimePlayedSeconds),
+			"sherpas":             uint32(p.Sherpas),
+			"is_first_clear":      boolToUInt8(p.IsFirstClear),
+			"characters":          characters,
+		})
 	}
-	return membershipIds, completed, timePlayedSeconds, sherpas, isFirstClear, charactersByPlayer
+	return out
 }

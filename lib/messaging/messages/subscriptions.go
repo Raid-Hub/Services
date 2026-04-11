@@ -57,13 +57,13 @@ type SubscriptionEventMessage struct {
 
 // SubscriptionMatchMessage is the stage 2 queue payload (routing.SubscriptionMatch). See lib/services/subscriptions/README.md.
 type SubscriptionMatchMessage struct {
-	InstanceId        int64               `json:"instanceId,string"`
-	ActivityHash      uint32              `json:"activityHash"`
-	PlayerCount       int                 `json:"playerCount"`
-	DateCompleted     time.Time           `json:"dateCompleted"`
-	DurationSeconds   int                 `json:"durationSeconds"`
-	Completed         bool                `json:"completed"`
-	ParticipantData   []ParticipantResult `json:"participantData"`
+	InstanceId      int64               `json:"instanceId,string"`
+	ActivityHash    uint32              `json:"activityHash"`
+	PlayerCount     int                 `json:"playerCount"`
+	DateCompleted   time.Time           `json:"dateCompleted"`
+	DurationSeconds int                 `json:"durationSeconds"`
+	Completed       bool                `json:"completed"`
+	ParticipantData []ParticipantResult `json:"participantData"`
 }
 
 // SubscriptionDeliveryMessage is the stage 3 queue payload (routing.SubscriptionDelivery). See lib/services/subscriptions/README.md.
@@ -72,9 +72,9 @@ type SubscriptionDeliveryMessage struct {
 	DestinationChannelId int64               `json:"destinationChannelId,string"`
 	ChannelType          DeliveryChannelType `json:"channelType"`
 	// WebhookURL is set in the match stage so delivery workers only POST (no DB lookup).
-	WebhookURL           string              `json:"webhookUrl,omitempty"`
-	DedupeKey            string              `json:"dedupeKey"`
-	Scope                DeliveryScope       `json:"scope"`
+	WebhookURL string        `json:"webhookUrl,omitempty"`
+	DedupeKey  string        `json:"dedupeKey"`
+	Scope      DeliveryScope `json:"scope"`
 	// FireteamMembershipIds is everyone in the activity (filled by subscription_match from the instance).
 	FireteamMembershipIds []int64 `json:"fireteamMembershipIds,omitempty"`
 	// Raid context (filled by subscription_match for rich embeds)
@@ -97,13 +97,21 @@ type DiscordEmbedPreload struct {
 	InstanceStats    []DiscordInstanceStat    `json:"instanceStats,omitempty"`
 	StatsUnavailable bool                     `json:"statsUnavailable,omitempty"`
 
-	// ClanFieldMarkdown is rendered for each destination clan scope (per delivery).
-	ClanFieldMarkdown string `json:"clanFieldMarkdown,omitempty"`
+	// Feats are raid skull modifiers from core.instance that exist in definitions.activity_feat_definition (icons from manifest).
+	Feats []DiscordFeat `json:"feats,omitempty"`
+}
+
+// DiscordFeat is one selectable feat for the raid embed (Bungie icon + short label).
+type DiscordFeat struct {
+	Label   string `json:"label,omitempty"`
+	IconURL string `json:"iconUrl,omitempty"`
 }
 
 type DiscordFireteamProfile struct {
 	MembershipID int64  `json:"membershipId,string"`
 	DisplayName  string `json:"displayName,omitempty"`
+	IconURL      string `json:"iconUrl,omitempty"`
+	ClassHash    uint32 `json:"classHash,omitempty"`
 }
 
 type DiscordInstanceStat struct {
@@ -112,5 +120,4 @@ type DiscordInstanceStat struct {
 	Deaths            int   `json:"deaths"`
 	Assists           int   `json:"assists"`
 	TimePlayedSeconds int   `json:"timePlayedSeconds"`
-	FirstClear        bool  `json:"firstClear"`
 }

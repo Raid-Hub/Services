@@ -25,6 +25,7 @@ This repo targets **Go 1.25** (`go.mod`). When bringing up Docker Compose, datab
 
 - Start from `example.env` → copy to `.env` (`make env` can help merge missing keys).
 - Keep **RabbitMQ** credentials in `.env` aligned with `docker-compose.yml` (e.g. `RABBITMQ_USER` / `RABBITMQ_PASSWORD` must match what the broker container uses). Mismatches produce connection failures that look like wrong user (`guest` vs configured user).
+- **`MISSED_PGCR_LOG_FILE_PATH`** in `example.env` points at `/.raidhub/...`, which is often **not writable** on a normal host (panic on init). For local `go run` of tools that pull in instance storage (e.g. `process-single-pgcr`), set it to something under the repo: `mkdir -p .raidhub` and use `MISSED_PGCR_LOG_FILE_PATH="$PWD/.raidhub/missed-pgcrs.log"` in `.env`. **`replay-subscription-instance`** does not need this; it only reads Postgres and optionally publishes to RabbitMQ.
 
 ## RabbitMQ delayed message exchange
 
@@ -58,34 +59,24 @@ This repo targets **Go 1.25** (`go.mod`). When bringing up Docker Compose, datab
 
 **What to do:** Prefer the **RabbitMQ HTTP API** or a small script that builds JSON safely (e.g. PowerShell `ConvertTo-Json` + `Invoke-RestMethod`). This is a **testing ergonomics** issue, not production app logic.
 
-## Subscriptions pipeline replay (ClickHouse → RabbitMQ)
+## Subscriptions pipeline replay (Postgres → RabbitMQ)
 
-**Clan vs player matching** uses Postgres only: `core.player` (privacy for player-scope rules) and `clan.clan` / `clan.clan_members` (clan-scope rules). **Redis is not used** by the subscriptions workers in this repo; no Redis service is required for local E2E.
+**Instance data for replay** comes from Postgres (`core.instance` + `core.instance_player`), not ClickHouse. **Clan vs player matching** uses `core.player` (privacy for player-scope rules) and `clan.clan` / `clan.clan_members` (clan-scope rules). **Redis is not used** by the subscriptions workers in this repo; no Redis service is required for local E2E.
 
 1. Run Postgres migrations so `subscriptions.destination` and `subscriptions.rule` exist (`make migrate-postgres`).
-2. Insert destinations and rules yourself, or use the dev seed helper below (optional).
+2. Insert destinations and rules yourself, or use **`replay-subscription-instance`** with **`-apply-subscription-setup`**, **`-webhook-url`**, and **`-instance-id`** to create a destination and player-scope rules for everyone on that instance (optional).
 3. Ensure **Hermes** is running (rebuild after subscription code changes: `docker compose build hermes && docker compose up -d hermes`).
-4. **Replay an instance through the pipeline** (loads from ClickHouse, publishes `instance_participant_refresh`):
+4. **Replay an instance through the pipeline** (loads from Postgres, publishes `instance_participant_refresh`). **`-instance-id` is required** and must match a row in `core.instance` (the tool does not pick a default instance).
+
+For copy-paste while developing subscriptions, use instance id **`16787546313`** (example PGCR below) if that row exists in your local DB; otherwise substitute any instance id you have ingested.
 
 ```bash
-go run ./tools/replay-subscription-instance/ -dry-run
-go run ./tools/replay-subscription-instance/
-go run ./tools/replay-subscription-instance/ -instance-id=1234567890123456789
+go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -dry-run
+go run ./tools/replay-subscription-instance/ -instance-id=16787546313
+go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -apply-subscription-setup -webhook-url='https://discord.com/api/webhooks/<id>/<token>'
 ```
 
-The tools default to a fixed dev instance id (`16818312483`); pass **`-instance-id=0`** to pick the most recent instance by `date_completed`.
-
-### Dev seed + player/clan smoke test (optional)
-
-`tools/subscription-pipeline-seed` **truncates** `subscriptions` tables, inserts a test clan (`group_id = 9000000000001`) and membership for the **first** player in the instance, creates **two** destinations (player rule on the **second** player, clan rule on that group), then publishes one replay. Pass **`-webhook-url`** each run (do not store webhook secrets in committed `.env` files).
-
-```bash
-go run ./tools/subscription-pipeline-seed/ -instance-id=16818312483 -webhook-url='https://discord.com/api/webhooks/<id>/<token>'
-```
-
-Expect Hermes logs: two `PROCESSING_SUBSCRIPTION_DELIVERY` lines for the same `instance_id` with different `channel_id` values (`1` and `2` after a fresh seed). Use `-skip-seed` to only publish if you already inserted rows manually.
-
-Hermes only POSTs to Discord for rows in `subscriptions.destination`.
+Example PGCR for local testing: [16787546313](https://raidhub.io/pgcr/16787546313). The row must exist in **`core.instance`** (from your normal ingest path: Atlas → Hermes `instance_store`, restore, etc.). Hermes only POSTs to Discord for rows in `subscriptions.destination`. To mutate subscription rows you must pass **`-apply-subscription-setup`** together with **`-webhook-url`** or **`-destination-id`** (see tool help).
 
 ## Docker-based Go commands
 

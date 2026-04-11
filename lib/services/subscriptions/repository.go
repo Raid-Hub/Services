@@ -220,7 +220,7 @@ func mapKeysSorted(m map[int64]struct{}) []int64 {
 type ActivityRaidMeta struct {
 	ActivityName string
 	VersionName  string
-	PathSegment  string // definitions.activity_definition.path — CDN splash slug
+	PathSegment  string // definitions.activity_definition.splash_path — cdn.raidhub.io/content/splash/{slug}/…
 }
 
 func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRaidMeta, error) {
@@ -229,7 +229,7 @@ func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRa
 	}
 	var meta ActivityRaidMeta
 	err := postgres.DB.QueryRowContext(ctx, `
-		SELECT ad.name, vd.name, ad.path
+		SELECT ad.name, vd.name, ad.splash_path
 		FROM definitions.activity_version av
 		JOIN definitions.activity_definition ad ON ad.id = av.activity_id
 		JOIN definitions.version_definition vd ON vd.id = av.version_id

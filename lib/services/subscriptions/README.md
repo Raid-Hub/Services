@@ -44,7 +44,7 @@ Stage 3  subscription_delivery
     done
 ```
 
-Other producers (e.g. `tools/replay-subscription-instance`) inject at **stage 1** by publishing the same first queue.
+Other producers (e.g. `tools/replay-subscription-instance`, which loads `core.instance` from Postgres) inject at **stage 1** by publishing the same first queue.
 
 ## Message types
 
@@ -58,4 +58,19 @@ Other producers (e.g. `tools/replay-subscription-instance`) inject at **stage 1*
 
 ## Hermes topic config
 
-Each topic defines its own `TopicConfig` (no shared helper): `instance_participant_refresh.go` (Bungie deps for scaling gates), `subscription_match.go`, `subscription_delivery.go` (HTTP-only path; no Bungie deps).
+Each topic defines its own `TopicConfig` (no shared helper): `lib/messaging/queue-workers/instance_participant_refresh.go` (Bungie deps for scaling gates), `subscription_match.go`, `subscription_delivery.go` (HTTP-only path; no Bungie deps).
+
+## Package layout (`lib/services/subscriptions`)
+
+| File | Role |
+|------|------|
+| `logging.go` | Shared package logger |
+| `subscription_event.go` | `NewSubscriptionEvent`, `PrepareParticipants`, large-instance threshold |
+| `match_pipeline.go` | `MatchEvent`, rule application, raid context on deliveries |
+| `delivery_preload.go` | Webhook URL batch load, Discord embed preload (stats, profiles, clans) |
+| `delivery_send.go` | `SendSubscriptionDelivery`, webhook payload from preload |
+| `discord_raid_embed.go` | Raid completion embed assembly and fireteam/clan markdown |
+| `repository.go` | Rules, destinations, activity meta, matching |
+| `postgres_stats.go` | Per-instance combat aggregates for embeds |
+| `postgres_instance.go` | Replay loader from `core.instance` |
+| `replay_setup.go` | CLI helpers for destinations/rules on replay |

@@ -1,6 +1,11 @@
-// replay-subscription-instance loads an instance from ClickHouse and publishes InstanceParticipantRefresh.
-// Use this as the default CLI to replay an instance_id through the subscriptions pipeline (Hermes workers).
-// For dev-only Postgres seeding + two test destinations, see tools/subscription-pipeline-seed.
+// replay-subscription-instance loads an instance from Postgres (core.instance) and publishes InstanceParticipantRefresh.
+// Use it to replay an instance_id through the subscriptions pipeline (Hermes workers).
+//
+// Required: -instance-id must be a real core.instance instance_id (no defaults; see docs for a dev example PGCR).
+//
+// Optional subscription DB changes: pass -apply-subscription-setup together with -webhook-url or -destination-id
+// to create/update subscriptions.destination and player-scope rules before replay (see lib/services/subscriptions/README.md).
+// Do not commit webhook URLs to .env or the repo; pass them on the CLI only.
 package main
 
 import (
@@ -8,8 +13,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"strings"
 
-	"raidhub/lib/database/clickhouse"
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
@@ -19,13 +24,20 @@ import (
 
 var logger = logging.NewLogger("replay-subscription-instance")
 
-// defaultSubscriptionReplayInstanceID is the usual dev instance wired for subscription E2E (Vow of the Disciple, 2 players).
-// Override with -instance-id, or pass 0 to use the most recent instance in ClickHouse by date_completed.
-const defaultSubscriptionReplayInstanceID int64 = 16818312483
+// unsetInstanceID is the flag default before the user passes -instance-id (must be set explicitly).
+const unsetInstanceID int64 = -1
 
 var (
-	instanceIDFlag = flag.Int64("instance-id", defaultSubscriptionReplayInstanceID, "ClickHouse instance_id (0 = most recent by date_completed)")
-	dryRunFlag     = flag.Bool("dry-run", false, "Print SubscriptionEventMessage JSON and exit without publishing to RabbitMQ")
+	instanceIDFlag = flag.Int64("instance-id", unsetInstanceID,
+		"required: core.instance instance_id (positive integer)")
+	dryRunFlag = flag.Bool("dry-run", false,
+		"Print SubscriptionEventMessage JSON and exit without writing rules or publishing to RabbitMQ")
+	applySubscriptionSetupFlag = flag.Bool("apply-subscription-setup", false,
+		"explicit opt-in: with -webhook-url or -destination-id, create/update subscriptions.destination and player rules before replay")
+	webhookURLFlag = flag.String("webhook-url", "",
+		"Discord Incoming Webhook URL (only used with -apply-subscription-setup; mutually exclusive with -destination-id)")
+	destinationIDFlag = flag.Int64("destination-id", 0,
+		"subscriptions.destination id (only used with -apply-subscription-setup; mutually exclusive with -webhook-url)")
 )
 
 func main() {
@@ -37,13 +49,83 @@ func main() {
 
 	ctx := context.Background()
 
-	clickhouse.Wait()
 	postgres.Wait()
 
-	inst, err := subscriptions.LoadDTOInstanceFromClickHouse(ctx, *instanceIDFlag)
-	if err != nil {
-		logger.Fatal("CLICKHOUSE_LOAD_FAILED", err, nil)
+	if *instanceIDFlag == unsetInstanceID {
+		logger.Fatal("INSTANCE_ID_REQUIRED", fmt.Errorf(
+			"pass -instance-id with a real core.instance instance_id (see LOCAL_DEVELOPMENT.md for a dev PGCR example)"), nil)
 		return
+	}
+	if *instanceIDFlag <= 0 {
+		logger.Fatal("INSTANCE_ID_INVALID", fmt.Errorf(
+			"-instance-id must be a positive instance_id"), nil)
+		return
+	}
+
+	hasWebhook := strings.TrimSpace(*webhookURLFlag) != ""
+	hasDestID := *destinationIDFlag != 0
+	if hasWebhook && hasDestID {
+		logger.Fatal("FLAGS_CONFLICT", fmt.Errorf("use only one of -destination-id or -webhook-url"), nil)
+		return
+	}
+	if (hasWebhook || hasDestID) && !*applySubscriptionSetupFlag {
+		logger.Fatal("SUBSCRIPTION_SETUP_OPT_IN_REQUIRED", fmt.Errorf(
+			"pass -apply-subscription-setup to create/update destination and rules when using -webhook-url or -destination-id"), nil)
+		return
+	}
+	if *applySubscriptionSetupFlag && !hasWebhook && !hasDestID {
+		logger.Fatal("SUBSCRIPTION_SETUP_INCOMPLETE", fmt.Errorf(
+			"-apply-subscription-setup requires -webhook-url or -destination-id"), nil)
+		return
+	}
+
+	inst, err := subscriptions.LoadDTOInstanceFromPostgres(ctx, *instanceIDFlag)
+	if err != nil {
+		logger.Fatal("POSTGRES_LOAD_FAILED", err, nil)
+		return
+	}
+
+	membershipIDs := make([]int64, 0, len(inst.Players))
+	for _, p := range inst.Players {
+		membershipIDs = append(membershipIDs, p.Player.MembershipId)
+	}
+
+	if !*dryRunFlag && *applySubscriptionSetupFlag {
+		var destID int64
+		var created bool
+		switch {
+		case hasWebhook:
+			destID, created, err = subscriptions.FindOrCreateDestinationByWebhook(ctx, *webhookURLFlag)
+			if err != nil {
+				logger.Fatal("DESTINATION_WEBHOOK_FAILED", err, nil)
+				return
+			}
+			logger.Info("REPLAY_DESTINATION", map[string]any{
+				"destination_id": destID,
+				"created":        created,
+			})
+		case hasDestID:
+			destID = *destinationIDFlag
+			ok, err := subscriptions.DestinationExists(ctx, destID)
+			if err != nil {
+				logger.Fatal("DESTINATION_LOOKUP_FAILED", err, nil)
+				return
+			}
+			if !ok {
+				logger.Fatal("DESTINATION_NOT_FOUND", fmt.Errorf("no active subscriptions.destination with id=%d", destID), nil)
+				return
+			}
+		}
+		n, err := subscriptions.EnsurePlayerRulesForReplay(ctx, destID, membershipIDs)
+		if err != nil {
+			logger.Fatal("ENSURE_RULES_FAILED", err, map[string]any{"destination_id": destID})
+			return
+		}
+		logger.Info("REPLAY_RULES_ENSURED", map[string]any{
+			"destination_id": destID,
+			"rules_inserted": n,
+			"participants":   len(membershipIDs),
+		})
 	}
 
 	event := subscriptions.NewSubscriptionEvent(inst)
@@ -54,7 +136,14 @@ func main() {
 			return
 		}
 		fmt.Println(string(out))
-		logger.Info("DRY_RUN_NO_PUBLISH", map[string]any{logging.INSTANCE_ID: inst.InstanceId})
+		if *applySubscriptionSetupFlag {
+			logger.Info("DRY_RUN_NO_PUBLISH", map[string]any{
+				logging.INSTANCE_ID: inst.InstanceId,
+				"note":              "skipped -apply-subscription-setup DB changes and RabbitMQ publish",
+			})
+		} else {
+			logger.Info("DRY_RUN_NO_PUBLISH", map[string]any{logging.INSTANCE_ID: inst.InstanceId})
+		}
 		return
 	}
 
