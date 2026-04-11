@@ -50,6 +50,10 @@ var (
 	GMReportWebhookAuth  string
 	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs (required).
 	SubscriptionHTTPWebhookSecret string
+	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL; partner URL is sent as X-RaidHub-Destination.
+	SubscriptionWebhookRelayURL string
+	// SubscriptionWebhookRelaySecret is Authorization: Bearer for the Worker; required when SubscriptionWebhookRelayURL is set.
+	SubscriptionWebhookRelaySecret string
 
 	// Other
 	IsContestWeekend      bool
@@ -135,6 +139,11 @@ func init() {
 	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
 
 	SubscriptionHTTPWebhookSecret = requireEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
+	SubscriptionWebhookRelayURL = strings.TrimSpace(getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL"))
+	SubscriptionWebhookRelaySecret = strings.TrimSpace(getEnv("SUBSCRIPTION_WEBHOOK_RELAY_SECRET"))
+	if SubscriptionWebhookRelayURL != "" && SubscriptionWebhookRelaySecret == "" {
+		envIssues = append(envIssues, "SUBSCRIPTION_WEBHOOK_RELAY_SECRET")
+	}
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"

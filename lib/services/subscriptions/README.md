@@ -7,7 +7,7 @@ When a **new raid instance** is stored, subscribed players/clans can receive not
 - **`discord_webhook`** — Discord Incoming Webhook with a Components V2 raid message (activity name, fireteam, feats, PGCR link).
 - **`http_callback`** — HTTPS POST with **`application/json`** body `dto.Instance` (same JSON shape as **`GET https://api.raidhub.io/instance/:id`**). Loaded once per match batch from `core.instance` via `LoadDTOInstanceFromPostgres`. Includes header **`X-RaidHub-Key`** from env `SUBSCRIPTION_HTTP_WEBHOOK_SECRET` for receivers to authenticate.
 
-**Optional Cloudflare Worker relay:** Source lives in the private org repo **[Raid-Hub/subscription-webhook-relay](https://github.com/Raid-Hub/subscription-webhook-relay)** (not in RaidHub-Services). Hermes **POSTs directly** to each destination URL here until relay env + `delivery_send` integration is added.
+**Cloudflare Worker relay (optional):** Implementation is **[Raid-Hub/subscription-webhook-relay](https://github.com/Raid-Hub/subscription-webhook-relay)**. When `SUBSCRIPTION_WEBHOOK_RELAY_URL` is set, Hermes POSTs there with `Authorization: Bearer`, **`X-RaidHub-Destination`** (partner URL from Postgres), same JSON body, and **`X-RaidHub-Key`**. If unset, Hermes POSTs directly to the destination URL.
 
 Rules live in **Postgres**; work is split across **three queue stages** so matching, hydration, and outbound HTTP stay separate.
 
