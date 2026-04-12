@@ -34,7 +34,7 @@ func InstanceParticipantRefreshTopic() processing.Topic {
 }
 
 func processInstanceParticipantRefresh(worker processing.WorkerInterface, message amqp.Delivery) error {
-	request, err := processing.ParseJSON[messages.SubscriptionEventMessage](worker, message.Body)
+	request, err := processing.ParseJSONUnretryable[messages.SubscriptionEventMessage](worker, message.Body)
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func processInstanceParticipantRefresh(worker processing.WorkerInterface, messag
 		logging.COUNT:       request.ParticipantCount,
 	})
 
-	matchMessage, err := subscriptions.PrepareParticipants(request)
+	matchMessage, err := subscriptions.PrepareParticipants(worker.Context(), request)
 	if err != nil {
 		worker.Warn("INSTANCE_PARTICIPANT_REFRESH_FAILED", err, map[string]any{
 			logging.INSTANCE_ID: request.InstanceId,

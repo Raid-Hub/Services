@@ -9,6 +9,7 @@ This repo targets **Go 1.25** (`go.mod`). When bringing up Docker Compose, datab
 **What to do:**
 
 - Prefer installing **Go 1.25+** locally so `go build`, `make`, and `go run` for migrations work without Docker.
+- If you see `go: go.mod requires go >= 1.25 (running go 1.xx; GOTOOLCHAIN=local)`, **`GOTOOLCHAIN=local` blocks automatic toolchain download**. Unset it (User env vars) or set **`GOTOOLCHAIN=auto`**, or upgrade the system `go` install.
 - If the toolchain still cannot be installed, run Go inside the official image (see [Docker-based Go commands](#docker-based-go-commands)).
 
 ## Docker Desktop
@@ -61,7 +62,9 @@ This repo targets **Go 1.25** (`go.mod`). When bringing up Docker Compose, datab
 
 ## Subscriptions pipeline replay (Postgres → RabbitMQ)
 
-**Instance data for replay** comes from Postgres (`core.instance` + `core.instance_player`), not ClickHouse. **Clan vs player matching** uses `core.player` (privacy for player-scope rules) and `clan.clan` / `clan.clan_members` (clan-scope rules). **Redis is not used** by the subscriptions workers in this repo; no Redis service is required for local E2E.
+**Instance data for replay** comes from Postgres (`core.instance` + `core.instance_player`), not ClickHouse. **Clan resolution** happens in stage 1 (`instance_participant_refresh`) via **Redis cache** (6 h TTL) with **Bungie `GetGroupsForMember`** fallback on miss. Stage 2 reads clan data from the message — it no longer queries `clan.clan_members`.
+
+**`replay-subscription-instance`** only needs **Postgres** (and **RabbitMQ** if you publish a replay). It does **not** open Redis. **Hermes** must be running with **Redis** (and Zeus, etc.) to **process** the pipeline — without Redis, stage 1 cannot resolve clans. Ensure **`redis`** is up (`docker compose up -d redis`) and `.env` includes **`REDIS_PORT`** (see `example.env`).
 
 1. Run Postgres migrations so `subscriptions.destination` and `subscriptions.rule` exist (`make migrate-postgres`).
 2. Insert destinations and rules yourself, or use **`replay-subscription-instance`** with **`-apply-subscription-setup`**, **`-webhook-url`**, and **`-instance-id`** to create a destination and player-scope rules for everyone on that instance (optional).
@@ -74,6 +77,7 @@ For copy-paste while developing subscriptions, use instance id **`16787546313`**
 go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -dry-run
 go run ./tools/replay-subscription-instance/ -instance-id=16787546313
 go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -apply-subscription-setup -webhook-url='https://discord.com/api/webhooks/<id>/<token>'
+# Or http_callback setup: -https-callback-url='https://partner.example/hook' (same -apply-subscription-setup rules)
 ```
 
 Example PGCR for local testing: [16787546313](https://raidhub.io/pgcr/16787546313). The row must exist in **`core.instance`** (from your normal ingest path: Atlas → Hermes `instance_store`, restore, etc.). Hermes only POSTs to Discord for rows in `subscriptions.destination`. To mutate subscription rows you must pass **`-apply-subscription-setup`** together with **`-webhook-url`** or **`-destination-id`** (see tool help).

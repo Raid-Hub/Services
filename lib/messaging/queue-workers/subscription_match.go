@@ -35,7 +35,7 @@ func SubscriptionMatchTopic() processing.Topic {
 }
 
 func processSubscriptionMatch(worker processing.WorkerInterface, message amqp.Delivery) error {
-	request, err := processing.ParseJSON[messages.SubscriptionMatchMessage](worker, message.Body)
+	request, err := processing.ParseJSONUnretryable[messages.SubscriptionMatchMessage](worker, message.Body)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func processSubscriptionMatch(worker processing.WorkerInterface, message amqp.De
 		return err
 	}
 
-	// Fan-out to subscription_delivery: marshal-then-publish-all avoids partial queue writes.
+	// Fan-out to subscription_delivery: marshal all, then one AMQP transaction so all deliveries enqueue or none.
 	bodies := make([][]byte, 0, len(deliveryMessages))
 	for _, dm := range deliveryMessages {
 		b, err := json.Marshal(dm)
@@ -65,13 +65,11 @@ func processSubscriptionMatch(worker processing.WorkerInterface, message amqp.De
 		}
 		bodies = append(bodies, b)
 	}
-	for _, body := range bodies {
-		if err := publishing.PublishJSONBytes(worker.Context(), routing.SubscriptionDelivery, body); err != nil {
-			worker.Warn("FAILED_TO_PUBLISH_SUBSCRIPTION_DELIVERY", err, map[string]any{
-				logging.INSTANCE_ID: request.InstanceId,
-			})
-			return err
-		}
+	if err := publishing.PublishJSONBytesBatchTx(worker.Context(), routing.SubscriptionDelivery, bodies); err != nil {
+		worker.Warn("FAILED_TO_PUBLISH_SUBSCRIPTION_DELIVERY", err, map[string]any{
+			logging.INSTANCE_ID: request.InstanceId,
+		})
+		return err
 	}
 
 	return nil

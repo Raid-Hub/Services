@@ -1,9 +1,11 @@
 // replay-subscription-instance loads an instance from Postgres (core.instance) and publishes InstanceParticipantRefresh.
 // Use it to replay an instance_id through the subscriptions pipeline (Hermes workers).
+// Hermes requires Redis (clan cache) and Zeus/Bungie (clan resolution on cache miss).
 //
 // Required: -instance-id must be a real core.instance instance_id (no defaults; see docs for a dev example PGCR).
 //
-// Optional subscription DB changes: pass -apply-subscription-setup together with -webhook-url or -destination-id
+// Optional subscription DB changes: pass -apply-subscription-setup together with one of:
+// -webhook-url (Discord), -https-callback-url (JSON http_callback), or -destination-id
 // to create/update subscriptions.destination and player-scope rules before replay (see lib/services/subscriptions/README.md).
 // Do not commit webhook URLs to .env or the repo; pass them on the CLI only.
 package main
@@ -33,11 +35,13 @@ var (
 	dryRunFlag = flag.Bool("dry-run", false,
 		"Print SubscriptionEventMessage JSON and exit without writing rules or publishing to RabbitMQ")
 	applySubscriptionSetupFlag = flag.Bool("apply-subscription-setup", false,
-		"explicit opt-in: with -webhook-url or -destination-id, create/update subscriptions.destination and player rules before replay")
+		"explicit opt-in: with -webhook-url, -https-callback-url, or -destination-id, create/update destination and player rules before replay")
 	webhookURLFlag = flag.String("webhook-url", "",
-		"Discord Incoming Webhook URL (only used with -apply-subscription-setup; mutually exclusive with -destination-id)")
+		"Discord Incoming Webhook URL (only with -apply-subscription-setup; mutually exclusive with -https-callback-url and -destination-id)")
+	httpsCallbackURLFlag = flag.String("https-callback-url", "",
+		"HTTPS URL for http_callback JSON delivery (only with -apply-subscription-setup; mutually exclusive with -webhook-url and -destination-id)")
 	destinationIDFlag = flag.Int64("destination-id", 0,
-		"subscriptions.destination id (only used with -apply-subscription-setup; mutually exclusive with -webhook-url)")
+		"subscriptions.destination id (only with -apply-subscription-setup; mutually exclusive with -webhook-url and -https-callback-url)")
 )
 
 func main() {
@@ -63,19 +67,31 @@ func main() {
 	}
 
 	hasWebhook := strings.TrimSpace(*webhookURLFlag) != ""
+	hasHTTPSCallback := strings.TrimSpace(*httpsCallbackURLFlag) != ""
 	hasDestID := *destinationIDFlag != 0
-	if hasWebhook && hasDestID {
-		logger.Fatal("FLAGS_CONFLICT", fmt.Errorf("use only one of -destination-id or -webhook-url"), nil)
+	nDestFlags := 0
+	if hasWebhook {
+		nDestFlags++
+	}
+	if hasHTTPSCallback {
+		nDestFlags++
+	}
+	if hasDestID {
+		nDestFlags++
+	}
+	if nDestFlags > 1 {
+		logger.Fatal("FLAGS_CONFLICT", fmt.Errorf(
+			"use only one of -destination-id, -webhook-url, or -https-callback-url"), nil)
 		return
 	}
-	if (hasWebhook || hasDestID) && !*applySubscriptionSetupFlag {
+	if nDestFlags != 0 && !*applySubscriptionSetupFlag {
 		logger.Fatal("SUBSCRIPTION_SETUP_OPT_IN_REQUIRED", fmt.Errorf(
-			"pass -apply-subscription-setup to create/update destination and rules when using -webhook-url or -destination-id"), nil)
+			"pass -apply-subscription-setup to create/update destination and rules when using -webhook-url, -https-callback-url, or -destination-id"), nil)
 		return
 	}
-	if *applySubscriptionSetupFlag && !hasWebhook && !hasDestID {
+	if *applySubscriptionSetupFlag && nDestFlags == 0 {
 		logger.Fatal("SUBSCRIPTION_SETUP_INCOMPLETE", fmt.Errorf(
-			"-apply-subscription-setup requires -webhook-url or -destination-id"), nil)
+			"-apply-subscription-setup requires -webhook-url, -https-callback-url, or -destination-id"), nil)
 		return
 	}
 
@@ -101,8 +117,20 @@ func main() {
 				return
 			}
 			logger.Info("REPLAY_DESTINATION", map[string]any{
-				"destination_id": destID,
-				"created":        created,
+				"destination_id":  destID,
+				"created":         created,
+				"channel_type":    "discord_webhook",
+			})
+		case hasHTTPSCallback:
+			destID, created, err = subscriptions.FindOrCreateDestinationByHTTPSCallback(ctx, *httpsCallbackURLFlag)
+			if err != nil {
+				logger.Fatal("DESTINATION_HTTPS_CALLBACK_FAILED", err, nil)
+				return
+			}
+			logger.Info("REPLAY_DESTINATION", map[string]any{
+				"destination_id":  destID,
+				"created":         created,
+				"channel_type":    "http_callback",
 			})
 		case hasDestID:
 			destID = *destinationIDFlag

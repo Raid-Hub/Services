@@ -28,6 +28,11 @@ var (
 	ClickHouseDB       string
 	ClickHousePort     string
 
+	// Redis
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+
 	// Prometheus
 	PrometheusHost string
 
@@ -50,7 +55,7 @@ var (
 	GMReportWebhookAuth  string
 	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs (required).
 	SubscriptionHTTPWebhookSecret string
-	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL; partner URL is sent as X-RaidHub-Destination.
+	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. discord_webhook deliveries never use the relay (direct to Discord).
 	SubscriptionWebhookRelayURL string
 	// SubscriptionWebhookRelaySecret is Authorization: Bearer for the Worker; required when SubscriptionWebhookRelayURL is set.
 	SubscriptionWebhookRelaySecret string
@@ -122,6 +127,11 @@ func init() {
 	ClickHousePassword = getEnv("CLICKHOUSE_PASSWORD")
 	ClickHouseDB = getEnvWithDefault("CLICKHOUSE_DB", "default")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
+
+	// Redis
+	RedisHost = getHostEnv("REDIS_HOST")
+	RedisPort = requireEnv("REDIS_PORT")
+	RedisPassword = getEnv("REDIS_PASSWORD")
 
 	// Zeus
 	ZeusHost = getHostEnv("ZEUS_HOST")

@@ -129,6 +129,8 @@ func assembleRaidDiscordEmbed(
 
 	playerInner := fireteamPlayerComponents(fireteamProfiles, statsMap, statsUnavailable)
 	playerInner = append(playerInner, discord.NewLinkButtonRow("View PGCR", pgcrURL))
+	playerInner = append(playerInner, discord.NewSeparatorDivider())
+	playerInner = append(playerInner, raidEmbedFooter())
 
 	// Each Container may include at most 10 child components. Raid splash uses Section+Thumbnail (compact), not Media Gallery.
 	const maxContainerChildren = 10
@@ -153,6 +155,12 @@ func assembleRaidDiscordEmbed(
 		Flags:      &flags,
 		Components: roots,
 	}
+}
+
+const raidHubEmoji = "<:RaidHub:1131584991227293717>"
+
+func raidEmbedFooter() *discord.TextDisplay {
+	return discord.NewTextDisplay("-# " + raidHubEmoji + " Powered by [RaidHub](https://raidhub.io)")
 }
 
 // Discord limits combined markdown text across all Text Display components in one message (Components V2).
@@ -204,6 +212,7 @@ func fireteamThumbnailDescription(displayName string) *string {
 	if s == "" {
 		return nil
 	}
+	s = discordEscape(s)
 	const max = 256
 	if utf8.RuneCountInString(s) <= max {
 		return &s

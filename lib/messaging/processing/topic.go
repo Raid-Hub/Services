@@ -69,6 +69,16 @@ func ParseJSON[T any](worker WorkerInterface, data []byte) (T, error) {
 	return v, nil
 }
 
+// ParseJSONUnretryable is like ParseJSON but wraps unmarshal failures in NewUnretryableError so poison
+// messages are not retried until max_retries (subscription pipeline workers).
+func ParseJSONUnretryable[T any](worker WorkerInterface, data []byte) (T, error) {
+	v, err := ParseJSON[T](worker, data)
+	if err != nil {
+		return v, NewUnretryableError(err)
+	}
+	return v, nil
+}
+
 // ParseText parses text from message body and logs errors automatically
 func ParseText(worker WorkerInterface, data []byte) (string, error) {
 	text := string(data)
@@ -118,7 +128,10 @@ type TopicConfig struct {
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
 	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
-	RetryDelay            time.Duration // Delay between retries
+	RetryDelay            time.Duration // Base delay between retries (used when RetryDelayMs is nil)
+	// RetryDelayMs, if set, returns the delay in milliseconds before the next delivery attempt for a given
+	// outgoing x-retry-count (1-based: value written when republishing). Overrides exponential backoff from RetryDelay.
+	RetryDelayMs func(newRetryCount int) int64
 }
 
 // NewTopic creates a new topic with the given config and processor

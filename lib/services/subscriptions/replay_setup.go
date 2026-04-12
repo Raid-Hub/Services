@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 
 	"raidhub/lib/database/postgres"
@@ -30,7 +32,9 @@ func ValidateDiscordWebhookURL(raw string) error {
 	return nil
 }
 
-// ValidateHTTPSCallbackURL returns nil if the URL is suitable for subscriptions.destination http_callback (HTTPS POST, JSON body).
+// ValidateHTTPSCallbackURL returns nil if the URL is suitable for subscriptions.destination http_callback
+// (HTTPS POST, JSON body). Blocks obvious SSRF targets (localhost, RFC1918, link-local, metadata IP).
+// Production egress may apply additional controls (e.g. Cloudflare WAF / URL filters on partner endpoints).
 func ValidateHTTPSCallbackURL(raw string) error {
 	u := strings.TrimSpace(raw)
 	if u == "" {
@@ -38,6 +42,34 @@ func ValidateHTTPSCallbackURL(raw string) error {
 	}
 	if !strings.HasPrefix(u, "https://") {
 		return fmt.Errorf("callback URL must use https://")
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return fmt.Errorf("callback URL parse: %w", err)
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("callback URL has no host")
+	}
+	if err := validateCallbackHost(host); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCallbackHost(host string) error {
+	h := strings.ToLower(strings.TrimSpace(host))
+	switch h {
+	case "localhost", "127.0.0.1", "::1", "0.0.0.0":
+		return fmt.Errorf("callback host %q is not allowed", host)
+	}
+	if strings.HasSuffix(h, ".localhost") || strings.HasSuffix(h, ".local") {
+		return fmt.Errorf("callback host %q is not allowed", host)
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("callback host IP %q is not allowed", host)
+		}
 	}
 	return nil
 }

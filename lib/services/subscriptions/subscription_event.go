@@ -1,6 +1,9 @@
 package subscriptions
 
 import (
+	"context"
+	"time"
+
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/utils/logging"
@@ -30,7 +33,7 @@ func NewSubscriptionEvent(inst *dto.Instance) messages.SubscriptionEventMessage 
 	}
 }
 
-func PrepareParticipants(event messages.SubscriptionEventMessage) (messages.SubscriptionMatchMessage, error) {
+func PrepareParticipants(ctx context.Context, event messages.SubscriptionEventMessage) (messages.SubscriptionMatchMessage, error) {
 	if event.PlayerCount >= LargeInstanceThreshold {
 		logger.Info("SUBSCRIPTIONS_SKIPPING_LARGE_INSTANCE", map[string]any{
 			logging.INSTANCE_ID: event.InstanceId,
@@ -50,8 +53,24 @@ func PrepareParticipants(event messages.SubscriptionEventMessage) (messages.Subs
 			reason := "membership_type_missing"
 			result.Status = messages.ParticipantPlayerUnresolved
 			result.FailureReason = &reason
+			participantResults = append(participantResults, result)
+			continue
+		}
+
+		groupId, fromCache, err := ResolveClan(ctx, *participant.MembershipType, participant.MembershipId)
+		if err != nil {
+			return messages.SubscriptionMatchMessage{}, err
+		}
+
+		now := time.Now()
+		result.ClanFromCache = fromCache
+		result.ClanResolvedAt = &now
+
+		if groupId != nil {
+			result.GroupId = groupId
+			result.Status = messages.ParticipantReady
 		} else {
-			result.Status = messages.ParticipantClanUnresolved
+			result.Status = messages.ParticipantNoClan
 		}
 
 		participantResults = append(participantResults, result)

@@ -16,6 +16,24 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// subscriptionDeliveryRetryDelayMs is the delay (ms) before the redelivered message is consumed when
+// republishing with x-retry-count=newRetryCount. Counts 1–10: 5s; 11–15: 12s→60s; 16–17: 30m.
+func subscriptionDeliveryRetryDelayMs(newRetryCount int) int64 {
+	const (
+		fiveSec   = int64(5_000)
+		thirtyMin = int64(30 * 60 * 1000)
+	)
+	switch {
+	case newRetryCount <= 10:
+		return fiveSec
+	case newRetryCount <= 15:
+		step := newRetryCount - 11 // 0..4 → 12s, 24s, 36s, 48s, 60s
+		return 12_000 + int64(step)*12_000
+	default:
+		return thirtyMin
+	}
+}
+
 // SubscriptionDeliveryTopic POSTs outbound URLs (Discord webhooks or HTTPS JSON callbacks).
 func SubscriptionDeliveryTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
@@ -29,14 +47,15 @@ func SubscriptionDeliveryTopic() processing.Topic {
 		ScaleDownThreshold: 10,
 		ScaleUpPercent:     0.2,
 		ScaleDownPercent:   0.1,
-		MaxRetryCount:      100,
-		// Base delay before the first republish after failure; Hermes doubles this each retry (cap 30m).
-		RetryDelay: 30 * time.Second,
+		// 17 failed attempts max: 10×5s delay, then 5 steps ramping to 60s, then 2×30m, then drop.
+		MaxRetryCount: 17,
+		RetryDelay:    5 * time.Second,
+		RetryDelayMs:  subscriptionDeliveryRetryDelayMs,
 	}, processSubscriptionDelivery)
 }
 
 func processSubscriptionDelivery(worker processing.WorkerInterface, message amqp.Delivery) error {
-	request, err := processing.ParseJSON[messages.SubscriptionDeliveryMessage](worker, message.Body)
+	request, err := processing.ParseJSONUnretryable[messages.SubscriptionDeliveryMessage](worker, message.Body)
 	if err != nil {
 		return err
 	}

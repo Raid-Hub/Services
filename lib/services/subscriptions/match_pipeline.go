@@ -4,12 +4,11 @@ import (
 	"context"
 
 	"raidhub/lib/messaging/messages"
-	"raidhub/lib/services/clan"
 	"raidhub/lib/services/player"
 )
 
 // MatchEvent is stage 2 of the subscription pipeline (see README.md). Order of operations:
-//  1. applySubscriptionRules — privacy, clan lookup, rules → one row per matched destination
+//  1. applySubscriptionRules — privacy, clan from message, rules → one row per matched destination
 //  2. enrichDeliveryRaidContext — instance-wide raid fields on each row
 //  3. attachDestinationWebhooks — batch-load webhook URLs (Postgres; not repeated in stage 3)
 //  4. preloadDiscordEmbedData — batch-load Discord embed body (activity, players, stats, feats)
@@ -37,8 +36,9 @@ func MatchEvent(ctx context.Context, message messages.SubscriptionMatchMessage) 
 	return deliveries, nil
 }
 
-// applySubscriptionRules resolves privacy, clan membership, active rules, and produces one
-// SubscriptionDeliveryMessage per destination that matched (no webhook or embed preload yet).
+// applySubscriptionRules resolves privacy, reads clan membership from the message
+// (resolved by stage 1 via Redis/Bungie), loads active rules, and produces one
+// SubscriptionDeliveryMessage per destination that matched.
 func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMatchMessage) ([]messages.SubscriptionDeliveryMessage, error) {
 	membershipIDs := make([]int64, 0, len(message.ParticipantData))
 	for _, p := range message.ParticipantData {
@@ -51,9 +51,12 @@ func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMa
 	if err != nil {
 		return nil, err
 	}
-	clansByMember, err := clan.GroupIDsByMembershipIDs(ctx, membershipIDs)
-	if err != nil {
-		return nil, err
+
+	clansByMember := make(map[int64][]int64, len(message.ParticipantData))
+	for _, p := range message.ParticipantData {
+		if p.GroupId != nil {
+			clansByMember[p.MembershipId] = []int64{*p.GroupId}
+		}
 	}
 
 	clanGroupIDs := uniqueClanGroupIDs(clansByMember, membershipIDs)

@@ -259,15 +259,23 @@ func (w *Worker) republishForRetry(msg amqp.Delivery, newRetryCount int) error {
 	}
 	msg.Headers["x-retry-count"] = int32(newRetryCount)
 
-	delayMs := max(w.Topic.Config.RetryDelay.Milliseconds(), 1000)
+	var delayMs int64
+	if w.Topic.Config.RetryDelayMs != nil {
+		delayMs = w.Topic.Config.RetryDelayMs(newRetryCount)
+		if delayMs < 1000 {
+			delayMs = 1000
+		}
+	} else {
+		delayMs = max(w.Topic.Config.RetryDelay.Milliseconds(), 1000)
 
-	// Calculate exponential backoff delay: base * multiplier^(retryCount-1)
-	// Cap prevents delays from growing too large for higher retry counts
-	for i := 1; i < newRetryCount; i++ {
-		delayMs *= retryDelayMultiplier
-		if delayMs > maxRetryDelayMs {
-			delayMs = maxRetryDelayMs
-			break
+		// Calculate exponential backoff delay: base * multiplier^(retryCount-1)
+		// Cap prevents delays from growing too large for higher retry counts
+		for i := 1; i < newRetryCount; i++ {
+			delayMs *= retryDelayMultiplier
+			if delayMs > maxRetryDelayMs {
+				delayMs = maxRetryDelayMs
+				break
+			}
 		}
 	}
 
