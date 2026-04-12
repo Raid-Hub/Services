@@ -40,6 +40,7 @@ func PgcrBlockedTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2"},
 		MaxRetryCount:      25, // Designed for retries, but still need a limit
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processPgcrBlocked)
 }
 
@@ -50,13 +51,13 @@ func processPgcrBlocked(worker processing.WorkerInterface, message amqp.Delivery
 	instanceId, err := processing.ParseInt64(worker, message.Body)
 	if err != nil {
 		// temporary fallback to handle old messages
-		instanceIdStr, err2 := processing.ParseJSON[string](worker, message.Body)
+		instanceIdStr, err2 := processing.ParseJSONUnretryable[string](worker, message.Body)
 		if err2 != nil {
 			return err2
 		}
 		instanceIdInt, err3 := strconv.ParseInt(instanceIdStr, 10, 64)
 		if err3 != nil {
-			return err3
+			return processing.NewUnretryableError(err3)
 		}
 		instanceId = instanceIdInt
 	}

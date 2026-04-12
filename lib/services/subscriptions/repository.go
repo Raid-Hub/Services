@@ -19,30 +19,26 @@ type subscriptionRule struct {
 	Scope         string
 	MembershipID  sql.NullInt64
 	GroupID       sql.NullInt64
-	ActivityHash  sql.NullInt64
 	ChannelType   string
 }
 
 // loadSubscriptionRulesForMatch loads only rules that could apply to this instance:
-// player-scope rows for these membership ids, clan-scope rows for these group ids,
-// and activity-specific rows matching this hash (or unrestricted rows with NULL activity_hash).
-// Uses idx_rule_membership / idx_rule_group instead of scanning the full rule table.
-func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, clanGroupIDs []int64, activityHash uint32) ([]subscriptionRule, error) {
+// player-scope rows for these membership ids and clan-scope rows for these group ids.
+// Uses partial unique indexes (membership_id, destination_id) / (group_id, destination_id) for player/clan lookups.
+func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, clanGroupIDs []int64) ([]subscriptionRule, error) {
 	if len(playerMembershipIDs) == 0 && len(clanGroupIDs) == 0 {
 		return nil, nil
 	}
 	rows, err := postgres.DB.QueryContext(ctx, `
-		SELECT r.id, r.destination_id, r.scope, r.membership_id, r.group_id, r.activity_hash,
+		SELECT r.id, r.destination_id, r.scope, r.membership_id, r.group_id,
 		       d.channel_type
 		FROM subscriptions.rule r
 		INNER JOIN subscriptions.destination d ON d.id = r.destination_id AND d.is_active
 		WHERE r.is_active
-		  AND (r.activity_hash IS NULL OR r.activity_hash = $1)
 		  AND (
-		    (r.scope = 'player' AND r.membership_id = ANY($2))
-		    OR (r.scope = 'clan' AND r.group_id = ANY($3))
+		    (r.scope = 'player' AND r.membership_id = ANY($1))
+		    OR (r.scope = 'clan' AND r.group_id = ANY($2))
 		  )`,
-		int64(activityHash),
 		pq.Array(playerMembershipIDs),
 		pq.Array(clanGroupIDs),
 	)
@@ -54,7 +50,7 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	var out []subscriptionRule
 	for rows.Next() {
 		var r subscriptionRule
-		if err := rows.Scan(&r.ID, &r.DestinationID, &r.Scope, &r.MembershipID, &r.GroupID, &r.ActivityHash,
+		if err := rows.Scan(&r.ID, &r.DestinationID, &r.Scope, &r.MembershipID, &r.GroupID,
 			&r.ChannelType); err != nil {
 			return nil, err
 		}

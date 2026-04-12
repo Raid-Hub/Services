@@ -98,7 +98,7 @@ func redactCallbackURLForLog(raw string) string {
 
 // postSubscriptionInstanceJSON POSTs JSON to the partner URL with X-RaidHub-Key from env.
 // If SUBSCRIPTION_WEBHOOK_RELAY_URL is set, POSTs to that URL instead with the same body and headers,
-// plus Authorization: Bearer (relay secret) and X-RaidHub-Destination (true partner URL).
+// plus Authorization: Bearer (same value as X-RaidHub-Key) and X-RaidHub-Destination (true partner URL).
 func postSubscriptionInstanceJSON(ctx context.Context, partnerURL string, inst any) error {
 	payload, err := json.Marshal(inst)
 	if err != nil {
@@ -117,7 +117,7 @@ func postSubscriptionInstanceJSON(ctx context.Context, partnerURL string, inst a
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(HTTPCallbackSecretHeader, partnerKey)
 		req.Header.Set(HTTPDestinationHeader, partnerURL)
-		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(env.SubscriptionWebhookRelaySecret))
+		req.Header.Set("Authorization", "Bearer "+partnerKey)
 		return doHTTPCallbackResponse(req, relay)
 	}
 
@@ -169,6 +169,6 @@ func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) 
 			TimePlayedSeconds: s.TimePlayedSeconds,
 		}
 	}
-	return assembleRaidDiscordEmbed(msg, pre.ActivityName, pre.VersionName, pre.PathSegment, pre.Feats,
+	return assembleRaidDiscordEmbed(msg.InstanceId, pre, pre.ActivityName, pre.VersionName, pre.PathSegment, pre.Feats,
 		profiles, statsMap, pre.StatsUnavailable)
 }

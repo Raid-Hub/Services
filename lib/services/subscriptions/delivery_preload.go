@@ -72,9 +72,22 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 	if !needDiscord {
 		return nil
 	}
-	d0 := deliveries[0]
+	var d0 *messages.SubscriptionDeliveryMessage
+	for i := range deliveries {
+		if deliveries[i].ChannelType == messages.DeliveryChannelDiscordWebhook {
+			d0 = &deliveries[i]
+			break
+		}
+	}
+	if d0 == nil {
+		return nil
+	}
+	ep0 := d0.EmbedPreload
+	if ep0 == nil {
+		return fmt.Errorf("internal: discord delivery missing embed preload raid context")
+	}
 
-	meta, err := loadActivityRaidMeta(ctx, d0.ActivityHash)
+	meta, err := loadActivityRaidMeta(ctx, ep0.ActivityHash)
 	if err != nil {
 		return err
 	}
@@ -85,7 +98,7 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 		pathSeg = meta.PathSegment
 	}
 
-	profiles, err := player.PlayerProfilesForDelivery(ctx, d0.FireteamMembershipIds)
+	profiles, err := player.PlayerProfilesForDelivery(ctx, ep0.FireteamMembershipIds)
 	if err != nil {
 		return err
 	}
@@ -110,8 +123,8 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 			logging.INSTANCE_ID: d0.InstanceId,
 		})
 	}
-	statsSlice := make([]messages.DiscordInstanceStat, 0, len(d0.FireteamMembershipIds))
-	for _, mid := range d0.FireteamMembershipIds {
+	statsSlice := make([]messages.DiscordInstanceStat, 0, len(ep0.FireteamMembershipIds))
+	for _, mid := range ep0.FireteamMembershipIds {
 		s := InstancePlayerStats{}
 		if statsMap != nil {
 			s = statsMap[mid]
@@ -134,15 +147,17 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 		if deliveries[i].ChannelType != messages.DeliveryChannelDiscordWebhook {
 			continue
 		}
-		deliveries[i].EmbedPreload = &messages.DiscordEmbedPreload{
-			ActivityName:     actName,
-			VersionName:      verName,
-			PathSegment:      pathSeg,
-			FireteamProfiles: ftProf,
-			InstanceStats:    statsSlice,
-			StatsUnavailable: statsUnavailable,
-			Feats:            feats,
+		ep := deliveries[i].EmbedPreload
+		if ep == nil {
+			return fmt.Errorf("internal: discord delivery missing embed preload")
 		}
+		ep.ActivityName = actName
+		ep.VersionName = verName
+		ep.PathSegment = pathSeg
+		ep.FireteamProfiles = ftProf
+		ep.InstanceStats = statsSlice
+		ep.StatsUnavailable = statsUnavailable
+		ep.Feats = feats
 	}
 	return nil
 }

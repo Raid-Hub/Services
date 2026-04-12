@@ -55,10 +55,8 @@ var (
 	GMReportWebhookAuth  string
 	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs (required).
 	SubscriptionHTTPWebhookSecret string
-	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. discord_webhook deliveries never use the relay (direct to Discord).
+	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. Authorization: Bearer uses the same value as SUBSCRIPTION_HTTP_WEBHOOK_SECRET. discord_webhook deliveries never use the relay (direct to Discord).
 	SubscriptionWebhookRelayURL string
-	// SubscriptionWebhookRelaySecret is Authorization: Bearer for the Worker; required when SubscriptionWebhookRelayURL is set.
-	SubscriptionWebhookRelaySecret string
 
 	// Other
 	IsContestWeekend      bool
@@ -149,11 +147,7 @@ func init() {
 	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
 
 	SubscriptionHTTPWebhookSecret = requireEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
-	SubscriptionWebhookRelayURL = strings.TrimSpace(getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL"))
-	SubscriptionWebhookRelaySecret = strings.TrimSpace(getEnv("SUBSCRIPTION_WEBHOOK_RELAY_SECRET"))
-	if SubscriptionWebhookRelayURL != "" && SubscriptionWebhookRelaySecret == "" {
-		envIssues = append(envIssues, "SUBSCRIPTION_WEBHOOK_RELAY_SECRET")
-	}
+	SubscriptionWebhookRelayURL = getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL")
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
@@ -186,11 +180,11 @@ func init() {
 }
 
 func getEnv(key string) string {
-	return os.Getenv(key)
+	return strings.TrimSpace(os.Getenv(key))
 }
 
 func requireEnv(key string) string {
-	val := os.Getenv(key)
+	val := getEnv(key)
 	if val == "" {
 		envIssues = append(envIssues, key)
 	}

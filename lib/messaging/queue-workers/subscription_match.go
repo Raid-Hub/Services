@@ -4,7 +4,6 @@
 package queueworkers
 
 import (
-	"encoding/json"
 	"time"
 
 	"raidhub/lib/messaging/messages"
@@ -30,7 +29,7 @@ func SubscriptionMatchTopic() processing.Topic {
 		ScaleUpPercent:     0.2,
 		ScaleDownPercent:   0.1,
 		MaxRetryCount:      10,
-		RetryDelay:         2 * time.Minute,
+		RetryDelay:         processing.ExponentialRetryDelay(2 * time.Minute),
 	}, processSubscriptionMatch)
 }
 
@@ -53,19 +52,7 @@ func processSubscriptionMatch(worker processing.WorkerInterface, message amqp.De
 		return err
 	}
 
-	// Fan-out to subscription_delivery: marshal all, then one AMQP transaction so all deliveries enqueue or none.
-	bodies := make([][]byte, 0, len(deliveryMessages))
-	for _, dm := range deliveryMessages {
-		b, err := json.Marshal(dm)
-		if err != nil {
-			worker.Warn("SUBSCRIPTION_DELIVERY_MARSHAL_FAILED", err, map[string]any{
-				logging.INSTANCE_ID: request.InstanceId,
-			})
-			return err
-		}
-		bodies = append(bodies, b)
-	}
-	if err := publishing.PublishJSONBytesBatchTx(worker.Context(), routing.SubscriptionDelivery, bodies); err != nil {
+	if err := publishing.PublishJSONMessageBatchTx(worker.Context(), routing.SubscriptionDelivery, deliveryMessages); err != nil {
 		worker.Warn("FAILED_TO_PUBLISH_SUBSCRIPTION_DELIVERY", err, map[string]any{
 			logging.INSTANCE_ID: request.InstanceId,
 		})

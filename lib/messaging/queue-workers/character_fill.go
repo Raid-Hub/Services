@@ -26,13 +26,13 @@ func CharacterFillTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2", "D2Characters"},
 		MaxRetryCount:      4, // Character data is useful but not critical
-		RetryDelay:         5 * time.Minute,
+		RetryDelay:         processing.ExponentialRetryDelay(5 * time.Minute),
 	}, processCharacterFill)
 }
 
 // processCharacterFill handles character fill messages
 func processCharacterFill(worker processing.WorkerInterface, message amqp.Delivery) error {
-	request, err := processing.ParseJSON[messages.CharacterFillMessage](worker, message.Body)
+	request, err := processing.ParseJSONUnretryable[messages.CharacterFillMessage](worker, message.Body)
 	if err != nil {
 		return err
 	}

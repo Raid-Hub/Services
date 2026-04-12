@@ -80,15 +80,16 @@ func YourTopicName() processing.Topic {
 		ScaleCooldown:         2 * time.Minute,              // Default: don't scale again within 2 minutes
 		BungieSystemDeps:      []string{},                   // Optional: Bungie API systems that must be available
 		MaxRetryCount:         0,                            // Default: 0 = unlimited retries. Set to limit retries before DLQ
+		RetryDelay:            processing.ExponentialRetryDelay(time.Second), // or a custom func(newRetryCount int) time.Duration
 	}, processYourTopicName)
 }
 
 // processYourTopicName handles messages for your topic
 func processYourTopicName(worker processing.WorkerInterface, message amqp.Delivery) error {
-	// Option 1: JSON message (recommended)
-	request, err := processing.ParseJSON[messages.YourMessageType](worker, message.Body)
+	// Option 1: JSON message (recommended) — use ParseJSONUnretryable so malformed bodies are not retried
+	request, err := processing.ParseJSONUnretryable[messages.YourMessageType](worker, message.Body)
 	if err != nil {
-		return err // ParseJSON already logs the error
+		return err
 	}
 	
 	worker.Info("PROCESSING_MESSAGE", map[string]any{

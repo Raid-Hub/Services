@@ -16,21 +16,17 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// subscriptionDeliveryRetryDelayMs is the delay (ms) before the redelivered message is consumed when
+// subscriptionDeliveryRetryDelay is the delay before the redelivered message is consumed when
 // republishing with x-retry-count=newRetryCount. Counts 1–10: 5s; 11–15: 12s→60s; 16–17: 30m.
-func subscriptionDeliveryRetryDelayMs(newRetryCount int) int64 {
-	const (
-		fiveSec   = int64(5_000)
-		thirtyMin = int64(30 * 60 * 1000)
-	)
+func subscriptionDeliveryRetryDelay(newRetryCount int) time.Duration {
 	switch {
 	case newRetryCount <= 10:
-		return fiveSec
+		return 5 * time.Second
 	case newRetryCount <= 15:
 		step := newRetryCount - 11 // 0..4 → 12s, 24s, 36s, 48s, 60s
-		return 12_000 + int64(step)*12_000
+		return time.Duration(12+step*12) * time.Second
 	default:
-		return thirtyMin
+		return 30 * time.Minute
 	}
 }
 
@@ -49,8 +45,7 @@ func SubscriptionDeliveryTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		// 17 failed attempts max: 10×5s delay, then 5 steps ramping to 60s, then 2×30m, then drop.
 		MaxRetryCount: 17,
-		RetryDelay:    5 * time.Second,
-		RetryDelayMs:  subscriptionDeliveryRetryDelayMs,
+		RetryDelay:    subscriptionDeliveryRetryDelay,
 	}, processSubscriptionDelivery)
 }
 

@@ -73,6 +73,7 @@ type SubscriptionMatchMessage struct {
 }
 
 // SubscriptionDeliveryMessage is the stage 3 queue payload (routing.SubscriptionDelivery). See lib/services/subscriptions/README.md.
+// Routing and deduplication only at this level; discord_webhook body uses EmbedPreload, http_callback uses Instance.
 type SubscriptionDeliveryMessage struct {
 	InstanceId           int64               `json:"instanceId,string"`
 	DestinationChannelId int64               `json:"destinationChannelId,string"`
@@ -81,22 +82,22 @@ type SubscriptionDeliveryMessage struct {
 	WebhookURL string        `json:"webhookUrl,omitempty"`
 	DedupeKey  string        `json:"dedupeKey"`
 	Scope      DeliveryScope `json:"scope"`
-	// FireteamMembershipIds is everyone in the activity (filled by subscription_match from the instance).
-	FireteamMembershipIds []int64 `json:"fireteamMembershipIds,omitempty"`
-	// Raid context (filled by subscription_match for rich embeds)
-	ActivityHash    uint32    `json:"activityHash,omitempty"`
-	DateCompleted   time.Time `json:"dateCompleted,omitempty"`
-	DurationSeconds int       `json:"durationSeconds,omitempty"`
-	Completed       bool      `json:"completed,omitempty"`
-	PlayerCount     int       `json:"playerCount,omitempty"`
-	// EmbedPreload is filled in the match stage for discord_webhook delivery.
+	// EmbedPreload is built in the match stage for discord_webhook (raid context + display preload).
 	EmbedPreload *DiscordEmbedPreload `json:"embedPreload,omitempty"`
 	// Instance is filled in the match stage for http_callback (same JSON as api.raidhub.io/instance/:id).
 	Instance *dto.Instance `json:"instance,omitempty"`
 }
 
-// DiscordEmbedPreload is display data for the raid embed body (resolved before the delivery queue).
+// DiscordEmbedPreload is everything needed to build a Discord raid embed (staged: raid context first, then display fields).
 type DiscordEmbedPreload struct {
+	// From the match message (instance-wide).
+	ActivityHash          uint32    `json:"activityHash,omitempty"`
+	DateCompleted         time.Time `json:"dateCompleted,omitempty"`
+	DurationSeconds       int       `json:"durationSeconds,omitempty"`
+	Completed             bool      `json:"completed,omitempty"`
+	PlayerCount           int       `json:"playerCount,omitempty"`
+	FireteamMembershipIds []int64   `json:"fireteamMembershipIds,omitempty"`
+
 	ActivityName string `json:"activityName,omitempty"`
 	VersionName  string `json:"versionName,omitempty"`
 	PathSegment  string `json:"pathSegment,omitempty"`

@@ -36,31 +36,31 @@ func raidContainerAccent(completed bool) int {
 
 // buildRaidHeaderMarkdown returns the main summary Text Display: ## title, then blocks separated by blank lines.
 // All completion times use Discord timestamp tokens (<t:unix:F> full locale datetime, <t:unix:R> relative).
-func buildRaidHeaderMarkdown(title string, msg messages.SubscriptionDeliveryMessage, versionName string) string {
+func buildRaidHeaderMarkdown(title string, pre *messages.DiscordEmbedPreload, versionName string) string {
 	var b strings.Builder
 	b.WriteString("## ")
 	b.WriteString(discordEscape(title))
 	b.WriteString("\n\n")
-	b.WriteString(raidHeaderBody(msg, versionName))
+	b.WriteString(raidHeaderBody(pre, versionName))
 	return b.String()
 }
 
-func raidHeaderBody(msg messages.SubscriptionDeliveryMessage, versionName string) string {
+func raidHeaderBody(pre *messages.DiscordEmbedPreload, versionName string) string {
 	var blocks []string
 
 	if v := strings.TrimSpace(versionName); v != "" && !strings.EqualFold(v, "standard") {
 		blocks = append(blocks, fmt.Sprintf("**Version:** %s", discordEscape(v)))
 	}
 
-	if !msg.DateCompleted.IsZero() {
-		end := msg.DateCompleted
-		if msg.DurationSeconds > 0 {
-			start := end.Add(-time.Duration(msg.DurationSeconds) * time.Second)
+	if pre != nil && !pre.DateCompleted.IsZero() {
+		end := pre.DateCompleted
+		if pre.DurationSeconds > 0 {
+			start := end.Add(-time.Duration(pre.DurationSeconds) * time.Second)
 			blocks = append(blocks, fmt.Sprintf("<t:%d:R>\n%s — %s",
 				end.Unix(),
 				fmt.Sprintf("<t:%d:f>", start.Unix()),
 				fmt.Sprintf("<t:%d:f>", end.Unix())))
-			blocks = append(blocks, fmt.Sprintf("**Duration:** %s", formatRaidDuration(msg.DurationSeconds)))
+			blocks = append(blocks, fmt.Sprintf("**Duration:** %s", formatRaidDuration(pre.DurationSeconds)))
 		} else {
 			blocks = append(blocks, fmt.Sprintf("<t:%d:R>\n<t:%d:f>", end.Unix(), end.Unix()))
 		}
@@ -94,20 +94,21 @@ func featDiscordComponents(feats []messages.DiscordFeat) []discord.MessageCompon
 }
 
 func assembleRaidDiscordEmbed(
-	msg messages.SubscriptionDeliveryMessage,
+	instanceId int64,
+	pre *messages.DiscordEmbedPreload,
 	activityName, versionName, pathSegment string,
 	feats []messages.DiscordFeat,
 	fireteamProfiles []player.PlayerProfileForDelivery,
 	statsMap map[int64]InstancePlayerStats,
 	statsUnavailable bool,
 ) *discord.Webhook {
-	title := discord.RaidCompletionMainTitle(activityName, msg.Completed)
+	title := discord.RaidCompletionMainTitle(activityName, pre.Completed)
 
-	pgcrURL := fmt.Sprintf("https://raidhub.io/pgcr/%d", msg.InstanceId)
+	pgcrURL := fmt.Sprintf("https://raidhub.io/pgcr/%d", instanceId)
 
 	// Components V2: IS_COMPONENTS_V2 replaces embeds; see https://discord.com/developers/docs/components/reference
 	// Header: optional version (non-Standard) → date range → duration → relative time.
-	header := truncateDiscordV2Text(buildRaidHeaderMarkdown(title, msg, versionName))
+	header := truncateDiscordV2Text(buildRaidHeaderMarkdown(title, pre, versionName))
 
 	featBlock := featDiscordComponents(feats)
 
@@ -138,7 +139,7 @@ func assembleRaidDiscordEmbed(
 	all = append(all, topInner...)
 	all = append(all, playerInner...)
 
-	accent := raidContainerAccent(msg.Completed)
+	accent := raidContainerAccent(pre.Completed)
 	var roots []discord.MessageComponent
 	if len(all) <= maxContainerChildren {
 		roots = []discord.MessageComponent{discord.NewContainer(accent, all)}

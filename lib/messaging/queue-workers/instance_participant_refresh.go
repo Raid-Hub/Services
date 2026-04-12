@@ -29,7 +29,7 @@ func InstanceParticipantRefreshTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2", "D2Profiles", "Groups", "Clans"},
 		MaxRetryCount:      10,
-		RetryDelay:         2 * time.Minute,
+		RetryDelay:         processing.ExponentialRetryDelay(2 * time.Minute),
 	}, processInstanceParticipantRefresh)
 }
 

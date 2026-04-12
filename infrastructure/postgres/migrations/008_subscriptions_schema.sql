@@ -21,7 +21,6 @@ CREATE TABLE "subscriptions"."rule" (
     "scope" TEXT NOT NULL,
     "membership_id" BIGINT,
     "group_id" BIGINT,
-    "activity_hash" BIGINT,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "rule_destination_fkey" FOREIGN KEY ("destination_id") REFERENCES "subscriptions"."destination" ("id") ON DELETE CASCADE,
@@ -32,13 +31,12 @@ CREATE TABLE "subscriptions"."rule" (
     )
 );
 
-CREATE UNIQUE INDEX "idx_rule_player_unique" ON "subscriptions"."rule" ("destination_id", "membership_id")
+-- One active (destination, player) and (destination, clan) pair each; uniqueness is unchanged if column order is swapped.
+-- Leading membership_id / group_id matches how we query (ANY on those ids), so we do not need separate btree indexes.
+CREATE UNIQUE INDEX "idx_rule_player_unique" ON "subscriptions"."rule" ("membership_id", "destination_id")
     WHERE "scope" = 'player' AND "is_active";
-CREATE UNIQUE INDEX "idx_rule_clan_unique" ON "subscriptions"."rule" ("destination_id", "group_id")
+CREATE UNIQUE INDEX "idx_rule_clan_unique" ON "subscriptions"."rule" ("group_id", "destination_id")
     WHERE "scope" = 'clan' AND "is_active";
-
-CREATE INDEX "idx_rule_membership" ON "subscriptions"."rule" ("membership_id") WHERE "scope" = 'player' AND "is_active";
-CREATE INDEX "idx_rule_group" ON "subscriptions"."rule" ("group_id") WHERE "scope" = 'clan' AND "is_active";
 
 GRANT USAGE ON SCHEMA "subscriptions" TO readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA "subscriptions" TO readonly;

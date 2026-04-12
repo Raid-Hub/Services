@@ -9,7 +9,7 @@ import (
 
 // MatchEvent is stage 2 of the subscription pipeline (see README.md). Order of operations:
 //  1. applySubscriptionRules — privacy, clan from message, rules → one row per matched destination
-//  2. enrichDeliveryRaidContext — instance-wide raid fields on each row
+//  2. enrichDeliveryRaidContext — DiscordEmbedPreload raid context for discord_webhook rows
 //  3. attachDestinationWebhooks — batch-load webhook URLs (Postgres; not repeated in stage 3)
 //  4. preloadDiscordEmbedData — batch-load Discord embed body (activity, players, stats, feats)
 //  5. preloadHttpCallbackInstance — dto.Instance for http_callback (API-shaped JSON)
@@ -60,7 +60,7 @@ func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMa
 	}
 
 	clanGroupIDs := uniqueClanGroupIDs(clansByMember, membershipIDs)
-	rules, err := loadSubscriptionRulesForMatch(ctx, membershipIDs, clanGroupIDs, message.ActivityHash)
+	rules, err := loadSubscriptionRulesForMatch(ctx, membershipIDs, clanGroupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +69,17 @@ func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMa
 }
 
 func enrichDeliveryRaidContext(d *messages.SubscriptionDeliveryMessage, msg messages.SubscriptionMatchMessage) {
-	d.ActivityHash = msg.ActivityHash
-	d.DateCompleted = msg.DateCompleted
-	d.DurationSeconds = msg.DurationSeconds
-	d.Completed = msg.Completed
-	d.PlayerCount = msg.PlayerCount
-	d.FireteamMembershipIds = fireteamMembershipIDs(msg.ParticipantData)
+	if d.ChannelType != messages.DeliveryChannelDiscordWebhook {
+		return
+	}
+	d.EmbedPreload = &messages.DiscordEmbedPreload{
+		ActivityHash:          msg.ActivityHash,
+		DateCompleted:         msg.DateCompleted,
+		DurationSeconds:       msg.DurationSeconds,
+		Completed:             msg.Completed,
+		PlayerCount:           msg.PlayerCount,
+		FireteamMembershipIds: fireteamMembershipIDs(msg.ParticipantData),
+	}
 }
 
 func fireteamMembershipIDs(participants []messages.ParticipantResult) []int64 {

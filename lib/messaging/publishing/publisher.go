@@ -83,24 +83,28 @@ func PublishJSONMessage(ctx context.Context, queueName string, body any) error {
 	})
 }
 
-// PublishJSONBytes publishes pre-marshaled JSON with the same headers as PublishJSONMessage.
-func PublishJSONBytes(ctx context.Context, queueName string, jsonBody []byte) error {
-	return publishWithTracking(ctx, queueName, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        jsonBody,
-		Headers: amqp.Table{
-			"x-retry-count": int32(0),
-		},
-	})
-}
-
-// PublishJSONBytesBatchTx publishes multiple messages in one AMQP transaction so either all are
-// enqueued or none (avoids duplicate subscription_delivery notifications if a later publish fails).
-func PublishJSONBytesBatchTx(ctx context.Context, queueName string, bodies [][]byte) error {
-	if len(bodies) == 0 {
+// PublishJSONMessageBatchTx marshals each payload and publishes in one AMQP transaction so either all
+// messages are enqueued or none (e.g. subscription match fan-out to subscription_delivery).
+func PublishJSONMessageBatchTx[T any](ctx context.Context, queueName string, payloads []T) error {
+	if len(payloads) == 0 {
 		return nil
 	}
+	bodies := make([][]byte, 0, len(payloads))
+	for _, p := range payloads {
+		b, err := json.Marshal(p)
+		if err != nil {
+			global_metrics.PublishingOperations.WithLabelValues(queueName, ERROR).Inc()
+			logger.Error("PUBLISH_MARSHAL_FAILED", err, map[string]any{
+				logging.QUEUE: queueName,
+			})
+			return fmt.Errorf("failed to marshal message: %w", err)
+		}
+		bodies = append(bodies, b)
+	}
+	return publishJSONBodiesBatchTx(ctx, queueName, bodies)
+}
 
+func publishJSONBodiesBatchTx(ctx context.Context, queueName string, bodies [][]byte) error {
 	err := retry.WithRetry(ctx, publishingRetryConfig, func(attempt int) error {
 		ch, err := rabbit.Conn.Channel()
 		if err != nil {

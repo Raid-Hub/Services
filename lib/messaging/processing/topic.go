@@ -128,10 +128,33 @@ type TopicConfig struct {
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
 	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
-	RetryDelay            time.Duration // Base delay between retries (used when RetryDelayMs is nil)
-	// RetryDelayMs, if set, returns the delay in milliseconds before the next delivery attempt for a given
-	// outgoing x-retry-count (1-based: value written when republishing). Overrides exponential backoff from RetryDelay.
-	RetryDelayMs func(newRetryCount int) int64
+	// RetryDelay returns how long to wait before the next delivery attempt after a failure.
+	// newRetryCount is 1-based (the value written to x-retry-count when republishing).
+	// Use ExponentialRetryDelay for the standard doubling backoff from a base duration.
+	RetryDelay func(newRetryCount int) time.Duration
+}
+
+const (
+	retryBackoffMultiplier = 2
+	maxRetryBackoff        = 30 * time.Minute
+)
+
+// ExponentialRetryDelay returns a retry delay function: the first attempt waits at least base (floored to 1s),
+// then the delay doubles for each subsequent attempt (newRetryCount 2, 3, …), capped at 30 minutes.
+// This matches the historical Hermes behavior for topics that only set a base RetryDelay duration.
+func ExponentialRetryDelay(base time.Duration) func(newRetryCount int) time.Duration {
+	return func(newRetryCount int) time.Duration {
+		delayMs := max(base.Milliseconds(), int64(1000))
+		maxMs := maxRetryBackoff.Milliseconds()
+		for i := 1; i < newRetryCount; i++ {
+			delayMs *= retryBackoffMultiplier
+			if delayMs > maxMs {
+				delayMs = maxMs
+				break
+			}
+		}
+		return time.Duration(delayMs) * time.Millisecond
+	}
 }
 
 // NewTopic creates a new topic with the given config and processor
