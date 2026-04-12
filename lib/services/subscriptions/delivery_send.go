@@ -22,6 +22,7 @@ var subscriptionHTTPDeliveryClient = &http.Client{Timeout: 60 * time.Second}
 
 // HTTPCallbackSecretHeader is the header name for the shared secret on http_callback POSTs.
 const HTTPCallbackSecretHeader = "X-RaidHub-Key"
+
 // HTTPDestinationHeader carries the partner webhook URL when posting to SUBSCRIPTION_WEBHOOK_RELAY_URL (outbound relay).
 const HTTPDestinationHeader = "X-RaidHub-Destination"
 

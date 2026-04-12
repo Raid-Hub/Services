@@ -117,9 +117,9 @@ func main() {
 				return
 			}
 			logger.Info("REPLAY_DESTINATION", map[string]any{
-				"destination_id":  destID,
-				"created":         created,
-				"channel_type":    "discord_webhook",
+				"destination_id": destID,
+				"created":        created,
+				"channel_type":   "discord_webhook",
 			})
 		case hasHTTPSCallback:
 			destID, created, err = subscriptions.FindOrCreateDestinationByHTTPSCallback(ctx, *httpsCallbackURLFlag)
@@ -128,9 +128,9 @@ func main() {
 				return
 			}
 			logger.Info("REPLAY_DESTINATION", map[string]any{
-				"destination_id":  destID,
-				"created":         created,
-				"channel_type":    "http_callback",
+				"destination_id": destID,
+				"created":        created,
+				"channel_type":   "http_callback",
 			})
 		case hasDestID:
 			destID = *destinationIDFlag
