@@ -6,6 +6,7 @@ import (
 
 	"raidhub/lib/dto"
 	"raidhub/lib/messaging/messages"
+	"raidhub/lib/services/clans"
 	"raidhub/lib/utils/logging"
 )
 
@@ -57,7 +58,7 @@ func PrepareParticipants(ctx context.Context, event messages.SubscriptionEventMe
 			continue
 		}
 
-		groupId, fromCache, err := ResolveClan(ctx, *participant.MembershipType, participant.MembershipId)
+		groupId, fromCache, err := clans.ResolveClan(ctx, *participant.MembershipType, participant.MembershipId)
 		if err != nil {
 			return messages.SubscriptionMatchMessage{}, err
 		}

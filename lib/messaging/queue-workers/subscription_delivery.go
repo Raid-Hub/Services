@@ -1,5 +1,5 @@
 // Stage 3 of the subscription pipeline: consume SubscriptionDeliveryMessage, SendSubscriptionDelivery
-// (HTTP POST). discord_webhook carries EmbedPreload; http_callback carries dto.Instance JSON.
+// (HTTP POST only — URLs, EmbedPreload, and dto.Instance are filled in stage 2 match_preload).
 // See lib/services/subscriptions/README.md.
 package queueworkers
 

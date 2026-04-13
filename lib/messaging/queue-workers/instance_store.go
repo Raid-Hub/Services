@@ -43,7 +43,7 @@ func processInstanceStore(worker processing.WorkerInterface, message amqp.Delive
 	worker.Debug("PROCESSING_INSTANCE_STORE", fields)
 
 	// Store the PGCR using the orchestrator
-	_, _, err = instance_storage.StorePGCR(&msg.Instance, &msg.PGCR)
+	_, _, err = instance_storage.StorePGCR(worker.Context(), &msg.Instance, &msg.PGCR)
 	if err != nil {
 		instance_storage.WriteMissedLog(msg.Instance.InstanceId)
 		return nil

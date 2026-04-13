@@ -167,8 +167,11 @@ type LinkedProfiles struct {
 	Profiles []DestinyUserInfo `json:"profiles"`
 }
 
+// GroupResponse is the Platform GroupV2.GetGroup Response payload (see Bungie OpenAPI GroupsV2.GroupResponse).
 type GroupResponse struct {
-	Detail GroupV2 `json:"detail"`
+	Detail               GroupV2                `json:"detail"`
+	Founder              *GroupMember           `json:"founder,omitempty"`
+	CurrentUserMemberMap map[string]GroupMember `json:"currentUserMemberMap,omitempty"`
 }
 
 type GroupV2 struct {

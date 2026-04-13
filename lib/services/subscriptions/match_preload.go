@@ -1,3 +1,5 @@
+// Match-stage batch loading for subscription_match (stage 2): destination URLs, Discord embed
+// hydration, and dto.Instance for http_callback. subscription_delivery (stage 3) only POSTs.
 package subscriptions
 
 import (
@@ -10,8 +12,8 @@ import (
 	"raidhub/lib/utils/logging"
 )
 
-// attachDestinationWebhooks loads webhook URLs for all destinations in one batch so the delivery
-// worker does not query Postgres.
+// attachDestinationWebhooks loads webhook URLs for all destinations in one batch so stage 3 does
+// not query Postgres.
 func attachDestinationWebhooks(ctx context.Context, deliveries []messages.SubscriptionDeliveryMessage) error {
 	if len(deliveries) == 0 {
 		return nil
@@ -57,7 +59,7 @@ func attachDestinationWebhooks(ctx context.Context, deliveries []messages.Subscr
 }
 
 // preloadDiscordEmbedData loads activity metadata, fireteam profiles, instance stats, and instance feats
-// once per match batch for discord_webhook destinations (URL + channel type are set in attachDestinationWebhooks).
+// once per match batch for discord_webhook rows (channel type and URL come from attachDestinationWebhooks).
 func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.SubscriptionDeliveryMessage) error {
 	if len(deliveries) == 0 {
 		return nil
@@ -162,22 +164,23 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 	return nil
 }
 
-// preloadHttpCallbackInstance loads dto.Instance once per batch for http_callback destinations (same JSON shape as the public instance API).
+// preloadHttpCallbackInstance loads dto.Instance once per batch for http_callback rows (same JSON shape
+// as the public instance API). Uses the first http_callback row’s InstanceId (all rows share one instance).
 func preloadHttpCallbackInstance(ctx context.Context, deliveries []messages.SubscriptionDeliveryMessage) error {
 	if len(deliveries) == 0 {
 		return nil
 	}
-	var need bool
+	var firstHTTP *messages.SubscriptionDeliveryMessage
 	for i := range deliveries {
 		if deliveries[i].ChannelType == messages.DeliveryChannelHttpCallback {
-			need = true
+			firstHTTP = &deliveries[i]
 			break
 		}
 	}
-	if !need {
+	if firstHTTP == nil {
 		return nil
 	}
-	inst, err := LoadDTOInstanceFromPostgres(ctx, deliveries[0].InstanceId)
+	inst, err := LoadDTOInstanceFromPostgres(ctx, firstHTTP.InstanceId)
 	if err != nil {
 		return err
 	}

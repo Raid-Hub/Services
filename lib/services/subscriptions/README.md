@@ -73,10 +73,9 @@ Each topic defines its own `TopicConfig` (no shared helper): `lib/messaging/queu
 | File | Role |
 |------|------|
 | `logging.go` | Shared package logger |
-| `clan_cache.go` | Redis clan cache + Bungie `GetGroupsForMember` fallback (stage 1) |
-| `subscription_event.go` | `NewSubscriptionEvent`, `PrepareParticipants` (resolves clans), large-instance threshold |
+| `subscription_event.go` | `NewSubscriptionEvent`, `PrepareParticipants` (resolves clans via `lib/services/clans`), large-instance threshold |
 | `match_pipeline.go` | `MatchEvent`, rule application (reads clans from message), raid context on deliveries |
-| `delivery_preload.go` | Destination URL batch load; Discord embed preload; `dto.Instance` for `http_callback` |
+| `match_preload.go` | Stage 2 batch load: destination URLs, Discord embed hydration, `dto.Instance` for `http_callback` |
 | `delivery_send.go` | `SendSubscriptionDelivery` (Discord or HTTPS JSON) |
 | `discord_raid_embed.go` | Raid completion embed assembly and fireteam/clan markdown |
 | `repository.go` | Rules, destinations, activity meta, matching |

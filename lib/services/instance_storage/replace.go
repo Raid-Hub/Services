@@ -15,7 +15,7 @@ import (
 // ReplacePGCR deletes existing instance data and stores the new PGCR
 // This is used to fix malformed PGCrs by re-fetching and replacing
 // All operations happen in a single transaction to ensure atomicity
-func ReplacePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
+func ReplacePGCR(ctx context.Context, inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
 	// Start transaction for atomic delete + store
 	tx, err := postgres.DB.Begin()
 	if err != nil {
@@ -82,15 +82,15 @@ func ReplacePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (
 	if instanceIsNew && sideEffects != nil {
 		if sideEffects.CharacterFillRequests != nil {
 			for _, characterFillRequest := range sideEffects.CharacterFillRequests {
-				publishing.PublishJSONMessage(context.TODO(), routing.CharacterFill, characterFillRequest)
+				publishing.PublishJSONMessage(ctx, routing.CharacterFill, characterFillRequest)
 			}
 		}
 		if sideEffects.PlayerCrawlRequests != nil {
 			for _, playerCrawlRequest := range sideEffects.PlayerCrawlRequests {
-				publishing.PublishJSONMessage(context.TODO(), routing.PlayerCrawl, playerCrawlRequest)
+				publishing.PublishJSONMessage(ctx, routing.PlayerCrawl, playerCrawlRequest)
 			}
 		}
-		publishing.PublishInt64Message(context.TODO(), routing.InstanceCheatCheck, inst.InstanceId)
+		publishing.PublishInt64Message(ctx, routing.InstanceCheatCheck, inst.InstanceId)
 	}
 
 	// Log successful replacement
