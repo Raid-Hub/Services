@@ -5,15 +5,15 @@
 SELECT 'CREATE DATABASE raidhub'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'raidhub')\gexec
 
--- Grant permissions and all
-GRANT ALL PRIVILEGES ON DATABASE raidhub TO dev;
+-- Grant permissions to whichever bootstrap user the container created
+GRANT ALL PRIVILEGES ON DATABASE raidhub TO CURRENT_USER;
 
 -- Grant schema usage
 \c raidhub
 
 -- Set default session parameters
 ALTER DATABASE raidhub SET timezone TO 'UTC';
-ALTER DATABASE raidhub SET search_path TO "public","core","definitions","clan","flagging","leaderboard","extended","raw","cache";
+ALTER DATABASE raidhub SET search_path TO "public","core","definitions","clan","flagging","leaderboard","extended","raw","cache","subscriptions";
 
 -- Create public schemas
 CREATE SCHEMA IF NOT EXISTS "core";
@@ -24,6 +24,7 @@ CREATE SCHEMA IF NOT EXISTS "extended";
 CREATE SCHEMA IF NOT EXISTS "raw";
 CREATE SCHEMA IF NOT EXISTS "flagging";
 CREATE SCHEMA IF NOT EXISTS "cache";
+CREATE SCHEMA IF NOT EXISTS "subscriptions";
 
 -- Create readonly user (ignore if already exists) - hardcoded as readonly with password 'password'
 DO $$
@@ -43,6 +44,7 @@ GRANT USAGE ON SCHEMA "leaderboard" TO readonly;
 GRANT USAGE ON SCHEMA "extended" TO readonly;
 GRANT USAGE ON SCHEMA "raw" TO readonly;
 GRANT USAGE ON SCHEMA "flagging" TO readonly;
+GRANT USAGE ON SCHEMA "subscriptions" TO readonly;
 
 -- Set default privileges for future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA "core" GRANT SELECT ON TABLES TO readonly;
@@ -52,6 +54,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA "leaderboard" GRANT SELECT ON TABLES TO reado
 ALTER DEFAULT PRIVILEGES IN SCHEMA "extended" GRANT SELECT ON TABLES TO readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA "raw" GRANT SELECT ON TABLES TO readonly;
 ALTER DEFAULT PRIVILEGES IN SCHEMA "flagging" GRANT SELECT ON TABLES TO readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA "subscriptions" GRANT SELECT ON TABLES TO readonly;
 
 -- =============================================================================
 -- MIGRATION TRACKING

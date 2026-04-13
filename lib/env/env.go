@@ -28,6 +28,11 @@ var (
 	ClickHouseDB       string
 	ClickHousePort     string
 
+	// Redis
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+
 	// Prometheus
 	PrometheusHost string
 
@@ -48,6 +53,11 @@ var (
 	NemesisWebhookURL    string
 	GMReportWebhookURL   string
 	GMReportWebhookAuth  string
+	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs.
+	// Optional at process start; subscription delivery enforces it when posting http_callback.
+	SubscriptionHTTPWebhookSecret string
+	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. Authorization: Bearer uses the same value as SUBSCRIPTION_HTTP_WEBHOOK_SECRET. discord_webhook deliveries never use the relay (direct to Discord).
+	SubscriptionWebhookRelayURL string
 
 	// Other
 	IsContestWeekend      bool
@@ -117,6 +127,11 @@ func init() {
 	ClickHouseDB = getEnvWithDefault("CLICKHOUSE_DB", "default")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
 
+	// Redis (optional port default; only binaries that open Redis need a reachable server)
+	RedisHost = getHostEnv("REDIS_HOST")
+	RedisPort = getEnvWithDefault("REDIS_PORT", "6379")
+	RedisPassword = getEnv("REDIS_PASSWORD")
+
 	// Zeus
 	ZeusHost = getHostEnv("ZEUS_HOST")
 	ZeusPort = getHostEnv("ZEUS_PORT")
@@ -131,6 +146,9 @@ func init() {
 	HadesWebhookURL = getEnv("HADES_WEBHOOK_URL")
 	CheatCheckWebhookURL = getEnv("CHEAT_CHECK_WEBHOOK_URL")
 	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
+
+	SubscriptionHTTPWebhookSecret = getEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
+	SubscriptionWebhookRelayURL = getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL")
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
@@ -163,11 +181,11 @@ func init() {
 }
 
 func getEnv(key string) string {
-	return os.Getenv(key)
+	return strings.TrimSpace(os.Getenv(key))
 }
 
 func requireEnv(key string) string {
-	val := os.Getenv(key)
+	val := getEnv(key)
 	if val == "" {
 		envIssues = append(envIssues, key)
 	}

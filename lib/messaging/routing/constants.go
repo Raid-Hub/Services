@@ -15,4 +15,9 @@ const (
 	// Instance data processing queues
 	InstanceStore      = "instance_store"
 	InstanceCheatCheck = "instance_cheat_check"
+
+	// Subscription pipeline (order: refresh -> match -> delivery). See lib/services/subscriptions/README.md.
+	InstanceParticipantRefresh = "instance_participant_refresh"
+	SubscriptionMatch          = "subscription_match"
+	SubscriptionDelivery       = "subscription_delivery"
 )

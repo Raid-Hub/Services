@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/player"
@@ -24,6 +26,7 @@ func ActivityHistoryTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2", "Activities", "D2Profiles"},
 		MaxRetryCount:      3,
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processActivityHistory)
 }
 

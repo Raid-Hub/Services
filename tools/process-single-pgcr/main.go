@@ -40,7 +40,7 @@ func main() {
 	logger.Info("SUCCESSFULLY_FETCHED_AND_PROCESSED_PGCR", map[string]any{logging.INSTANCE_ID: instanceId})
 
 	// Store the PGCR
-	lag, committed, err := instance_storage.StorePGCR(instance, pgcr)
+	lag, committed, err := instance_storage.StorePGCR(context.Background(), instance, pgcr)
 	if err != nil {
 		logger.Error("FAILED_TO_STORE_PGCR", err, map[string]any{logging.INSTANCE_ID: instanceId})
 		return

@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
@@ -24,12 +26,13 @@ func InstanceStoreTopic() processing.Topic {
 		ScaleUpPercent:     0.2,
 		ScaleDownPercent:   0.1,
 		MaxRetryCount:      3, // We write to a dlq anyways, so we don't need to retry
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processInstanceStore)
 }
 
 // processInstanceStore handles instance store messages
 func processInstanceStore(worker processing.WorkerInterface, message amqp.Delivery) error {
-	msg, err := processing.ParseJSON[messages.PGCRStoreMessage](worker, message.Body)
+	msg, err := processing.ParseJSONUnretryable[messages.PGCRStoreMessage](worker, message.Body)
 	if err != nil {
 		return err
 	}
@@ -40,7 +43,7 @@ func processInstanceStore(worker processing.WorkerInterface, message amqp.Delive
 	worker.Debug("PROCESSING_INSTANCE_STORE", fields)
 
 	// Store the PGCR using the orchestrator
-	_, _, err = instance_storage.StorePGCR(&msg.Instance, &msg.PGCR)
+	_, _, err = instance_storage.StorePGCR(worker.Context(), &msg.Instance, &msg.PGCR)
 	if err != nil {
 		instance_storage.WriteMissedLog(msg.Instance.InstanceId)
 		return nil

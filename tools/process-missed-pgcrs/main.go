@@ -285,7 +285,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 				processed = true
 				// NonRaid activities are successfully processed, just not raids
 			} else if result == pgcr_processing.Success {
-				_, committed, err := instance_storage.StorePGCR(instance, pgcr)
+				_, committed, err := instance_storage.StorePGCR(context.Background(), instance, pgcr)
 				if err != nil {
 					attempt := errors + 1
 					if attempt > workerMaxRetries {

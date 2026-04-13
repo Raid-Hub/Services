@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -54,7 +55,7 @@ func NewDiscordAlerting(webhookURL string, logger logging.Logger) *DiscordAlerti
 
 // Send sends a Discord webhook and optionally logs it
 func (da *DiscordAlerting) Send(webhook *Webhook, logKey string, logFields map[string]any) {
-	err := SendWebhook(da.webhookURL, webhook)
+	err := SendWebhook(context.Background(), da.webhookURL, webhook)
 	if err != nil && da.logger != nil {
 		da.logger.Warn("DISCORD_WEBHOOK_SEND_FAILED", err, nil)
 	}

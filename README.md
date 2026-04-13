@@ -19,13 +19,14 @@ RaidHub Services follows a microservices architecture with clear separation betw
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - Detailed architecture documentation
 - **[Atlas Documentation](docs/ATLAS.md)** - PGCR crawler service details
 - **[Logging Standards](docs/LOGGING.md)** - Comprehensive logging guidelines and standards
+- **[Local development pitfalls](docs/LOCAL_DEVELOPMENT.md)** - Go 1.25 toolchain, Docker, env vars, RabbitMQ/Postgres/ClickHouse on Windows, and `scripts/go-docker.*`
 
 ## Quick Start
 
 ### Prerequisites
 
 - Docker Desktop
-- Go 1.25+
+- Go 1.25+ (if the toolchain cannot be installed on your machine—common on some Windows setups—see **[Local development pitfalls](docs/LOCAL_DEVELOPMENT.md)** and use `scripts/go-docker.ps1` or `scripts/go-docker.sh`)
 - Make
 - **Tilt** (for development) - Install from https://docs.tilt.dev/install.html
 

@@ -11,9 +11,10 @@ import (
 // with the players Nested column populated. Materialized views (e.g. weapon_meta_by_hour_mv)
 // read from instance and populate analytics tables.
 //
-// The players shape is []map[string]interface{} (nested: players[i].characters[j].weapons[k])
-// so that clickhouse-go can serialize it to the Nested columns, matching the old pgcr_clickhouse
-// format that used batch.Append(..., instance["players"]).
+// With flatten_nested=0 on the connection, clickhouse-go expects one []map per Nested column
+// (Array(Tuple(...)) — see lib/column/nested.go and examples/clickhouse_api/nested.go NestedUnFlattened).
+// Do not pass separate arrays per Nested field here; that only matches flattened mode and breaks
+// batch.Append with "expected N arguments, got M".
 func StoreToClickHouse(inst *dto.Instance) error {
 	conn := clickhouse.DB
 	ctx := context.Background()
@@ -35,7 +36,7 @@ func StoreToClickHouse(inst *dto.Instance) error {
 		}
 	}
 
-	players := buildPlayersNested(inst.Players)
+	players := buildPlayersMaps(inst.Players)
 
 	batch, err := conn.PrepareBatch(ctx, "INSERT INTO instance")
 	if err != nil {
@@ -46,15 +47,15 @@ func StoreToClickHouse(inst *dto.Instance) error {
 	err = batch.Append(
 		inst.InstanceId,
 		inst.Hash,
-		inst.Completed,
-		inst.PlayerCount,
+		boolToUInt8(inst.Completed),
+		uint32(inst.PlayerCount),
 		fresh,
 		flawless,
 		inst.DateStarted,
 		inst.DateCompleted,
 		uint16(inst.MembershipType),
-		inst.DurationSeconds,
-		inst.Score,
+		uint32(inst.DurationSeconds),
+		int32(inst.Score),
 		players,
 	)
 	if err != nil {
@@ -63,18 +64,17 @@ func StoreToClickHouse(inst *dto.Instance) error {
 	return batch.Send()
 }
 
-// buildPlayersNested builds the nested []map[string]interface{} shape that
-// clickhouse-go serializes to the instance.players Nested columns.
-func buildPlayersNested(pl []dto.InstancePlayer) []map[string]interface{} {
-	players := make([]map[string]interface{}, 0, len(pl))
+func boolToUInt8(v bool) uint8 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+// buildPlayersMaps returns one map per player for the players Nested column (flatten_nested=0).
+func buildPlayersMaps(pl []dto.InstancePlayer) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(pl))
 	for _, p := range pl {
-		instancePlayer := map[string]interface{}{
-			"membership_id":       p.Player.MembershipId,
-			"completed":           p.Finished,
-			"time_played_seconds": p.TimePlayedSeconds,
-			"sherpas":             p.Sherpas,
-			"is_first_clear":      p.IsFirstClear,
-		}
 		characters := make([]map[string]interface{}, 0, len(p.Characters))
 		for _, c := range p.Characters {
 			classHash := uint32(0)
@@ -89,31 +89,37 @@ func buildPlayersNested(pl []dto.InstancePlayer) []map[string]interface{} {
 				"character_id":        c.CharacterId,
 				"class_hash":          classHash,
 				"emblem_hash":         emblemHash,
-				"completed":           c.Completed,
-				"score":               c.Score,
-				"kills":               c.Kills,
-				"assists":             c.Assists,
-				"deaths":              c.Deaths,
-				"precision_kills":     c.PrecisionKills,
-				"super_kills":         c.SuperKills,
-				"grenade_kills":       c.GrenadeKills,
-				"melee_kills":         c.MeleeKills,
-				"time_played_seconds": c.TimePlayedSeconds,
-				"start_seconds":       c.StartSeconds,
+				"completed":           boolToUInt8(c.Completed),
+				"score":               int32(c.Score),
+				"kills":               uint32(c.Kills),
+				"assists":             uint32(c.Assists),
+				"deaths":              uint32(c.Deaths),
+				"precision_kills":     uint32(c.PrecisionKills),
+				"super_kills":         uint32(c.SuperKills),
+				"grenade_kills":       uint32(c.GrenadeKills),
+				"melee_kills":         uint32(c.MeleeKills),
+				"time_played_seconds": uint32(c.TimePlayedSeconds),
+				"start_seconds":       uint32(c.StartSeconds),
 			}
 			weapons := make([]map[string]interface{}, 0, len(c.Weapons))
 			for _, w := range c.Weapons {
 				weapons = append(weapons, map[string]interface{}{
 					"weapon_hash":     w.WeaponHash,
-					"kills":           w.Kills,
-					"precision_kills": w.PrecisionKills,
+					"kills":           uint32(w.Kills),
+					"precision_kills": uint32(w.PrecisionKills),
 				})
 			}
 			instanceCharacter["weapons"] = weapons
 			characters = append(characters, instanceCharacter)
 		}
-		instancePlayer["characters"] = characters
-		players = append(players, instancePlayer)
+		out = append(out, map[string]interface{}{
+			"membership_id":       p.Player.MembershipId,
+			"completed":           boolToUInt8(p.Finished),
+			"time_played_seconds": uint32(p.TimePlayedSeconds),
+			"sherpas":             uint32(p.Sherpas),
+			"is_first_clear":      boolToUInt8(p.IsFirstClear),
+			"characters":          characters,
+		})
 	}
-	return players
+	return out
 }

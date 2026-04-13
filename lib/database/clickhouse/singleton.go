@@ -19,12 +19,17 @@ func init() {
 		"port": env.ClickHousePort,
 		"db":   env.ClickHouseDB,
 	}, func() error {
+		// flatten_nested=0 matches clickhouse-go's Nested insert shape: each Nested column
+		// is one Append argument as []map (see ClickHouse/clickhouse-go examples/clickhouse_api/nested.go NestedUnFlattened).
 		conn, err := clickhouse.Open(&clickhouse.Options{
 			Addr: []string{env.ClickHouseHost + ":" + env.ClickHousePort},
 			Auth: clickhouse.Auth{
 				Database: env.ClickHouseDB,
 				Username: env.ClickHouseUser,
 				Password: env.ClickHousePassword,
+			},
+			Settings: clickhouse.Settings{
+				"flatten_nested": 0,
 			},
 		})
 		if err != nil {

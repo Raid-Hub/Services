@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"raidhub/lib/database/clickhouse"
 	"raidhub/lib/database/postgres"
+	rdb "raidhub/lib/database/redis"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/publishing"
 	qw "raidhub/lib/messaging/queue-workers"
@@ -60,10 +61,11 @@ func main() {
 	monitoring.RegisterHermesMetrics(*metricsPort)
 
 	HermesLogger.Debug("WAITING_ON_CONNECTIONS", map[string]any{
-		"services": []string{"postgres", "clickhouse", "rabbit", "publishing"},
+		"services": []string{"postgres", "clickhouse", "redis", "rabbit", "publishing"},
 	})
 	postgres.Wait()
 	clickhouse.Wait()
+	rdb.Wait()
 	rabbit.Wait()
 	publishing.Wait()
 
@@ -81,6 +83,9 @@ func main() {
 		qw.PgcrCrawlTopic(),
 		qw.InstanceCheatCheckTopic(),
 		qw.InstanceStoreTopic(),
+		qw.InstanceParticipantRefreshTopic(),
+		qw.SubscriptionMatchTopic(),
+		qw.SubscriptionDeliveryTopic(),
 	}
 
 	var topicManagers []*TopicManager

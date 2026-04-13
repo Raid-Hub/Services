@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/publishing"
@@ -28,6 +30,7 @@ func PgcrCrawlTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Destiny2"},
 		MaxRetryCount:      20, // Critical - main functionality
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processPgcrCrawl)
 }
 

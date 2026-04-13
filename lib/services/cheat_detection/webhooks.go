@@ -78,7 +78,7 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 		})
 	}
 
-	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
+	discord.SendWebhook(context.Background(), env.CheatCheckWebhookURL, &webhook)
 }
 
 func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) {
@@ -124,7 +124,7 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 		})
 	}
 
-	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
+	discord.SendWebhook(context.Background(), env.CheatCheckWebhookURL, &webhook)
 }
 
 func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie.DestinyProfileComponent, clears int, ageInDays float64, bungieName string, iconPath string, cheaterAccountChance float64, flags uint64) {
@@ -190,5 +190,5 @@ func (flag PlayerInstanceFlagStats) SendBlacklistedPlayerWebhook(profile *bungie
 		"class_a_flags":       flag.FlagsA,
 	})
 
-	discord.SendWebhook(env.CheatCheckWebhookURL, &webhook)
+	discord.SendWebhook(context.Background(), env.CheatCheckWebhookURL, &webhook)
 }

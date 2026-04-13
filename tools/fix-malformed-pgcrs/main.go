@@ -166,7 +166,7 @@ func worker(ch chan int64, successes chan int64, failures chan int64, skipped ch
 				processed = true
 			} else if result == pgcr_processing.Success {
 				// Replace the PGCR (delete old, store new)
-				_, committed, err := instance_storage.ReplacePGCR(instance, pgcr)
+				_, committed, err := instance_storage.ReplacePGCR(context.Background(), instance, pgcr)
 				if err != nil {
 					attempt := errors + 1
 					if attempt > maxRetries {

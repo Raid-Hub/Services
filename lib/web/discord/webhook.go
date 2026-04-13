@@ -1,21 +1,20 @@
 package discord
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
-)
+// FlagIsComponentsV2 enables Discord Components V2 (Text Display, Container, etc.); embeds/content must not be used.
+// See https://discord.com/developers/docs/resources/message#message-object-message-flags
+const FlagIsComponentsV2 = 1 << 15 // 32768
 
 type Webhook struct {
-	Username  *string `json:"username"`
-	AvatarURL *string `json:"avatar_url"`
-	Content   *string `json:"content"`
-	Embeds    []Embed `json:"embeds"`
+	Username   *string            `json:"username,omitempty"`
+	AvatarURL  *string            `json:"avatar_url,omitempty"`
+	Content    *string            `json:"content,omitempty"`
+	Embeds     []Embed            `json:"embeds,omitempty"`
+	Flags      *int               `json:"flags,omitempty"`
+	Components []MessageComponent `json:"components,omitempty"`
 }
 
 type Embed struct {
-	Author      Author     `json:"author"`
+	Author      *Author    `json:"author,omitempty"`
 	Title       string     `json:"title"`
 	URL         *string    `json:"url"`
 	Description *string    `json:"description"`
@@ -55,33 +54,4 @@ type Footer struct {
 var CommonFooter = Footer{
 	Text:    "RaidHub Alerts",
 	IconURL: "https://raidhub.io/_next/image?url=%2Flogo.png&w=48&q=100",
-}
-
-func SendWebhook(url string, webhook *Webhook) error {
-	// Convert payload to JSON
-	jsonPayload, err := json.Marshal(&webhook)
-	if err != nil {
-		return err
-	}
-
-	// Send the JSON payload to the Discord webhook
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent {
-		// read the json response body for more details
-		decoder := json.NewDecoder(resp.Body)
-		var errorResponse map[string]any
-		if err := decoder.Decode(&errorResponse); err != nil {
-			return fmt.Errorf("error sending discord webhook: error decoding error response %d: %s", resp.StatusCode, err)
-		}
-
-		return fmt.Errorf("error sending discord webhook: %s (status code: %d)", errorResponse, resp.StatusCode)
-	}
-
-	return nil
 }

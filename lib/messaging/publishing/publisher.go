@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"raidhub/lib/messaging/rabbit"
 	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/utils/network"
@@ -80,6 +81,73 @@ func PublishJSONMessage(ctx context.Context, queueName string, body any) error {
 			"x-retry-count": int32(0),
 		},
 	})
+}
+
+// PublishJSONMessageBatchTx marshals each payload and publishes in one AMQP transaction so either all
+// messages are enqueued or none (e.g. subscription match fan-out to subscription_delivery).
+func PublishJSONMessageBatchTx[T any](ctx context.Context, queueName string, payloads []T) error {
+	if len(payloads) == 0 {
+		return nil
+	}
+	bodies := make([][]byte, 0, len(payloads))
+	for _, p := range payloads {
+		b, err := json.Marshal(p)
+		if err != nil {
+			global_metrics.PublishingOperations.WithLabelValues(queueName, ERROR).Inc()
+			logger.Error("PUBLISH_MARSHAL_FAILED", err, map[string]any{
+				logging.QUEUE: queueName,
+			})
+			return fmt.Errorf("failed to marshal message: %w", err)
+		}
+		bodies = append(bodies, b)
+	}
+	return publishJSONBodiesBatchTx(ctx, queueName, bodies)
+}
+
+func publishJSONBodiesBatchTx(ctx context.Context, queueName string, bodies [][]byte) error {
+	err := retry.WithRetry(ctx, publishingRetryConfig, func(attempt int) error {
+		ch, err := rabbit.Conn.Channel()
+		if err != nil {
+			return err
+		}
+		defer ch.Close()
+
+		if err := ch.Tx(); err != nil {
+			return err
+		}
+		for _, jsonBody := range bodies {
+			pub := amqp.Publishing{
+				ContentType:  "application/json",
+				Body:         jsonBody,
+				DeliveryMode: amqp.Persistent,
+				Headers: amqp.Table{
+					"x-retry-count": int32(0),
+				},
+			}
+			if err := ch.PublishWithContext(ctx, "", queueName, false, false, pub); err != nil {
+				_ = ch.TxRollback()
+				return err
+			}
+		}
+		if err := ch.TxCommit(); err != nil {
+			_ = ch.TxRollback()
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		global_metrics.PublishingOperations.WithLabelValues(queueName, ERROR).Inc()
+		logger.Error("PUBLISH_BATCH_TX_FAILED", err, map[string]any{
+			logging.QUEUE: queueName,
+		})
+	} else {
+		for range bodies {
+			global_metrics.PublishingOperations.WithLabelValues(queueName, SUCCESS).Inc()
+		}
+	}
+
+	return err
 }
 
 // PublishTextMessage publishes a text message to the specified queue

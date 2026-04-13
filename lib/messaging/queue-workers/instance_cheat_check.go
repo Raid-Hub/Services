@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/cheat_detection"
@@ -23,6 +25,7 @@ func InstanceCheatCheckTopic() processing.Topic {
 		ScaleUpPercent:     0.2,
 		ScaleDownPercent:   0.1,
 		MaxRetryCount:      5,
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processInstanceCheatCheck)
 }
 

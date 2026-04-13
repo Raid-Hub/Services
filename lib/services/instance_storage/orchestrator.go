@@ -7,6 +7,7 @@ import (
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring/global_metrics"
+	"raidhub/lib/services/subscriptions"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -19,7 +20,7 @@ var logger = logging.NewLogger("INSTANCE_STORAGE_SERVICE")
 // 1. pgcr domain (raw JSON storage)
 // 2. instance domain (structured data storage)
 // 3. ClickHouse publishing (external, non-transactional)
-func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
+func StorePGCR(ctx context.Context, inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
 	startTime := time.Now()
 
 	// Start transaction for atomic storage of pgcr + instance data
@@ -93,15 +94,19 @@ func StorePGCR(inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*t
 	if instanceIsNew && sideEffects != nil {
 		if sideEffects.CharacterFillRequests != nil {
 			for _, characterFillRequest := range sideEffects.CharacterFillRequests {
-				publishing.PublishJSONMessage(context.TODO(), routing.CharacterFill, characterFillRequest)
+				publishing.PublishJSONMessage(ctx, routing.CharacterFill, characterFillRequest)
 			}
 		}
 		if sideEffects.PlayerCrawlRequests != nil {
 			for _, playerCrawlRequest := range sideEffects.PlayerCrawlRequests {
-				publishing.PublishJSONMessage(context.TODO(), routing.PlayerCrawl, playerCrawlRequest)
+				publishing.PublishJSONMessage(ctx, routing.PlayerCrawl, playerCrawlRequest)
 			}
 		}
-		publishing.PublishInt64Message(context.TODO(), routing.InstanceCheatCheck, inst.InstanceId)
+		publishing.PublishInt64Message(ctx, routing.InstanceCheatCheck, inst.InstanceId)
+	}
+	if instanceIsNew {
+		// Subscription pipeline entry (stage 1 queue): see lib/services/subscriptions/README.md
+		publishing.PublishJSONMessage(ctx, routing.InstanceParticipantRefresh, subscriptions.NewSubscriptionEvent(inst))
 	}
 
 	// Track overall storage duration and success

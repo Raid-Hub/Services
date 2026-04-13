@@ -1,6 +1,8 @@
 package queueworkers
 
 import (
+	"time"
+
 	"raidhub/lib/messaging/processing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/clan"
@@ -24,6 +26,7 @@ func ClanCrawlTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		BungieSystemDeps:   []string{"Groups", "Clans", "Destiny2"},
 		MaxRetryCount:      5,
+		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
 	}, processClanCrawl)
 }
 

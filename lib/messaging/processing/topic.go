@@ -69,6 +69,16 @@ func ParseJSON[T any](worker WorkerInterface, data []byte) (T, error) {
 	return v, nil
 }
 
+// ParseJSONUnretryable is like ParseJSON but wraps unmarshal failures in NewUnretryableError so poison
+// messages are not retried until max_retries (subscription pipeline workers).
+func ParseJSONUnretryable[T any](worker WorkerInterface, data []byte) (T, error) {
+	v, err := ParseJSON[T](worker, data)
+	if err != nil {
+		return v, NewUnretryableError(err)
+	}
+	return v, nil
+}
+
 // ParseText parses text from message body and logs errors automatically
 func ParseText(worker WorkerInterface, data []byte) (string, error) {
 	text := string(data)
@@ -118,7 +128,33 @@ type TopicConfig struct {
 	ConsecutiveChecksDown int           // Consecutive checks below threshold before scaling down
 	BungieSystemDeps      []string      // Which API systems must be available for the topic to scale
 	MaxRetryCount         int           // Maximum number of retries before sending to DLQ (0 = unlimited)
-	RetryDelay            time.Duration // Delay between retries
+	// RetryDelay returns how long to wait before the next delivery attempt after a failure.
+	// newRetryCount is 1-based (the value written to x-retry-count when republishing).
+	// Use ExponentialRetryDelay for the standard doubling backoff from a base duration.
+	RetryDelay func(newRetryCount int) time.Duration
+}
+
+const (
+	retryBackoffMultiplier = 2
+	maxRetryBackoff        = 30 * time.Minute
+)
+
+// ExponentialRetryDelay returns a retry delay function: the first attempt waits at least base (floored to 1s),
+// then the delay doubles for each subsequent attempt (newRetryCount 2, 3, …), capped at 30 minutes.
+// This matches the historical Hermes behavior for topics that only set a base RetryDelay duration.
+func ExponentialRetryDelay(base time.Duration) func(newRetryCount int) time.Duration {
+	return func(newRetryCount int) time.Duration {
+		delayMs := max(base.Milliseconds(), int64(1000))
+		maxMs := maxRetryBackoff.Milliseconds()
+		for i := 1; i < newRetryCount; i++ {
+			delayMs *= retryBackoffMultiplier
+			if delayMs > maxMs {
+				delayMs = maxMs
+				break
+			}
+		}
+		return time.Duration(delayMs) * time.Millisecond
+	}
 }
 
 // NewTopic creates a new topic with the given config and processor
