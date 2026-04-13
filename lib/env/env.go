@@ -53,7 +53,8 @@ var (
 	NemesisWebhookURL    string
 	GMReportWebhookURL   string
 	GMReportWebhookAuth  string
-	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs (required).
+	// SubscriptionHTTPWebhookSecret is sent as X-RaidHub-Key on http_callback POSTs.
+	// Optional at process start; subscription delivery enforces it when posting http_callback.
 	SubscriptionHTTPWebhookSecret string
 	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. Authorization: Bearer uses the same value as SUBSCRIPTION_HTTP_WEBHOOK_SECRET. discord_webhook deliveries never use the relay (direct to Discord).
 	SubscriptionWebhookRelayURL string
@@ -126,9 +127,9 @@ func init() {
 	ClickHouseDB = getEnvWithDefault("CLICKHOUSE_DB", "default")
 	ClickHousePort = requireEnv("CLICKHOUSE_PORT")
 
-	// Redis
+	// Redis (optional port default; only binaries that open Redis need a reachable server)
 	RedisHost = getHostEnv("REDIS_HOST")
-	RedisPort = requireEnv("REDIS_PORT")
+	RedisPort = getEnvWithDefault("REDIS_PORT", "6379")
 	RedisPassword = getEnv("REDIS_PASSWORD")
 
 	// Zeus
@@ -146,7 +147,7 @@ func init() {
 	CheatCheckWebhookURL = getEnv("CHEAT_CHECK_WEBHOOK_URL")
 	AlertsRoleID = getEnv("DISCORD_ALERTS_ROLE_ID")
 
-	SubscriptionHTTPWebhookSecret = requireEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
+	SubscriptionHTTPWebhookSecret = getEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
 	SubscriptionWebhookRelayURL = getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL")
 
 	// Config

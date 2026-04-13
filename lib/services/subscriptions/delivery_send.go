@@ -105,6 +105,10 @@ func postSubscriptionInstanceJSON(ctx context.Context, partnerURL string, inst a
 		return err
 	}
 	partnerKey := strings.TrimSpace(env.SubscriptionHTTPWebhookSecret)
+	if partnerKey == "" {
+		return processing.NewUnretryableError(fmt.Errorf(
+			"SUBSCRIPTION_HTTP_WEBHOOK_SECRET is not set (required for http_callback X-RaidHub-Key)"))
+	}
 
 	// Relay is off unless SUBSCRIPTION_WEBHOOK_RELAY_URL is set; then we POST to the Worker and pass
 	// the real partner URL in X-RaidHub-Destination. Empty/unset env means direct POST to partnerURL only.

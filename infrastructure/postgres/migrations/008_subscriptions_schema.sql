@@ -14,6 +14,10 @@ CREATE TABLE "subscriptions"."destination" (
     CONSTRAINT "destination_channel_type_chk" CHECK ("channel_type" IN ('discord_webhook', 'http_callback'))
 );
 
+-- One row per (channel_type, webhook_url) for find-or-create and concurrent inserts.
+CREATE UNIQUE INDEX "idx_destination_channel_type_webhook_url"
+    ON "subscriptions"."destination" ("channel_type", "webhook_url");
+
 -- Match rule: watch a player membership id and/or a clan group id.
 CREATE TABLE "subscriptions"."rule" (
     "id" BIGSERIAL PRIMARY KEY,
