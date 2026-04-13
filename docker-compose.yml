@@ -134,7 +134,10 @@ services:
     stop_signal: SIGTERM
 
   redis:
-    image: redis:7-alpine
+    image: raidhub-redis
+    build:
+      context: ./infrastructure/redis
+      dockerfile: Dockerfile
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
