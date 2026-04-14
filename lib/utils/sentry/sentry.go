@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -120,15 +121,39 @@ func isInitialized() bool {
 	return sentry.CurrentHub() != nil
 }
 
+// shouldReportErrorToSentry returns false for expected shutdown/cancellation noise (no Sentry event).
+func shouldReportErrorToSentry(err error) bool {
+	return err != nil && !IsBenignCancellationOrShutdown(err)
+}
+
+// IsBenignCancellationOrShutdown reports context cancellation, retry cancel wraps, or process shutdown
+// (e.g. Hermes cancel cause "shutdown_requested"). Callers should not log these at ERROR or report to Sentry.
+func IsBenignCancellationOrShutdown(err error) bool {
+	if err == nil {
+		return false
+	}
+	var contextCancelledErr *retry.ContextCancelledError
+	if errors.As(err, &contextCancelledErr) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Hermes and other services cancel with context.WithCancelCause (e.g. fmt.Errorf("shutdown_requested")).
+	// net/http may surface the cause text without a clean errors.Is(context.Canceled) in some chains.
+	if strings.Contains(err.Error(), "shutdown_requested") {
+		return true
+	}
+	return false
+}
+
 // CaptureError captures an error to Sentry
 func CaptureError(level sentry.Level, logKey string, err error, fields map[string]any) {
 	if !isInitialized() {
 		return
 	}
 
-	// Skip sending ContextCancelledError to Sentry as it's an expected condition
-	var contextCancelledErr *retry.ContextCancelledError
-	if err != nil && errors.As(err, &contextCancelledErr) {
+	if !shouldReportErrorToSentry(err) {
 		return
 	}
 

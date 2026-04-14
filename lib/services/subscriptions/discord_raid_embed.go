@@ -25,6 +25,9 @@ const (
 	hunterEmoji  = "<:hunter:1082054321413300246>"
 	titanEmoji   = "<:titan:1082054336777035937>"
 	warlockEmoji = "<:warlock:1082054347694809192>"
+
+	// Unicode U+1F3C1 — Discord :checkered_flag: (PGCR fresh == false, checkpoint / not fresh start).
+	checkpointFlagEmoji = "\U0001F3C1"
 )
 
 func raidContainerAccent(completed bool) int {
@@ -103,6 +106,9 @@ func assembleRaidDiscordEmbed(
 	statsUnavailable bool,
 ) *discord.Webhook {
 	title := discord.RaidCompletionMainTitle(activityName, pre.Completed)
+	if pre.Fresh != nil && !*pre.Fresh {
+		title = checkpointFlagEmoji + " " + title
+	}
 
 	pgcrURL := fmt.Sprintf("https://raidhub.io/pgcr/%d", instanceId)
 

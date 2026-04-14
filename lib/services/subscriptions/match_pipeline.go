@@ -64,7 +64,7 @@ func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMa
 		return nil, err
 	}
 
-	return matchRulesToDeliveries(message.InstanceId, message.ParticipantData, rules, privacy, clansByMember)
+	return matchRulesToDeliveries(message, message.ParticipantData, rules, privacy, clansByMember)
 }
 
 func enrichDeliveryRaidContext(d *messages.SubscriptionDeliveryMessage, msg messages.SubscriptionMatchMessage) {
@@ -76,6 +76,7 @@ func enrichDeliveryRaidContext(d *messages.SubscriptionDeliveryMessage, msg mess
 		DateCompleted:         msg.DateCompleted,
 		DurationSeconds:       msg.DurationSeconds,
 		Completed:             msg.Completed,
+		Fresh:                 msg.Fresh,
 		PlayerCount:           msg.PlayerCount,
 		FireteamMembershipIds: fireteamMembershipIDs(msg.ParticipantData),
 	}

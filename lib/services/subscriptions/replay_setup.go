@@ -164,6 +164,7 @@ func DestinationExists(ctx context.Context, destinationID int64) (bool, error) {
 
 // EnsurePlayerRulesForReplay inserts player-scope rules so each membership_id receives deliveries for this destination when they appear in an instance.
 // Idempotent: skips rows that already exist (active player rule for that destination + membership_id).
+// Does not modify require_* on existing rows; use UpsertPlayerRulesWithInstanceCriteria from onboarding tools to set filters.
 func EnsurePlayerRulesForReplay(ctx context.Context, destinationID int64, membershipIDs []int64) (inserted int, err error) {
 	for _, mid := range membershipIDs {
 		res, err := postgres.DB.ExecContext(ctx, `

@@ -2,6 +2,7 @@ package env
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -58,6 +59,8 @@ var (
 	SubscriptionHTTPWebhookSecret string
 	// SubscriptionWebhookRelayURL when set: http_callback POSTs go here instead of the partner URL (e.g. https://outbound-webhooks.raidhub.io/); partner URL is sent as X-RaidHub-Destination. Authorization: Bearer uses the same value as SUBSCRIPTION_HTTP_WEBHOOK_SECRET. discord_webhook deliveries never use the relay (direct to Discord).
 	SubscriptionWebhookRelayURL string
+	// SubscriptionDestDisableAfterConsecutiveFailures sets subscriptions.destination is_active false after this many recorded failures (default 10). See RecordDestinationDeliveryOutcome.
+	SubscriptionDestDisableAfterConsecutiveFailures int
 
 	// Other
 	IsContestWeekend      bool
@@ -149,6 +152,7 @@ func init() {
 
 	SubscriptionHTTPWebhookSecret = getEnv("SUBSCRIPTION_HTTP_WEBHOOK_SECRET")
 	SubscriptionWebhookRelayURL = getEnv("SUBSCRIPTION_WEBHOOK_RELAY_URL")
+	SubscriptionDestDisableAfterConsecutiveFailures = getEnvIntPositiveWithDefault("SUBSCRIPTION_DEST_DISABLE_AFTER_CONSECUTIVE_FAILURES", 10)
 
 	// Config
 	IsContestWeekend = getEnv("IS_CONTEST_WEEKEND") == "true"
@@ -197,6 +201,18 @@ func getEnvWithDefault(key string, defaultValue string) string {
 		return val
 	}
 	return defaultValue
+}
+
+func getEnvIntPositiveWithDefault(key string, defaultValue int) int {
+	s := getEnv(key)
+	if s == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 1 {
+		return defaultValue
+	}
+	return n
 }
 
 func getHostEnv(key string) string {

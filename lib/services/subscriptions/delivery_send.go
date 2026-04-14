@@ -14,6 +14,7 @@ import (
 	"raidhub/lib/env"
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
+	"raidhub/lib/monitoring/global_metrics"
 	"raidhub/lib/services/player"
 	"raidhub/lib/web/discord"
 )
@@ -29,9 +30,18 @@ const HTTPDestinationHeader = "X-RaidHub-Destination"
 // SendSubscriptionDelivery POSTs the destination URL. Discord uses Components V2 webhook payloads
 // (always direct to Discord — never SUBSCRIPTION_WEBHOOK_RELAY_URL). http_callback sends
 // application/json dto.Instance (same shape as api.raidhub.io/instance/:id); relay applies only there.
-func SendSubscriptionDelivery(ctx context.Context, message messages.SubscriptionDeliveryMessage) error {
+func SendSubscriptionDelivery(ctx context.Context, message messages.SubscriptionDeliveryMessage) (err error) {
+	metricChannelType := strings.TrimSpace(string(message.ChannelType))
+	if metricChannelType == "" {
+		metricChannelType = "unknown"
+	}
+	defer func() {
+		recordSubscriptionDeliverySend(metricChannelType, err == nil)
+	}()
+
 	webhookURL := strings.TrimSpace(message.WebhookURL)
 	if webhookURL == "" {
+		metricChannelType = "unknown"
 		return processing.NewUnretryableError(fmt.Errorf(
 			"subscription delivery: missing webhookUrl (expected subscription_match output)"))
 	}
@@ -43,11 +53,11 @@ func SendSubscriptionDelivery(ctx context.Context, message messages.Subscription
 				"subscription delivery: discord_webhook missing embedPreload"))
 		}
 		wh := buildRaidWebhookFromEmbedPreload(message)
-		if err := discord.SendWebhook(ctx, webhookURL, wh); err != nil {
-			if discord.IsPermanentDeliveryError(err) {
-				return processing.NewUnretryableError(err)
+		if sendErr := discord.SendWebhook(ctx, webhookURL, wh); sendErr != nil {
+			if discord.IsPermanentDeliveryError(sendErr) {
+				return processing.NewUnretryableError(sendErr)
 			}
-			return err
+			return sendErr
 		}
 		return nil
 	case messages.DeliveryChannelHttpCallback:
@@ -59,6 +69,14 @@ func SendSubscriptionDelivery(ctx context.Context, message messages.Subscription
 	default:
 		return processing.NewUnretryableError(fmt.Errorf("unsupported channel type %q", message.ChannelType))
 	}
+}
+
+func recordSubscriptionDeliverySend(channelType string, success bool) {
+	status := "error"
+	if success {
+		status = "success"
+	}
+	global_metrics.SubscriptionDeliverySends.WithLabelValues(channelType, status).Inc()
 }
 
 func httpCallbackPermanentStatus(code int) bool {

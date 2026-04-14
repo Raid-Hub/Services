@@ -51,12 +51,14 @@ type SubscriptionParticipantMessage struct {
 
 // SubscriptionEventMessage is the stage 1 queue payload (routing.InstanceParticipantRefresh). See lib/services/subscriptions/README.md.
 type SubscriptionEventMessage struct {
-	InstanceId       int64                            `json:"instanceId,string"`
-	ActivityHash     uint32                           `json:"activityHash"`
-	PlayerCount      int                              `json:"playerCount"`
-	DateCompleted    time.Time                        `json:"dateCompleted"`
-	DurationSeconds  int                              `json:"durationSeconds"`
-	Completed        bool                             `json:"completed"`
+	InstanceId      int64     `json:"instanceId,string"`
+	ActivityHash    uint32    `json:"activityHash"`
+	PlayerCount     int       `json:"playerCount"`
+	DateCompleted   time.Time `json:"dateCompleted"`
+	DurationSeconds int       `json:"durationSeconds"`
+	Completed       bool      `json:"completed"`
+	// Fresh is from PGCR (ActivityWasStartedFromBeginning / phase index). False means checkpoint / not fresh.
+	Fresh            *bool                            `json:"fresh,omitempty"`
 	ParticipantCount int                              `json:"participantCount"`
 	Participants     []SubscriptionParticipantMessage `json:"participants"`
 }
@@ -69,6 +71,7 @@ type SubscriptionMatchMessage struct {
 	DateCompleted   time.Time           `json:"dateCompleted"`
 	DurationSeconds int                 `json:"durationSeconds"`
 	Completed       bool                `json:"completed"`
+	Fresh           *bool               `json:"fresh,omitempty"`
 	ParticipantData []ParticipantResult `json:"participantData"`
 }
 
@@ -95,6 +98,7 @@ type DiscordEmbedPreload struct {
 	DateCompleted         time.Time `json:"dateCompleted,omitempty"`
 	DurationSeconds       int       `json:"durationSeconds,omitempty"`
 	Completed             bool      `json:"completed,omitempty"`
+	Fresh                 *bool     `json:"fresh,omitempty"`
 	PlayerCount           int       `json:"playerCount,omitempty"`
 	FireteamMembershipIds []int64   `json:"fireteamMembershipIds,omitempty"`
 

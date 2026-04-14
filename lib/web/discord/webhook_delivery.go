@@ -56,24 +56,94 @@ func truncateWebhookErrBody(body []byte, max int) string {
 	return s[:max] + "…"
 }
 
+// discordWebhookExecuteQuery sets Execute Webhook query params per Discord API docs:
+//   - wait=true: wait for server confirmation so failures return an error (default wait=false can succeed even if the message is not saved).
+//   - with_components=true: required for components / IS_COMPONENTS_V2 on non-application-owned webhooks.
+//
+// https://discord.com/developers/docs/resources/webhook#execute-webhook
+func discordWebhookExecuteURL(base string, withComponents bool) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("parse webhook url: %w", err)
+	}
+	q := u.Query()
+	q.Set("wait", "true")
+	if withComponents {
+		q.Set("with_components", "true")
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// discordAPIErrorBody matches common Discord REST JSON error shapes (reference#error-messages, rate-limits#exceeding-a-rate-limit).
+type discordAPIErrorBody struct {
+	Code       int     `json:"code"`
+	Message    string  `json:"message"`
+	RetryAfter float64 `json:"retry_after"`
+	Global     bool    `json:"global"`
+}
+
+func formatDiscordWebhookError(status int, body []byte, retryAfterHeader string) string {
+	const max = 768
+	var d discordAPIErrorBody
+	if len(body) > 0 && json.Unmarshal(body, &d) == nil && strings.TrimSpace(d.Message) != "" {
+		var b strings.Builder
+		b.WriteString(d.Message)
+		if d.Code != 0 {
+			fmt.Fprintf(&b, " (code=%d)", d.Code)
+		}
+		if status == http.StatusTooManyRequests {
+			if d.RetryAfter > 0 {
+				fmt.Fprintf(&b, "; retry_after=%gs", d.RetryAfter)
+			}
+			if d.Global {
+				b.WriteString("; global=true")
+			}
+			if strings.TrimSpace(retryAfterHeader) != "" {
+				fmt.Fprintf(&b, "; Retry-After=%s", strings.TrimSpace(retryAfterHeader))
+			}
+		}
+		return truncateWebhookErrBody([]byte(b.String()), max)
+	}
+	if strings.TrimSpace(retryAfterHeader) != "" && status == http.StatusTooManyRequests {
+		return truncateWebhookErrBody([]byte(fmt.Sprintf("HTTP %d; Retry-After=%s", status, strings.TrimSpace(retryAfterHeader))), max)
+	}
+	out := truncateWebhookErrBody(body, max)
+	if out == "" {
+		return fmt.Sprintf("empty response body (HTTP %d)", status)
+	}
+	return out
+}
+
+func applyDefaultWebhookIdentity(w *Webhook) {
+	if w.Username == nil || strings.TrimSpace(*w.Username) == "" {
+		u := DefaultWebhookUsername
+		w.Username = &u
+	}
+	if w.AvatarURL == nil || strings.TrimSpace(*w.AvatarURL) == "" {
+		a := CommonFooter.IconURL
+		w.AvatarURL = &a
+	}
+}
+
 // SendWebhook POSTs a webhook payload. Uses ctx for cancellation; honors a 45s client timeout.
+//
+// Query params are set per Execute Webhook (wait, with_components); see discordWebhookExecuteURL.
+// When username and avatar_url are unset (or blank), DefaultWebhookUsername and CommonFooter.IconURL are applied.
 func SendWebhook(ctx context.Context, webhookURL string, webhook *Webhook) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	execURL := webhookURL
-	if len(webhook.Components) > 0 || (webhook.Flags != nil && (*webhook.Flags&FlagIsComponentsV2) != 0) {
-		u, err := url.Parse(webhookURL)
-		if err != nil {
-			return fmt.Errorf("parse webhook url: %w", err)
-		}
-		q := u.Query()
-		q.Set("with_components", "true")
-		u.RawQuery = q.Encode()
-		execURL = u.String()
+	payload := *webhook
+	applyDefaultWebhookIdentity(&payload)
+
+	withComponents := len(payload.Components) > 0 || (payload.Flags != nil && (*payload.Flags&FlagIsComponentsV2) != 0)
+	execURL, err := discordWebhookExecuteURL(webhookURL, withComponents)
+	if err != nil {
+		return err
 	}
 
-	jsonPayload, err := json.Marshal(webhook)
+	jsonPayload, err := json.Marshal(&payload)
 	if err != nil {
 		return err
 	}
@@ -95,18 +165,15 @@ func SendWebhook(ctx context.Context, webhookURL string, webhook *Webhook) error
 		return fmt.Errorf("read discord webhook response: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
+	// With wait=true, Discord returns 200 + message body on success; still treat any 2xx as success.
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
 
-	detail := truncateWebhookErrBody(body, 512)
+	detail := formatDiscordWebhookError(resp.StatusCode, body, resp.Header.Get("Retry-After"))
 	if discordPermanentHTTPStatus(resp.StatusCode) {
 		return &PermanentDeliveryError{Status: resp.StatusCode, Detail: detail}
 	}
 
-	var errorResponse map[string]any
-	if err := json.Unmarshal(body, &errorResponse); err != nil {
-		return fmt.Errorf("error sending discord webhook: status %d: %s", resp.StatusCode, detail)
-	}
-	return fmt.Errorf("error sending discord webhook: %s (status code: %d)", errorResponse, resp.StatusCode)
+	return fmt.Errorf("discord webhook: status %d: %s", resp.StatusCode, detail)
 }

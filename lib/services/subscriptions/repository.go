@@ -14,12 +14,14 @@ import (
 )
 
 type subscriptionRule struct {
-	ID            int64
-	DestinationID int64
-	Scope         string
-	MembershipID  sql.NullInt64
-	GroupID       sql.NullInt64
-	ChannelType   string
+	ID               int64
+	DestinationID    int64
+	Scope            string
+	MembershipID     sql.NullInt64
+	GroupID          sql.NullInt64
+	ChannelType      string
+	RequireFresh     bool
+	RequireCompleted bool
 }
 
 // loadSubscriptionRulesForMatch loads only rules that could apply to this instance:
@@ -31,7 +33,7 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	}
 	rows, err := postgres.DB.QueryContext(ctx, `
 		SELECT r.id, r.destination_id, r.scope, r.membership_id, r.group_id,
-		       d.channel_type
+		       d.channel_type, r.require_fresh, r.require_completed
 		FROM subscriptions.rule r
 		INNER JOIN subscriptions.destination d ON d.id = r.destination_id AND d.is_active
 		WHERE r.is_active
@@ -51,12 +53,25 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	for rows.Next() {
 		var r subscriptionRule
 		if err := rows.Scan(&r.ID, &r.DestinationID, &r.Scope, &r.MembershipID, &r.GroupID,
-			&r.ChannelType); err != nil {
+			&r.ChannelType, &r.RequireFresh, &r.RequireCompleted); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ruleMatchesInstanceCriteria enforces subscriptions.rule require_* flags (AND semantics).
+func ruleMatchesInstanceCriteria(msg messages.SubscriptionMatchMessage, rule subscriptionRule) bool {
+	if rule.RequireCompleted && !msg.Completed {
+		return false
+	}
+	if rule.RequireFresh {
+		if msg.Fresh == nil || !*msg.Fresh {
+			return false
+		}
+	}
+	return true
 }
 
 // uniqueClanGroupIDs returns distinct group ids among the given participants' clan memberships.
@@ -108,12 +123,13 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 }
 
 func matchRulesToDeliveries(
-	instanceID int64,
+	msg messages.SubscriptionMatchMessage,
 	participants []messages.ParticipantResult,
 	rules []subscriptionRule,
 	privacy map[int64]bool,
 	clansByMember map[int64][]int64,
 ) ([]messages.SubscriptionDeliveryMessage, error) {
+	instanceID := msg.InstanceId
 	eligible := make([]messages.ParticipantResult, 0, len(participants))
 	for _, p := range participants {
 		if p.Status == messages.ParticipantPlayerUnresolved {
@@ -156,6 +172,9 @@ func matchRulesToDeliveries(
 	byDest := make(map[int64]*agg)
 
 	for _, rule := range rules {
+		if !ruleMatchesInstanceCriteria(msg, rule) {
+			continue
+		}
 		switch rule.Scope {
 		case "player":
 			if !rule.MembershipID.Valid {

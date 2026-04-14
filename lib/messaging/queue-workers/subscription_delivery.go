@@ -49,6 +49,9 @@ func SubscriptionDeliveryTopic() processing.Topic {
 	}, processSubscriptionDelivery)
 }
 
+// subscriptionDeliveryMaxRetries must match SubscriptionDeliveryTopic MaxRetryCount (final failure recording).
+const subscriptionDeliveryMaxRetries = 17
+
 func processSubscriptionDelivery(worker processing.WorkerInterface, message amqp.Delivery) error {
 	request, err := processing.ParseJSONUnretryable[messages.SubscriptionDeliveryMessage](worker, message.Body)
 	if err != nil {
@@ -66,7 +69,10 @@ func processSubscriptionDelivery(worker processing.WorkerInterface, message amqp
 	}
 	worker.Info("PROCESSING_SUBSCRIPTION_DELIVERY", infoFields)
 
-	if err := subscriptions.SendSubscriptionDelivery(worker.Context(), request); err != nil {
+	retryCount := subscriptionDeliveryRetryCount(message.Headers)
+	err = subscriptions.SendSubscriptionDelivery(worker.Context(), request)
+	subscriptions.RecordDestinationDeliveryOutcome(worker.Context(), request.DestinationChannelId, err, retryCount, subscriptionDeliveryMaxRetries)
+	if err != nil {
 		worker.Warn("SUBSCRIPTION_DELIVERY_FAILED", err, map[string]any{
 			logging.INSTANCE_ID: request.InstanceId,
 			"channel_id":        request.DestinationChannelId,
@@ -77,6 +83,42 @@ func processSubscriptionDelivery(worker processing.WorkerInterface, message amqp
 	}
 
 	return nil
+}
+
+// subscriptionDeliveryRetryCount matches Hermes worker getRetryCount (x-retry-count, 0 = first try).
+func subscriptionDeliveryRetryCount(headers amqp.Table) int {
+	if headers == nil {
+		return 0
+	}
+	v, ok := headers["x-retry-count"]
+	if !ok {
+		return 0
+	}
+	var n int64
+	switch x := v.(type) {
+	case int32:
+		n = int64(x)
+	case int64:
+		n = x
+	case int:
+		n = int64(x)
+	case uint8:
+		n = int64(x)
+	case uint16:
+		n = int64(x)
+	case uint32:
+		n = int64(x)
+	case uint64:
+		n = int64(x)
+	case float64:
+		n = int64(x)
+	default:
+		return 0
+	}
+	if n < 0 {
+		return 0
+	}
+	return int(n)
 }
 
 // deliveryAttemptNumber maps broker x-retry-count (0 = first try) to a 1-based attempt for logs.

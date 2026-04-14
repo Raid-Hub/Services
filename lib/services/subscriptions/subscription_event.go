@@ -29,6 +29,7 @@ func NewSubscriptionEvent(inst *dto.Instance) messages.SubscriptionEventMessage 
 		DateCompleted:    inst.DateCompleted,
 		DurationSeconds:  inst.DurationSeconds,
 		Completed:        inst.Completed,
+		Fresh:            inst.Fresh,
 		ParticipantCount: len(participants),
 		Participants:     participants,
 	}
@@ -84,6 +85,7 @@ func PrepareParticipants(ctx context.Context, event messages.SubscriptionEventMe
 		DateCompleted:   event.DateCompleted,
 		DurationSeconds: event.DurationSeconds,
 		Completed:       event.Completed,
+		Fresh:           event.Fresh,
 		ParticipantData: participantResults,
 	}, nil
 }

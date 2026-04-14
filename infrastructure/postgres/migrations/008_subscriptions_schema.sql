@@ -1,5 +1,5 @@
 -- RaidHub Services - Subscriptions (alert destinations and match rules).
--- Destinations store routing only (channel_type, webhook_url); no display/embed columns.
+-- Destinations: routing (channel_type, webhook_url) plus delivery health / deactivation fields.
 
 CREATE SCHEMA IF NOT EXISTS "subscriptions";
 
@@ -9,6 +9,12 @@ CREATE TABLE "subscriptions"."destination" (
     "channel_type" TEXT NOT NULL,
     "webhook_url" TEXT NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "consecutive_delivery_failures" INTEGER NOT NULL DEFAULT 0,
+    "last_delivery_success_at" TIMESTAMPTZ(3),
+    "last_delivery_failure_at" TIMESTAMPTZ(3),
+    "last_delivery_error" TEXT,
+    "deactivated_at" TIMESTAMPTZ(3),
+    "deactivation_reason" TEXT,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "destination_channel_type_chk" CHECK ("channel_type" IN ('discord_webhook', 'http_callback'))
@@ -26,6 +32,9 @@ CREATE TABLE "subscriptions"."rule" (
     "membership_id" BIGINT,
     "group_id" BIGINT,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
+    -- Instance gates (AND when true; all false = no extra filter beyond scope).
+    "require_fresh" BOOLEAN NOT NULL DEFAULT false,
+    "require_completed" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "rule_destination_fkey" FOREIGN KEY ("destination_id") REFERENCES "subscriptions"."destination" ("id") ON DELETE CASCADE,
     CONSTRAINT "rule_scope_chk" CHECK ("scope" IN ('player', 'clan')),

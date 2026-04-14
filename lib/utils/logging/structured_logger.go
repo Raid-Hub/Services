@@ -150,6 +150,12 @@ func (l *StructuredLogger) Error(key string, err error, fields map[string]any) {
 	} else {
 		fields["error"] = "<nil>"
 	}
+
+	// Shutdown and context cancellation are expected; omit ERROR logs and Sentry.
+	if err != nil && sentry.IsBenignCancellationOrShutdown(err) {
+		return
+	}
+
 	if ShouldLog(Error) {
 		l.log(ERROR, key, fields)
 	}

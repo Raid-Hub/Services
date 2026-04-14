@@ -52,6 +52,17 @@ var PublishingOperations = prometheus.NewCounterVec(
 	[]string{"queue_name", StatusDimension}, // status: "success", "error"
 )
 
+// SubscriptionDeliverySends counts outbound subscription deliveries (Discord webhook POST or http_callback JSON).
+// Exported on Hermes HERMES_METRICS_PORT /metrics (incremented when the HTTP send finishes, not when the queue starts handling the message).
+// Labels: channel_type matches subscriptions.destination (e.g. discord_webhook, http_callback); status is success or error.
+var SubscriptionDeliverySends = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "subscription_delivery_sends_total",
+		Help: "Outbound subscription delivery attempts by channel type and result (Hermes metrics endpoint)",
+	},
+	[]string{"channel_type", StatusDimension},
+)
+
 // RegisterGlobalMetrics registers all metrics that can be exported by any app
 func RegisterGlobalMetrics() {
 	prometheus.MustRegister(GetPostGameCarnageReportRequest)
@@ -59,4 +70,5 @@ func RegisterGlobalMetrics() {
 	prometheus.MustRegister(InstanceStorageOperations)
 	prometheus.MustRegister(InstanceStorageOperationDuration)
 	prometheus.MustRegister(PublishingOperations)
+	prometheus.MustRegister(SubscriptionDeliverySends)
 }

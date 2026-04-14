@@ -55,3 +55,6 @@ var CommonFooter = Footer{
 	Text:    "RaidHub Alerts",
 	IconURL: "https://raidhub.io/_next/image?url=%2Flogo.png&w=48&q=100",
 }
+
+// DefaultWebhookUsername is the Execute Webhook display name when username is omitted or empty.
+const DefaultWebhookUsername = "RaidHub"

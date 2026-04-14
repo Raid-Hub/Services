@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	numWorkers       = flag.Int("workers", 25, "number of workers to spawn at the start")
+	numWorkers       = flag.Int("workers", 10, "number of workers to spawn at the start")
 	buffer           = flag.Int64("buffer", -1, "number of ids to start behind last added (-1 means auto: 10000 in prod, 0 in dev)")
 	targetInstanceId = flag.Int64("target", -1, "specific instance id to start at (optional)")
 	maxWorkersFlag   = flag.Int("max-workers", 0, "maximum number of workers (0 uses default constant, or 8 in dev mode)")
@@ -16,7 +16,7 @@ var (
 )
 
 const (
-	minWorkers = 5
+	minWorkers = 3
 	maxWorkers = 250
 
 	retryDelayTime = 5500
