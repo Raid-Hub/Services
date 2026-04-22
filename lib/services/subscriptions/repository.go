@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"raidhub/lib/database/postgres"
 	"raidhub/lib/messaging/messages"
@@ -13,15 +15,38 @@ import (
 	"github.com/lib/pq"
 )
 
+// destinationCacheTTL bounds staleness for webhook URLs / channel type (admin updates).
+const destinationCacheTTL = 3 * time.Minute
+
+type destinationCacheEntry struct {
+	row destinationRow
+	exp time.Time
+}
+
+var (
+	destinationCacheMu sync.Mutex
+	destinationCache   = make(map[int64]destinationCacheEntry) // id -> row
+
+	activityRaidMetaMu    sync.RWMutex
+	activityRaidMetaCache = make(map[uint32]activityRaidMetaCacheEntry)
+)
+
+// activityRaidMetaCacheEntry caches definition-backed display metadata per activity hash (same process lifetime as raid_bitmap).
+type activityRaidMetaCacheEntry struct {
+	meta   *ActivityRaidMeta
+	noRows bool
+}
+
 type subscriptionRule struct {
-	ID               int64
-	DestinationID    int64
-	Scope            string
-	MembershipID     sql.NullInt64
-	GroupID          sql.NullInt64
-	ChannelType      string
-	RequireFresh     bool
-	RequireCompleted bool
+	ID                 int64
+	DestinationID      int64
+	Scope              string
+	MembershipID       sql.NullInt64
+	GroupID            sql.NullInt64
+	ChannelType        string
+	RequireFresh       bool
+	RequireCompleted   bool
+	ActivityRaidBitmap uint64
 }
 
 // loadSubscriptionRulesForMatch loads only rules that could apply to this instance:
@@ -33,7 +58,7 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	}
 	rows, err := postgres.DB.QueryContext(ctx, `
 		SELECT r.id, r.destination_id, r.scope, r.membership_id, r.group_id,
-		       d.channel_type, r.require_fresh, r.require_completed
+		       d.channel_type, r.require_fresh, r.require_completed, r.activity_raid_bitmap
 		FROM subscriptions.rule r
 		INNER JOIN subscriptions.destination d ON d.id = r.destination_id AND d.is_active
 		WHERE r.is_active
@@ -53,7 +78,7 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	for rows.Next() {
 		var r subscriptionRule
 		if err := rows.Scan(&r.ID, &r.DestinationID, &r.Scope, &r.MembershipID, &r.GroupID,
-			&r.ChannelType, &r.RequireFresh, &r.RequireCompleted); err != nil {
+			&r.ChannelType, &r.RequireFresh, &r.RequireCompleted, &r.ActivityRaidBitmap); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -61,17 +86,17 @@ func loadSubscriptionRulesForMatch(ctx context.Context, playerMembershipIDs, cla
 	return out, rows.Err()
 }
 
-// ruleMatchesInstanceCriteria enforces subscriptions.rule require_* flags (AND semantics).
-func ruleMatchesInstanceCriteria(msg messages.SubscriptionMatchMessage, rule subscriptionRule) bool {
+// ruleMatchesInstanceCriteria enforces subscriptions.rule require_* and activity_raid_bitmap (AND semantics).
+func ruleMatchesInstanceCriteria(ctx context.Context, msg messages.SubscriptionMatchMessage, rule subscriptionRule) (bool, error) {
 	if rule.RequireCompleted && !msg.Completed {
-		return false
+		return false, nil
 	}
 	if rule.RequireFresh {
 		if msg.Fresh == nil || !*msg.Fresh {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return ruleMatchesRaidBitmap(ctx, msg.ActivityHash, rule.ActivityRaidBitmap)
 }
 
 // uniqueClanGroupIDs returns distinct group ids among the given participants' clan memberships.
@@ -99,6 +124,24 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 	if len(destinationIDs) == 0 {
 		return map[int64]destinationRow{}, nil
 	}
+	now := time.Now()
+	out := make(map[int64]destinationRow, len(destinationIDs))
+	var missing []int64
+	destinationCacheMu.Lock()
+	for _, id := range destinationIDs {
+		e, ok := destinationCache[id]
+		if ok && now.Before(e.exp) {
+			out[id] = e.row
+			continue
+		}
+		missing = append(missing, id)
+	}
+	destinationCacheMu.Unlock()
+
+	if len(missing) == 0 {
+		return out, nil
+	}
+
 	rows, err := postgres.DB.QueryContext(ctx, `
 		SELECT
 			d.id,
@@ -113,14 +156,16 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 		LEFT JOIN subscriptions.discord_destination_config c ON c.destination_id = d.id
 		LEFT JOIN subscriptions.http_callback_destination_config h ON h.destination_id = d.id
 		WHERE d.id = ANY($1) AND d.is_active`,
-		pq.Array(destinationIDs),
+		pq.Array(missing),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := make(map[int64]destinationRow)
+	exp := now.Add(destinationCacheTTL)
+	destinationCacheMu.Lock()
+	defer destinationCacheMu.Unlock()
 	for rows.Next() {
 		var id int64
 		var webhookURL sql.NullString
@@ -130,11 +175,16 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 		}
 		d.WebhookURL = webhookURL.String
 		out[id] = d
+		destinationCache[id] = destinationCacheEntry{row: d, exp: exp}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func matchRulesToDeliveries(
+	ctx context.Context,
 	msg messages.SubscriptionMatchMessage,
 	participants []messages.ParticipantResult,
 	rules []subscriptionRule,
@@ -184,7 +234,11 @@ func matchRulesToDeliveries(
 	byDest := make(map[int64]*agg)
 
 	for _, rule := range rules {
-		if !ruleMatchesInstanceCriteria(msg, rule) {
+		ok, err := ruleMatchesInstanceCriteria(ctx, msg, rule)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
 		switch rule.Scope {
@@ -254,6 +308,27 @@ func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRa
 	if activityHash == 0 {
 		return nil, nil
 	}
+	activityRaidMetaMu.RLock()
+	if e, ok := activityRaidMetaCache[activityHash]; ok {
+		activityRaidMetaMu.RUnlock()
+		if e.noRows {
+			return nil, nil
+		}
+		c := *e.meta
+		return &c, nil
+	}
+	activityRaidMetaMu.RUnlock()
+
+	activityRaidMetaMu.Lock()
+	defer activityRaidMetaMu.Unlock()
+	if e, ok := activityRaidMetaCache[activityHash]; ok {
+		if e.noRows {
+			return nil, nil
+		}
+		c := *e.meta
+		return &c, nil
+	}
+
 	var meta ActivityRaidMeta
 	err := postgres.DB.QueryRowContext(ctx, `
 		SELECT ad.name, vd.name, ad.splash_path
@@ -265,10 +340,15 @@ func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRa
 	).Scan(&meta.ActivityName, &meta.VersionName, &meta.PathSegment)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			activityRaidMetaCache[activityHash] = activityRaidMetaCacheEntry{noRows: true}
 			return nil, nil
 		}
 		return nil, err
 	}
 	meta.PathSegment = strings.Trim(meta.PathSegment, "/")
-	return &meta, nil
+	stored := new(ActivityRaidMeta)
+	*stored = meta
+	activityRaidMetaCache[activityHash] = activityRaidMetaCacheEntry{meta: stored}
+	out := *stored
+	return &out, nil
 }

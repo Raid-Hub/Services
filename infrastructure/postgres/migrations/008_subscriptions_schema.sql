@@ -35,6 +35,8 @@ CREATE TABLE "subscriptions"."rule" (
     -- Instance gates (AND when true; all false = no extra filter beyond scope).
     "require_fresh" BOOLEAN NOT NULL DEFAULT false,
     "require_completed" BOOLEAN NOT NULL DEFAULT false,
+    -- Bitmask of raid activities to notify for (OR of per-raid bits, 0 means all raids).
+    "activity_raid_bitmap" BIGINT NOT NULL DEFAULT 0,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
     CONSTRAINT "rule_destination_fkey" FOREIGN KEY ("destination_id") REFERENCES "subscriptions"."destination" ("id") ON DELETE CASCADE,
     CONSTRAINT "rule_scope_chk" CHECK ("scope" IN ('player', 'clan')),

@@ -244,9 +244,12 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 	currentWorkers := tm.activeWorkers
 
 	if targetWorkers > currentWorkers {
-		// Scale up - add workers
+		// Scale up - add workers. Release mutex around startWorkerGoroutine so waitForWorkerLifecycle
+		// can acquire the lock if a worker dies during scale-up (avoids deadlock).
 		for i := currentWorkers; i < targetWorkers; i++ {
+			tm.mutex.Unlock()
 			worker, err := tm.startWorkerGoroutine(i)
+			tm.mutex.Lock()
 			if err != nil {
 				tm.Warn("WORKER_START_ERROR", err, map[string]any{
 					"worker_id": i,
@@ -255,6 +258,7 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 			}
 			tm.workers[i] = worker
 			tm.activeWorkers++
+			go tm.waitForWorkerLifecycle(worker)
 		}
 		if !isInitial {
 			tm.Info("WORKERS_SCALED_UP", map[string]any{
@@ -286,7 +290,8 @@ func (tm *TopicManager) scaleToInternal(targetWorkers int, isInitial bool) error
 	return nil
 }
 
-// startWorkerGoroutine starts a single worker goroutine and returns the Worker
+// startWorkerGoroutine opens a new RabbitMQ channel, declares queue/bind/consume, and starts Run.
+// The caller must set tm.workers[id] and then call go waitForWorkerLifecycle(worker) so recovery sees the worker in the map.
 func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 	ch, err := rabbit.Conn.Channel()
 	if err != nil {
@@ -383,10 +388,75 @@ func (tm *TopicManager) startWorkerGoroutine(workerID int) (*Worker, error) {
 		delayedExchangeName: delayedExchangeName,
 	}
 
-	// Start worker goroutine with panic recovery
+	// Start worker goroutine with panic recovery (caller registers waitForWorkerLifecycle after tm.workers[id] is set)
 	sentry.Go(worker.Run)
 
 	return worker, nil
+}
+
+// waitForWorkerLifecycle replaces a worker whose AMQP consumer channel closed unexpectedly
+// (Run exits with context still active). Intentional shutdown/autoscale/scale-down is ignored.
+func (tm *TopicManager) waitForWorkerLifecycle(w *Worker) {
+	<-w.Done()
+
+	tm.mutex.Lock()
+	if _, exists := tm.workers[w.ID]; !exists {
+		tm.mutex.Unlock()
+		return
+	}
+	// Shutdown or other cancellation: worker stays in map until WaitForWorkersToFinish.
+	if w.Context().Err() != nil || tm.Context().Err() != nil {
+		tm.mutex.Unlock()
+		return
+	}
+
+	delete(tm.workers, w.ID)
+	tm.activeWorkers--
+	tm.mutex.Unlock()
+
+	const maxAttempts = 3
+	var replacement *Worker
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if tm.Context().Err() != nil {
+			return
+		}
+		replacement, err = tm.startWorkerGoroutine(w.ID)
+		if err == nil {
+			break
+		}
+		if attempt < maxAttempts {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+	}
+
+	tm.mutex.Lock()
+	defer tm.mutex.Unlock()
+
+	if err != nil {
+		tm.Error("WORKER_RECOVERY_FAILED", err, map[string]any{
+			"worker_id": w.ID,
+			"attempts":  maxAttempts,
+		})
+		hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
+		return
+	}
+
+	if tm.Context().Err() != nil {
+		replacement.cancel(context.Cause(tm.Context()))
+		hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
+		return
+	}
+
+	tm.workers[w.ID] = replacement
+	tm.activeWorkers++
+	hermes_metrics.QueueWorkerCount.WithLabelValues(tm.config.QueueName).Set(float64(tm.activeWorkers))
+
+	tm.Info("WORKER_RECOVERED_AFTER_CHANNEL_CLOSE", map[string]any{
+		"worker_id": w.ID,
+	})
+
+	go tm.waitForWorkerLifecycle(replacement)
 }
 
 // monitorSelfScaling monitors queue depth and scales workers with improved dead zone and cooldown logic

@@ -9,7 +9,6 @@ import (
 
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/services/player"
-	"raidhub/lib/utils/logging"
 )
 
 // attachDestinationWebhooks loads webhook URLs for all destinations in one batch so stage 3 does
@@ -109,28 +108,27 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 		return err
 	}
 	ftProf := make([]messages.DiscordFireteamProfile, 0, len(profiles))
-	for _, p := range profiles {
+	for i, p := range profiles {
+		fin := true
+		if i < len(ep0.FireteamFinished) {
+			fin = ep0.FireteamFinished[i]
+		}
 		ftProf = append(ftProf, messages.DiscordFireteamProfile{
 			MembershipID: p.MembershipID,
 			DisplayName:  p.DisplayName,
 			IconURL:      p.IconURL,
 			ClassHash:    classByMembership[p.MembershipID],
+			Finished:     fin,
 		})
 	}
 
-	statsMap, statsErr := loadInstancePlayerStats(ctx, d0.InstanceId)
-	statsUnavailable := statsErr != nil
-	if statsErr != nil {
-		logger.Warn("SUBSCRIPTIONS_INSTANCE_STATS_UNAVAILABLE", statsErr, map[string]any{
-			logging.INSTANCE_ID: d0.InstanceId,
-		})
+	statsMap, err := loadInstancePlayerStats(ctx, d0.InstanceId)
+	if err != nil {
+		return fmt.Errorf("load instance player stats for instance %d: %w", d0.InstanceId, err)
 	}
 	statsSlice := make([]messages.DiscordInstanceStat, 0, len(ep0.FireteamMembershipIds))
 	for _, mid := range ep0.FireteamMembershipIds {
-		s := InstancePlayerStats{}
-		if statsMap != nil {
-			s = statsMap[mid]
-		}
+		s := statsMap[mid]
 		statsSlice = append(statsSlice, messages.DiscordInstanceStat{
 			MembershipID:      mid,
 			Kills:             s.Kills,
@@ -158,7 +156,6 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 		ep.PathSegment = pathSeg
 		ep.FireteamProfiles = ftProf
 		ep.InstanceStats = statsSlice
-		ep.StatsUnavailable = statsUnavailable
 		ep.Feats = feats
 	}
 	return nil

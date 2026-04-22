@@ -103,7 +103,6 @@ func assembleRaidDiscordEmbed(
 	feats []messages.DiscordFeat,
 	fireteamProfiles []player.PlayerProfileForDelivery,
 	statsMap map[int64]InstancePlayerStats,
-	statsUnavailable bool,
 ) *discord.Webhook {
 	title := discord.RaidCompletionMainTitle(activityName, pre.Completed)
 	if pre.Fresh != nil && !*pre.Fresh {
@@ -134,7 +133,7 @@ func assembleRaidDiscordEmbed(
 		topInner = append(topInner, featBlock...)
 	}
 
-	playerInner := fireteamPlayerComponents(fireteamProfiles, statsMap, statsUnavailable)
+	playerInner := fireteamPlayerComponents(fireteamProfiles, statsMap)
 	playerInner = append(playerInner, discord.NewLinkButtonRow("View PGCR", pgcrURL))
 	playerInner = append(playerInner, discord.NewSeparatorDivider())
 	playerInner = append(playerInner, raidEmbedFooter())
@@ -167,23 +166,47 @@ func assembleRaidDiscordEmbed(
 const raidHubEmoji = "<:RaidHub:1131584991227293717>"
 
 func raidEmbedFooter() *discord.TextDisplay {
-	return discord.NewTextDisplay("-# " + raidHubEmoji + " Powered by [RaidHub](https://raidhub.io)")
+	return discord.NewTextDisplay("-# Powered by [RaidHub](https://raidhub.io) " + raidHubEmoji)
 }
 
 // Discord limits combined markdown text across all Text Display components in one message (Components V2).
 const discordV2MaxCombinedTextRunes = 4000
 
-// fireteamPlayerComponents renders a compact linked player list. We still sort by kills when stats are
-// available, but the display itself is just bullet-separated profile links.
-func fireteamPlayerComponents(profiles []player.PlayerProfileForDelivery, stats map[int64]InstancePlayerStats, statsUnavailable bool) []discord.MessageComponent {
+// fireteamKADStrings returns kills, assists, deaths for one fireteam line (shown as K / A / D).
+// Primary source is InstancePlayerStats from stage 2 (DiscordEmbedPreload.InstanceStats).
+func fireteamKADStrings(p player.PlayerProfileForDelivery, stats map[int64]InstancePlayerStats) (k, a, d string) {
+	if stats != nil {
+		s := stats[p.MembershipID]
+		return strconv.Itoa(s.Kills), strconv.Itoa(s.Assists), strconv.Itoa(s.Deaths)
+	}
+	return strconv.Itoa(p.Kills), strconv.Itoa(p.Assists), strconv.Itoa(p.Deaths)
+}
+
+func fireteamMixedCompletion(profiles []player.PlayerProfileForDelivery) bool {
+	var nFin, nNot int
+	for _, p := range profiles {
+		if p.Finished {
+			nFin++
+		} else {
+			nNot++
+		}
+	}
+	return nFin > 0 && nNot > 0
+}
+
+// fireteamPlayerComponents renders a compact linked player list. Sorts by kills when stats map is present.
+// Each row ends with K / A / D only (no other columns).
+func fireteamPlayerComponents(profiles []player.PlayerProfileForDelivery, stats map[int64]InstancePlayerStats) []discord.MessageComponent {
 	if len(profiles) == 0 {
 		return []discord.MessageComponent{
 			discord.NewTextDisplay("### Fireteam\n\n_No fireteam data._"),
 		}
 	}
 
+	mixedIncomplete := fireteamMixedCompletion(profiles)
+
 	ordered := append([]player.PlayerProfileForDelivery(nil), profiles...)
-	if !statsUnavailable && stats != nil && len(ordered) > 1 {
+	if stats != nil && len(ordered) > 1 {
 		sort.Slice(ordered, func(i, j int) bool {
 			ki := stats[ordered[i].MembershipID].Kills
 			kj := stats[ordered[j].MembershipID].Kills
@@ -197,16 +220,23 @@ func fireteamPlayerComponents(profiles []player.PlayerProfileForDelivery, stats 
 	var b strings.Builder
 	b.WriteString("### Fireteam\n\n")
 	for _, p := range ordered {
-		name := formatFireteamPlayerFieldName(p)
+		linkLabel := formatFireteamLinkLabel(p, mixedIncomplete)
 		b.WriteString("- [")
 		if em := classEmoji(p.ClassHash); em != "" {
 			b.WriteString(em)
 			b.WriteString(" ")
 		}
-		b.WriteString(name)
+		b.WriteString(linkLabel)
 		b.WriteString("](https://raidhub.io/profile/")
 		b.WriteString(strconv.FormatInt(p.MembershipID, 10))
-		b.WriteString(")\n")
+		b.WriteString(") // ")
+		kStr, aStr, dStr := fireteamKADStrings(p, stats)
+		b.WriteString(kStr)
+		b.WriteString(" / ")
+		b.WriteString(aStr)
+		b.WriteString(" / ")
+		b.WriteString(dStr)
+		b.WriteString("\n")
 	}
 	return []discord.MessageComponent{
 		discord.NewTextDisplay(truncateDiscordV2Text(strings.TrimSpace(b.String()))),
@@ -299,6 +329,16 @@ func formatFireteamPlayerFieldName(p player.PlayerProfileForDelivery) string {
 		return truncateDiscordFieldName(discordEscape(name))
 	}
 	return truncateDiscordFieldName(strconv.FormatInt(p.MembershipID, 10))
+}
+
+// formatFireteamLinkLabel is the markdown link text for a fireteam row. Strikethrough (~~) applies only
+// when the fireteam is mixed (some finished, some not) and this player did not finish.
+func formatFireteamLinkLabel(p player.PlayerProfileForDelivery, mixedIncomplete bool) string {
+	inner := formatFireteamPlayerFieldName(p)
+	if mixedIncomplete && !p.Finished {
+		return "~~" + inner + "~~"
+	}
+	return inner
 }
 
 func formatKillDeathRatio(kills, deaths int) string {

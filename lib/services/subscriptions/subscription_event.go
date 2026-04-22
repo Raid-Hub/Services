@@ -49,6 +49,7 @@ func PrepareParticipants(ctx context.Context, event messages.SubscriptionEventMe
 		result := messages.ParticipantResult{
 			MembershipId:   participant.MembershipId,
 			MembershipType: participant.MembershipType,
+			Finished:       participant.Finished,
 		}
 
 		if participant.MembershipType == nil || *participant.MembershipType == 0 {

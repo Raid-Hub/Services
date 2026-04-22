@@ -80,6 +80,114 @@ func validateCallbackHost(host string) error {
 	return nil
 }
 
+func normalizeDiscordWebhookURL(raw string) string {
+	u := strings.TrimSpace(raw)
+	if strings.HasPrefix(u, discordWebhookPrefixLegacy) {
+		return discordWebhookPrefix + strings.TrimPrefix(u, discordWebhookPrefixLegacy)
+	}
+	return u
+}
+
+func parseDiscordWebhookIDAndToken(raw string) (webhookID, webhookToken string, err error) {
+	u := strings.TrimSpace(raw)
+	for _, prefix := range []string{discordWebhookPrefix, discordWebhookPrefixLegacy} {
+		if !strings.HasPrefix(u, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(u, prefix)
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return "", "", fmt.Errorf("invalid Discord webhook URL path")
+		}
+		token := strings.SplitN(parts[1], "?", 2)[0]
+		token = strings.SplitN(token, "#", 2)[0]
+		return parts[0], token, nil
+	}
+	return "", "", fmt.Errorf("invalid Discord webhook URL")
+}
+
+// FindOrCreateDestinationByWebhook returns the subscriptions.destination id for this Discord webhook URL, inserting discord_webhook if none exists.
+// Canonical ids/tokens live in subscriptions.discord_destination_config (unique on webhook_id).
+func FindOrCreateDestinationByWebhook(ctx context.Context, webhookURL string) (id int64, created bool, err error) {
+	if err := ValidateDiscordWebhookURL(webhookURL); err != nil {
+		return 0, false, err
+	}
+	webhookID, webhookToken, err := parseDiscordWebhookIDAndToken(webhookURL)
+	if err != nil {
+		return 0, false, err
+	}
+	canonicalURL := normalizeDiscordWebhookURL(webhookURL)
+
+	var existingID int64
+	var isActive bool
+	err = postgres.DB.QueryRowContext(ctx, `
+		SELECT d.id, d.is_active
+		FROM subscriptions.discord_destination_config c
+		INNER JOIN subscriptions.destination d ON d.id = c.destination_id
+		WHERE c.webhook_id = $1`, webhookID).Scan(&existingID, &isActive)
+	if err == nil {
+		if !isActive {
+			_, err = postgres.DB.ExecContext(ctx, `
+				UPDATE subscriptions.destination SET is_active = true, updated_at = NOW() WHERE id = $1`, existingID)
+			if err != nil {
+				return 0, false, err
+			}
+		}
+		if _, uerr := postgres.DB.ExecContext(ctx, `
+			UPDATE subscriptions.discord_destination_config
+			SET webhook_token = $2, updated_at = NOW()
+			WHERE destination_id = $1 AND webhook_token IS DISTINCT FROM $2`, existingID, webhookToken); uerr != nil {
+			return 0, false, uerr
+		}
+		return existingID, false, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+
+	var httpDup int64
+	err = postgres.DB.QueryRowContext(ctx, `
+		SELECT destination_id FROM subscriptions.http_callback_destination_config
+		WHERE callback_url = $1 OR callback_url = $2`,
+		strings.TrimSpace(webhookURL), canonicalURL).Scan(&httpDup)
+	if err == nil {
+		return 0, false, fmt.Errorf("destination URL already registered as http_callback")
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+
+	tx, err := postgres.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO subscriptions.destination (channel_type)
+		VALUES ('discord_webhook')
+		RETURNING id`).Scan(&id)
+	if err != nil {
+		return 0, false, err
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO subscriptions.discord_destination_config (destination_id, webhook_id, webhook_token)
+		VALUES ($1, $2, $3)`, id, webhookID, webhookToken)
+	if err != nil {
+		if isPGUniqueViolation(err) {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return 0, false, rbErr
+			}
+			return FindOrCreateDestinationByWebhook(ctx, webhookURL)
+		}
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
 // FindOrCreateDestinationByHTTPSCallback returns the subscriptions.destination id for this URL, inserting http_callback if none exists.
 // URL is stored in subscriptions.http_callback_destination_config (unique on callback_url).
 func FindOrCreateDestinationByHTTPSCallback(ctx context.Context, callbackURL string) (id int64, created bool, err error) {

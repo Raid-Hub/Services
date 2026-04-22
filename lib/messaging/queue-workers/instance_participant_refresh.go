@@ -18,9 +18,9 @@ import (
 func InstanceParticipantRefreshTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
 		QueueName:          routing.InstanceParticipantRefresh,
-		MinWorkers:         1,
-		MaxWorkers:         10,
-		DesiredWorkers:     2,
+		MinWorkers:         4,
+		MaxWorkers:         32,
+		DesiredWorkers:     6,
 		KeepInReady:        true,
 		PrefetchCount:      1,
 		ScaleUpThreshold:   100,

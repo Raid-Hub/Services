@@ -15,10 +15,11 @@ type ClanNameMatch struct {
 	Name    string
 }
 
-// RuleInstanceCriteria maps to subscriptions.rule require_* columns (AND semantics in the matcher).
+// RuleInstanceCriteria maps to subscriptions.rule require_* and activity_raid_bitmap (AND semantics in the matcher).
 type RuleInstanceCriteria struct {
-	RequireFresh     bool
-	RequireCompleted bool
+	RequireFresh       bool
+	RequireCompleted   bool
+	ActivityRaidBitmap uint64 // Stored NOT NULL; 0 = all raids, non-zero = filter (OR of raid bits).
 }
 
 // EnsureClanRule inserts an active clan-scoped rule if none exists for this destination + group_id.
@@ -44,15 +45,15 @@ func EnsureClanRule(ctx context.Context, destinationID, groupID int64) (inserted
 // UpsertClanRuleWithInstanceCriteria inserts a clan rule with instance gates, or updates require_* if an active row already exists.
 func UpsertClanRuleWithInstanceCriteria(ctx context.Context, destinationID, groupID int64, cr RuleInstanceCriteria) (inserted bool, err error) {
 	res, err := postgres.DB.ExecContext(ctx, `
-		INSERT INTO subscriptions.rule (destination_id, scope, group_id, require_fresh, require_completed)
-		SELECT $1, 'clan', $2, $3, $4
+		INSERT INTO subscriptions.rule (destination_id, scope, group_id, require_fresh, require_completed, activity_raid_bitmap)
+		SELECT $1, 'clan', $2, $3, $4, $5
 		WHERE NOT EXISTS (
 			SELECT 1 FROM subscriptions.rule r
 			WHERE r.destination_id = $1
 			  AND r.scope = 'clan'
 			  AND r.group_id = $2
 			  AND r.is_active
-		)`, destinationID, groupID, cr.RequireFresh, cr.RequireCompleted)
+		)`, destinationID, groupID, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 	if err != nil {
 		return false, err
 	}
@@ -62,9 +63,9 @@ func UpsertClanRuleWithInstanceCriteria(ctx context.Context, destinationID, grou
 	}
 	_, err = postgres.DB.ExecContext(ctx, `
 		UPDATE subscriptions.rule
-		SET require_fresh = $3, require_completed = $4
+		SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5
 		WHERE destination_id = $1 AND scope = 'clan' AND group_id = $2 AND is_active`,
-		destinationID, groupID, cr.RequireFresh, cr.RequireCompleted)
+		destinationID, groupID, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 	return false, err
 }
 
@@ -72,15 +73,15 @@ func UpsertClanRuleWithInstanceCriteria(ctx context.Context, destinationID, grou
 func UpsertPlayerRulesWithInstanceCriteria(ctx context.Context, destinationID int64, membershipIDs []int64, cr RuleInstanceCriteria) (inserted, updated int, err error) {
 	for _, mid := range membershipIDs {
 		res, err := postgres.DB.ExecContext(ctx, `
-			INSERT INTO subscriptions.rule (destination_id, scope, membership_id, require_fresh, require_completed)
-			SELECT $1, 'player', $2, $3, $4
+			INSERT INTO subscriptions.rule (destination_id, scope, membership_id, require_fresh, require_completed, activity_raid_bitmap)
+			SELECT $1, 'player', $2, $3, $4, $5
 			WHERE NOT EXISTS (
 				SELECT 1 FROM subscriptions.rule r
 				WHERE r.destination_id = $1
 				  AND r.scope = 'player'
 				  AND r.membership_id = $2
 				  AND r.is_active
-			)`, destinationID, mid, cr.RequireFresh, cr.RequireCompleted)
+			)`, destinationID, mid, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 		if err != nil {
 			return inserted, updated, fmt.Errorf("rule for membership_id %d: %w", mid, err)
 		}
@@ -91,9 +92,9 @@ func UpsertPlayerRulesWithInstanceCriteria(ctx context.Context, destinationID in
 		}
 		res2, err := postgres.DB.ExecContext(ctx, `
 			UPDATE subscriptions.rule
-			SET require_fresh = $3, require_completed = $4
+			SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5
 			WHERE destination_id = $1 AND scope = 'player' AND membership_id = $2 AND is_active`,
-			destinationID, mid, cr.RequireFresh, cr.RequireCompleted)
+			destinationID, mid, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 		if err != nil {
 			return inserted, updated, err
 		}
