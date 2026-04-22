@@ -82,6 +82,14 @@ func processSubscriptionDelivery(worker processing.WorkerInterface, message amqp
 		return err
 	}
 
+	okFields := map[string]any{
+		logging.INSTANCE_ID: request.InstanceId,
+		"channel_id":        request.DestinationChannelId,
+		"channel_type":      request.ChannelType,
+		logging.ATTEMPT:     attempt,
+	}
+	worker.Info("SUBSCRIPTION_DELIVERY_SUCCEEDED", okFields)
+
 	return nil
 }
 

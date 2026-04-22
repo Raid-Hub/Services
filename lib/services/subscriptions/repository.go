@@ -100,8 +100,16 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 		return map[int64]destinationRow{}, nil
 	}
 	rows, err := postgres.DB.QueryContext(ctx, `
-		SELECT id, webhook_url, channel_type
-		FROM subscriptions.destination
+		SELECT
+			d.id,
+			CASE
+				WHEN d.channel_type = 'discord_webhook' THEN
+					'https://discord.com/api/webhooks/' || c.webhook_id || '/' || c.webhook_token
+				ELSE NULL
+			END AS webhook_url,
+			d.channel_type
+		FROM subscriptions.destination d
+		LEFT JOIN subscriptions.discord_destination_config c ON c.destination_id = d.id
 		WHERE id = ANY($1) AND is_active`,
 		pq.Array(destinationIDs),
 	)
@@ -113,10 +121,12 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 	out := make(map[int64]destinationRow)
 	for rows.Next() {
 		var id int64
+		var webhookURL sql.NullString
 		var d destinationRow
-		if err := rows.Scan(&id, &d.WebhookURL, &d.ChannelType); err != nil {
+		if err := rows.Scan(&id, &webhookURL, &d.ChannelType); err != nil {
 			return nil, err
 		}
+		d.WebhookURL = webhookURL.String
 		out[id] = d
 	}
 	return out, rows.Err()

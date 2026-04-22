@@ -2,16 +2,12 @@ package subscriptions
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 
 	"raidhub/lib/database/postgres"
-
-	"github.com/lib/pq"
 )
 
 const discordWebhookPrefix = "https://discord.com/api/webhooks/"
@@ -78,80 +74,12 @@ func validateCallbackHost(host string) error {
 }
 
 // FindOrCreateDestinationByHTTPSCallback returns the subscriptions.destination id for this URL, inserting http_callback if none exists.
-// Looks up by channel_type + webhook_url; reactivates an inactive row; errors if the URL exists under another channel_type.
+// http_callback URL persistence still needs a dedicated config table in the new schema.
 func FindOrCreateDestinationByHTTPSCallback(ctx context.Context, callbackURL string) (id int64, created bool, err error) {
-	return findOrCreateDestination(ctx, "http_callback", callbackURL, ValidateHTTPSCallbackURL)
-}
-
-// FindOrCreateDestinationByWebhook returns the subscriptions.destination id for this webhook_url, inserting a row if none exists.
-func FindOrCreateDestinationByWebhook(ctx context.Context, webhookURL string) (id int64, created bool, err error) {
-	return findOrCreateDestination(ctx, "discord_webhook", webhookURL, ValidateDiscordWebhookURL)
-}
-
-func findOrCreateDestination(ctx context.Context, channelType, rawURL string, validate func(string) error) (id int64, created bool, err error) {
-	if err := validate(rawURL); err != nil {
+	if err := ValidateHTTPSCallbackURL(callbackURL); err != nil {
 		return 0, false, err
 	}
-	u := strings.TrimSpace(rawURL)
-
-	var existingID int64
-	var isActive bool
-	err = postgres.DB.QueryRowContext(ctx,
-		`SELECT id, is_active FROM subscriptions.destination WHERE webhook_url = $1 AND channel_type = $2`,
-		u, channelType).Scan(&existingID, &isActive)
-	if err == nil {
-		if !isActive {
-			_, err = postgres.DB.ExecContext(ctx,
-				`UPDATE subscriptions.destination SET is_active = true, updated_at = NOW() WHERE id = $1`, existingID)
-			if err != nil {
-				return 0, false, err
-			}
-		}
-		return existingID, false, nil
-	}
-	if err != sql.ErrNoRows {
-		return 0, false, err
-	}
-
-	var other string
-	err = postgres.DB.QueryRowContext(ctx,
-		`SELECT channel_type FROM subscriptions.destination WHERE webhook_url = $1 LIMIT 1`, u).Scan(&other)
-	if err == nil {
-		return 0, false, fmt.Errorf("destination URL already registered as %s", other)
-	}
-	if err != sql.ErrNoRows {
-		return 0, false, err
-	}
-
-	err = postgres.DB.QueryRowContext(ctx, `
-		INSERT INTO subscriptions.destination (channel_type, webhook_url)
-		VALUES ($1, $2)
-		RETURNING id`, channelType, u).Scan(&id)
-	if err != nil {
-		if isPGUniqueViolation(err) {
-			err = postgres.DB.QueryRowContext(ctx,
-				`SELECT id, is_active FROM subscriptions.destination WHERE webhook_url = $1 AND channel_type = $2`,
-				u, channelType).Scan(&id, &isActive)
-			if err != nil {
-				return 0, false, err
-			}
-			if !isActive {
-				_, err = postgres.DB.ExecContext(ctx,
-					`UPDATE subscriptions.destination SET is_active = true, updated_at = NOW() WHERE id = $1`, id)
-				if err != nil {
-					return 0, false, err
-				}
-			}
-			return id, false, nil
-		}
-		return 0, false, err
-	}
-	return id, true, nil
-}
-
-func isPGUniqueViolation(err error) bool {
-	var pqErr *pq.Error
-	return errors.As(err, &pqErr) && pqErr.Code == "23505"
+	return 0, false, fmt.Errorf("http_callback destination creation by URL is not supported in the current schema; use -destination-id")
 }
 
 // DestinationExists returns true if id refers to an active destination.

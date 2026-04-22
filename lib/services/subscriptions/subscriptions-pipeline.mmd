@@ -1,0 +1,61 @@
+flowchart TB
+  subgraph producers["Producers"]
+    IS["instance_store / new instance"]
+    RP["tools/replay-subscription-instance<br/>(same first queue)"]
+  end
+
+  subgraph pg["Postgres"]
+    RULES["subscriptions.rule<br/>+ destinations"]
+  end
+
+  IS -->|"NewSubscriptionEvent → JSON"| Q1
+  RP --> Q1
+
+  subgraph stage1["Stage 1: instance_participant_refresh"]
+    Q1(("Queue: InstanceParticipantRefresh"))
+    PE["PrepareParticipants"]
+    PE -->|"Redis cache → Bungie GetGroupsForMember"| CLAN["Resolve clan per player"]
+    CLAN --> PM["SubscriptionMatchMessage<br/>ParticipantResult[]"]
+    SKIP{{"PlayerCount ≥ 25?"}}
+    PE --> SKIP
+    SKIP -->|"yes"| DROP["Skip — no publish"]
+    SKIP -->|"no"| PM
+  end
+
+  Q1 --> PE
+
+  subgraph stage2["Stage 2: subscription_match"]
+    Q2(("Queue: SubscriptionMatch"))
+    ME["MatchEvent"]
+    R1["applySubscriptionRules<br/>privacy + rules from PG"]
+    R2["enrichDeliveryRaidContext"]
+    R3["attachDestinationWebhooks"]
+    R4["preloadDiscordEmbedData / preloadHttpCallbackInstance"]
+    ME --> R1 --> R2 --> R3 --> R4
+    DM["N × SubscriptionDeliveryMessage<br/>(webhook URL + EmbedPreload or dto.Instance)"]
+    R4 --> DM
+  end
+
+  PM --> Q2
+  Q2 --> ME
+  RULES -.-> R1
+
+  subgraph stage3["Stage 3: subscription_delivery"]
+    Q3(("Queue: SubscriptionDelivery<br/>(N messages)"))
+    SD["SendSubscriptionDelivery<br/>HTTP POST only"]
+  end
+
+  DM -->|"PublishJSONMessageBatchTx"| Q3
+  Q3 --> SD
+
+  subgraph outbound["Outbound"]
+    DW["discord_webhook → Discord API"]
+    HC["http_callback → partner URL<br/>or optional relay"]
+  end
+
+  SD --> DW
+  SD --> HC
+
+  style stage1 fill:#1a1a2e,color:#eee
+  style stage2 fill:#16213e,color:#eee
+  style stage3 fill:#0f3460,color:#eee
