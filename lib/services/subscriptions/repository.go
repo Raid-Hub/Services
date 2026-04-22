@@ -105,12 +105,14 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 			CASE
 				WHEN d.channel_type = 'discord_webhook' THEN
 					'https://discord.com/api/webhooks/' || c.webhook_id || '/' || c.webhook_token
+				WHEN d.channel_type = 'http_callback' THEN h.callback_url
 				ELSE NULL
 			END AS webhook_url,
 			d.channel_type
 		FROM subscriptions.destination d
 		LEFT JOIN subscriptions.discord_destination_config c ON c.destination_id = d.id
-		WHERE id = ANY($1) AND is_active`,
+		LEFT JOIN subscriptions.http_callback_destination_config h ON h.destination_id = d.id
+		WHERE d.id = ANY($1) AND d.is_active`,
 		pq.Array(destinationIDs),
 	)
 	if err != nil {

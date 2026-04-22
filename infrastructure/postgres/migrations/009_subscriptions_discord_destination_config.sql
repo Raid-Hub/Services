@@ -72,7 +72,39 @@ CREATE UNIQUE INDEX "idx_discord_destination_config_channel_id"
     ON "subscriptions"."discord_destination_config" ("channel_id")
     WHERE "channel_id" IS NOT NULL;
 
+-- HTTPS JSON callback URL for subscriptions.destination rows (channel_type = http_callback).
+-- Canonical URL storage; subscriptions.destination no longer carries webhook_url.
+
+CREATE TABLE "subscriptions"."http_callback_destination_config" (
+    "destination_id" BIGINT PRIMARY KEY,
+    "callback_url" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
+    CONSTRAINT "http_callback_destination_config_destination_fkey"
+        FOREIGN KEY ("destination_id")
+        REFERENCES "subscriptions"."destination" ("id")
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX "idx_http_callback_destination_config_callback_url"
+    ON "subscriptions"."http_callback_destination_config" ("callback_url");
+
+INSERT INTO "subscriptions"."http_callback_destination_config" (
+    "destination_id",
+    "callback_url"
+)
+SELECT
+    d.id,
+    d.webhook_url
+FROM "subscriptions"."destination" d
+WHERE d.channel_type = 'http_callback'
+ON CONFLICT ("destination_id")
+DO UPDATE SET
+    "callback_url" = EXCLUDED."callback_url",
+    "updated_at" = NOW();
+
 DROP INDEX IF EXISTS "idx_destination_channel_type_webhook_url";
 ALTER TABLE "subscriptions"."destination" DROP COLUMN IF EXISTS "webhook_url";
 
 GRANT SELECT ON "subscriptions"."discord_destination_config" TO readonly;
+GRANT SELECT ON "subscriptions"."http_callback_destination_config" TO readonly;

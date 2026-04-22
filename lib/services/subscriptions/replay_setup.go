@@ -2,12 +2,16 @@ package subscriptions
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 
 	"raidhub/lib/database/postgres"
+
+	"github.com/lib/pq"
 )
 
 const discordWebhookPrefix = "https://discord.com/api/webhooks/"
@@ -38,6 +42,9 @@ func ValidateHTTPSCallbackURL(raw string) error {
 	u := strings.TrimSpace(raw)
 	if u == "" {
 		return fmt.Errorf("callback URL is empty")
+	}
+	if ValidateDiscordWebhookURL(u) == nil {
+		return fmt.Errorf("callback URL must not be a Discord webhook URL")
 	}
 	if !strings.HasPrefix(u, "https://") {
 		return fmt.Errorf("callback URL must use https://")
@@ -74,12 +81,68 @@ func validateCallbackHost(host string) error {
 }
 
 // FindOrCreateDestinationByHTTPSCallback returns the subscriptions.destination id for this URL, inserting http_callback if none exists.
-// http_callback URL persistence still needs a dedicated config table in the new schema.
+// URL is stored in subscriptions.http_callback_destination_config (unique on callback_url).
 func FindOrCreateDestinationByHTTPSCallback(ctx context.Context, callbackURL string) (id int64, created bool, err error) {
 	if err := ValidateHTTPSCallbackURL(callbackURL); err != nil {
 		return 0, false, err
 	}
-	return 0, false, fmt.Errorf("http_callback destination creation by URL is not supported in the current schema; use -destination-id")
+	u := strings.TrimSpace(callbackURL)
+
+	var existingID int64
+	var isActive bool
+	err = postgres.DB.QueryRowContext(ctx, `
+		SELECT d.id, d.is_active
+		FROM subscriptions.http_callback_destination_config h
+		INNER JOIN subscriptions.destination d ON d.id = h.destination_id
+		WHERE h.callback_url = $1`, u).Scan(&existingID, &isActive)
+	if err == nil {
+		if !isActive {
+			_, err = postgres.DB.ExecContext(ctx, `
+				UPDATE subscriptions.destination SET is_active = true, updated_at = NOW() WHERE id = $1`, existingID)
+			if err != nil {
+				return 0, false, err
+			}
+		}
+		return existingID, false, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+
+	tx, err := postgres.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO subscriptions.destination (channel_type)
+		VALUES ('http_callback')
+		RETURNING id`).Scan(&id)
+	if err != nil {
+		return 0, false, err
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO subscriptions.http_callback_destination_config (destination_id, callback_url)
+		VALUES ($1, $2)`, id, u)
+	if err != nil {
+		if isPGUniqueViolation(err) {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return 0, false, rbErr
+			}
+			return FindOrCreateDestinationByHTTPSCallback(ctx, callbackURL)
+		}
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+func isPGUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }
 
 // DestinationExists returns true if id refers to an active destination.
