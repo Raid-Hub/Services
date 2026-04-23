@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -84,8 +85,46 @@ func DownloadManifest(out string, fromDisk bool, force bool) string {
 
 	var sqlitePath string
 	if !fromDisk {
+		// Wait for Bungie API availability before attempting to download manifest
+		// Wait at most 30 seconds, then exit cleanly if API is still unavailable
+		destiny2Monitor := bungie.GetAPIAvailabilityMonitor("Destiny2")
+		apiWG := destiny2Monitor.GetReadOnlyWaitGroup()
+		if apiWG != nil {
+			waitCtx, waitCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer waitCancel()
+			
+			done := make(chan struct{})
+			go func() {
+				apiWG.Wait()
+				close(done)
+			}()
+			
+			select {
+			case <-done:
+				// API became available
+			case <-waitCtx.Done():
+				// Timeout - API still unavailable after 30 seconds
+				logger.Info("BUNGIE_API_UNAVAILABLE_TIMEOUT", map[string]any{
+					"timeout_seconds": 30,
+					"message":         "Bungie API not available after 30 seconds, exiting",
+				})
+				os.Exit(0)
+			}
+		}
+
 		result, err := bungie.Client.GetDestinyManifest(context.Background())
 		if err != nil {
+			// Check if this is a SystemDisabled error
+			var bungieErr *bungie.BungieError
+			if errors.As(err, &bungieErr) && bungieErr.ErrorCode == bungie.SystemDisabled {
+				// Handle SystemDisabled gracefully - signal the monitor and exit cleanly
+				logger.Info("BUNGIE_SYSTEM_DISABLED", map[string]any{
+					logging.BUNGIE_ERROR_CODE: bungieErr.ErrorCode,
+					logging.ERROR_STATUS:      bungieErr.ErrorStatus,
+				})
+				bungie.SignalSystemDisabled("Destiny2")
+				os.Exit(0)
+			}
 			logger.Fatal("ERROR_GETTING_MANIFEST", err, map[string]any{})
 		}
 		if result.Data == nil {
