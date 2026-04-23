@@ -38,15 +38,15 @@ type activityRaidMetaCacheEntry struct {
 }
 
 type subscriptionRule struct {
-	ID                  int64
-	DestinationID       int64
-	Scope               string
-	MembershipID        sql.NullInt64
-	GroupID             sql.NullInt64
-	ChannelType         string
-	RequireFresh        bool
-	RequireCompleted    bool
-	ActivityRaidBitmap  uint64
+	ID                 int64
+	DestinationID      int64
+	Scope              string
+	MembershipID       sql.NullInt64
+	GroupID            sql.NullInt64
+	ChannelType        string
+	RequireFresh       bool
+	RequireCompleted   bool
+	ActivityRaidBitmap uint64
 }
 
 // loadSubscriptionRulesForMatch loads only rules that could apply to this instance:
@@ -143,9 +143,19 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 	}
 
 	rows, err := postgres.DB.QueryContext(ctx, `
-		SELECT id, webhook_url, channel_type
-		FROM subscriptions.destination
-		WHERE id = ANY($1) AND is_active`,
+		SELECT
+			d.id,
+			CASE
+				WHEN d.channel_type = 'discord_webhook' THEN
+					'https://discord.com/api/webhooks/' || c.webhook_id || '/' || c.webhook_token
+				WHEN d.channel_type = 'http_callback' THEN h.callback_url
+				ELSE NULL
+			END AS webhook_url,
+			d.channel_type
+		FROM subscriptions.destination d
+		LEFT JOIN subscriptions.discord_destination_config c ON c.destination_id = d.id
+		LEFT JOIN subscriptions.http_callback_destination_config h ON h.destination_id = d.id
+		WHERE d.id = ANY($1) AND d.is_active`,
 		pq.Array(missing),
 	)
 	if err != nil {
@@ -158,10 +168,15 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 	defer destinationCacheMu.Unlock()
 	for rows.Next() {
 		var id int64
+		var webhookURL sql.NullString
 		var d destinationRow
-		if err := rows.Scan(&id, &d.WebhookURL, &d.ChannelType); err != nil {
+		if err := rows.Scan(&id, &webhookURL, &d.ChannelType); err != nil {
 			return nil, err
 		}
+		if !webhookURL.Valid {
+			return nil, fmt.Errorf("destination %d has NULL webhook_url for channel type %q (missing config row?)", id, d.ChannelType)
+		}
+		d.WebhookURL = webhookURL.String
 		out[id] = d
 		destinationCache[id] = destinationCacheEntry{row: d, exp: exp}
 	}

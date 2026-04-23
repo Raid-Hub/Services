@@ -67,7 +67,7 @@ This repo targets **Go 1.25** (`go.mod`). When bringing up Docker Compose, datab
 **`replay-subscription-instance`** only needs **Postgres** (and **RabbitMQ** if you publish a replay). It does **not** open Redis. **Hermes** must be running with **Redis** (and Zeus, etc.) to **process** the pipeline — without Redis, stage 1 cannot resolve clans. Ensure **`redis`** is up (`docker compose up -d redis`) and `.env` includes **`REDIS_PORT`** (see `example.env`).
 
 1. Run Postgres migrations so `subscriptions.destination` and `subscriptions.rule` exist (`make migrate-postgres`).
-2. Insert destinations and rules yourself, or use **`replay-subscription-instance`** with **`-apply-subscription-setup`**, **`-webhook-url`**, and **`-instance-id`** to create a destination and player-scope rules for everyone on that instance (optional).
+2. Insert destinations and rules yourself, or use **`replay-subscription-instance`** with **`-apply-subscription-setup`**, **`-https-callback-url`** or **`-destination-id`**, and **`-instance-id`** to attach rules for everyone on that instance (optional). Discord webhook destinations are created via **RaidHub-API** (`PUT /subscriptions/discord/webhooks`), not this replay tool.
 3. Ensure **Hermes** is running (rebuild after subscription code changes: `docker compose build hermes && docker compose up -d hermes`).
 4. **Replay an instance through the pipeline** (loads from Postgres, publishes `instance_participant_refresh`). **`-instance-id` is required** and must match a row in `core.instance` (the tool does not pick a default instance).
 
@@ -76,11 +76,11 @@ For copy-paste while developing subscriptions, use instance id **`16787546313`**
 ```bash
 go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -dry-run
 go run ./tools/replay-subscription-instance/ -instance-id=16787546313
-go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -apply-subscription-setup -webhook-url='https://discord.com/api/webhooks/<id>/<token>'
+go run ./tools/replay-subscription-instance/ -instance-id=16787546313 -apply-subscription-setup -destination-id=123
 # Or http_callback setup: -https-callback-url='https://partner.example/hook' (same -apply-subscription-setup rules)
 ```
 
-Example PGCR for local testing: [16787546313](https://raidhub.io/pgcr/16787546313). The row must exist in **`core.instance`** (from your normal ingest path: Atlas → Hermes `instance_store`, restore, etc.). Hermes only POSTs to Discord for rows in `subscriptions.destination`. To mutate subscription rows you must pass **`-apply-subscription-setup`** together with **`-webhook-url`** or **`-destination-id`** (see tool help).
+Example PGCR for local testing: [16787546313](https://raidhub.io/pgcr/16787546313). The row must exist in **`core.instance`** (from your normal ingest path: Atlas → Hermes `instance_store`, restore, etc.). Hermes only POSTs for destinations that exist and are active. To mutate subscription rules from this tool, pass **`-apply-subscription-setup`** together with **`-https-callback-url`** or **`-destination-id`** (see tool help).
 
 ## Docker-based Go commands
 

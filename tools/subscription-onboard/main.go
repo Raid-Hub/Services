@@ -98,8 +98,8 @@ func main() {
 			logger.Fatal("CLAN_RULE_FAILED", err, map[string]any{"group_id": gid})
 		}
 		fields := map[string]any{
-			"group_id":          gid,
-			"inserted":          inserted,
+			"group_id":             gid,
+			"inserted":             inserted,
 			"require_fresh":        criteria.RequireFresh,
 			"require_completed":    criteria.RequireCompleted,
 			"activity_raid_bitmap": criteria.ActivityRaidBitmap,
@@ -126,8 +126,8 @@ func main() {
 
 func runDryRun(ctx context.Context, webhookURL string, clanGroupIDs, playerMembershipIDs []int64, criteria subscriptions.RuleInstanceCriteria) {
 	logger.Info("DRY_RUN", map[string]any{
-		"webhook_url":       "(valid)",
-		"note":              "no database writes",
+		"webhook_url":          "(valid)",
+		"note":                 "no database writes",
 		"require_fresh":        criteria.RequireFresh,
 		"require_completed":    criteria.RequireCompleted,
 		"activity_raid_bitmap": criteria.ActivityRaidBitmap,
