@@ -35,6 +35,8 @@ type ParticipantResult struct {
 	ClanFromCache    bool              `json:"clanFromCache"`
 	ClanResolvedAt   *time.Time        `json:"clanResolvedAt,omitempty"`
 	FailureReason    *string           `json:"failureReason,omitempty"`
+	// Finished is whether this player completed the activity (from instance PGCR). Used for Discord fireteam display.
+	Finished bool `json:"finished,omitempty"`
 }
 
 // DeliveryScope is which player/clan targets on this destination applied to this instance.
@@ -101,6 +103,8 @@ type DiscordEmbedPreload struct {
 	Fresh                 *bool     `json:"fresh,omitempty"`
 	PlayerCount           int       `json:"playerCount,omitempty"`
 	FireteamMembershipIds []int64   `json:"fireteamMembershipIds,omitempty"`
+	// FireteamFinished is parallel to FireteamMembershipIds (raid completion per player).
+	FireteamFinished []bool `json:"fireteamFinished,omitempty"`
 
 	ActivityName string `json:"activityName,omitempty"`
 	VersionName  string `json:"versionName,omitempty"`
@@ -108,7 +112,6 @@ type DiscordEmbedPreload struct {
 
 	FireteamProfiles []DiscordFireteamProfile `json:"fireteamProfiles,omitempty"`
 	InstanceStats    []DiscordInstanceStat    `json:"instanceStats,omitempty"`
-	StatsUnavailable bool                     `json:"statsUnavailable,omitempty"`
 
 	// Feats are raid skull modifiers from core.instance that exist in definitions.activity_feat_definition (icons from manifest).
 	Feats []DiscordFeat `json:"feats,omitempty"`
@@ -125,6 +128,10 @@ type DiscordFireteamProfile struct {
 	DisplayName  string `json:"displayName,omitempty"`
 	IconURL      string `json:"iconUrl,omitempty"`
 	ClassHash    uint32 `json:"classHash,omitempty"`
+	Finished     bool   `json:"finished,omitempty"`
+	Kills        int    `json:"kills"`
+	Deaths       int    `json:"deaths"`
+	Assists      int    `json:"assists"`
 }
 
 type DiscordInstanceStat struct {

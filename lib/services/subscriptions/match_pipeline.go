@@ -64,13 +64,14 @@ func applySubscriptionRules(ctx context.Context, message messages.SubscriptionMa
 		return nil, err
 	}
 
-	return matchRulesToDeliveries(message, message.ParticipantData, rules, privacy, clansByMember)
+	return matchRulesToDeliveries(ctx, message, message.ParticipantData, rules, privacy, clansByMember)
 }
 
 func enrichDeliveryRaidContext(d *messages.SubscriptionDeliveryMessage, msg messages.SubscriptionMatchMessage) {
 	if d.ChannelType != messages.DeliveryChannelDiscordWebhook {
 		return
 	}
+	ids, finished := fireteamMembershipRows(msg.ParticipantData)
 	d.EmbedPreload = &messages.DiscordEmbedPreload{
 		ActivityHash:          msg.ActivityHash,
 		DateCompleted:         msg.DateCompleted,
@@ -78,17 +79,20 @@ func enrichDeliveryRaidContext(d *messages.SubscriptionDeliveryMessage, msg mess
 		Completed:             msg.Completed,
 		Fresh:                 msg.Fresh,
 		PlayerCount:           msg.PlayerCount,
-		FireteamMembershipIds: fireteamMembershipIDs(msg.ParticipantData),
+		FireteamMembershipIds: ids,
+		FireteamFinished:      finished,
 	}
 }
 
-func fireteamMembershipIDs(participants []messages.ParticipantResult) []int64 {
+func fireteamMembershipRows(participants []messages.ParticipantResult) (ids []int64, finished []bool) {
 	if len(participants) == 0 {
-		return nil
+		return nil, nil
 	}
-	ids := make([]int64, 0, len(participants))
+	ids = make([]int64, 0, len(participants))
+	finished = make([]bool, 0, len(participants))
 	for _, p := range participants {
 		ids = append(ids, p.MembershipId)
+		finished = append(finished, p.Finished)
 	}
-	return ids
+	return ids, finished
 }

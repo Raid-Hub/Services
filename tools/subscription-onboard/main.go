@@ -9,6 +9,7 @@
 //	go run ./tools/subscription-onboard -webhook-url 'https://discord.com/api/webhooks/...' -clan-group-id 5243173
 //	go run ./tools/subscription-onboard -webhook-url '...' -clan-group-id 4927161 -player-membership-id 4611686018488107374
 //	go run ./tools/subscription-onboard -webhook-url '...' -clan-group-id 4927161 -require-completed
+//	go run ./tools/subscription-onboard -webhook-url '...' -clan-group-id 5411410 -activity-raid-bitmap 400
 package main
 
 import (
@@ -38,6 +39,7 @@ func main() {
 
 	requireFresh := flag.Bool("require-fresh", false, "Only notify for fresh raid starts (not checkpoint)")
 	requireCompleted := flag.Bool("require-completed", false, "Only notify for full clears (completed instance)")
+	activityRaidBitmapStr := flag.String("activity-raid-bitmap", "", "Raid filter: uint64 bitmask, decimal or 0x hex (same layout as cheat_detection raid bits). Empty or 0 = all raids.")
 
 	flag.Parse()
 	logging.ParseFlags()
@@ -59,9 +61,20 @@ func main() {
 		logger.Fatal("WEBHOOK_URL_INVALID", err, nil)
 	}
 
+	var raidBitmap uint64
+	if strings.TrimSpace(*activityRaidBitmapStr) != "" {
+		v, err := strconv.ParseUint(strings.TrimSpace(*activityRaidBitmapStr), 0, 64)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error: invalid -activity-raid-bitmap:", err)
+			os.Exit(2)
+		}
+		raidBitmap = v
+	}
+
 	criteria := subscriptions.RuleInstanceCriteria{
-		RequireFresh:     *requireFresh,
-		RequireCompleted: *requireCompleted,
+		RequireFresh:       *requireFresh,
+		RequireCompleted:   *requireCompleted,
+		ActivityRaidBitmap: raidBitmap,
 	}
 
 	if *dryRun {
@@ -87,9 +100,10 @@ func main() {
 		fields := map[string]any{
 			"group_id":          gid,
 			"inserted":          inserted,
-			"require_fresh":     criteria.RequireFresh,
-			"require_completed": criteria.RequireCompleted,
-			"clan_in_database":  clanInDB,
+			"require_fresh":        criteria.RequireFresh,
+			"require_completed":    criteria.RequireCompleted,
+			"activity_raid_bitmap": criteria.ActivityRaidBitmap,
+			"clan_in_database":     clanInDB,
 		}
 		if clanInDB {
 			fields["clan_name"] = clanName
@@ -104,7 +118,7 @@ func main() {
 		if err != nil {
 			logger.Fatal("PLAYER_RULES_FAILED", err, nil)
 		}
-		logger.Info("PLAYER_RULES", map[string]any{"rules_inserted": ins, "rules_updated": upd, "players": len(playerMembershipIDs), "require_fresh": criteria.RequireFresh, "require_completed": criteria.RequireCompleted})
+		logger.Info("PLAYER_RULES", map[string]any{"rules_inserted": ins, "rules_updated": upd, "players": len(playerMembershipIDs), "require_fresh": criteria.RequireFresh, "require_completed": criteria.RequireCompleted, "activity_raid_bitmap": criteria.ActivityRaidBitmap})
 	}
 
 	logger.Info("DONE", map[string]any{"destination_id": destID})
@@ -114,8 +128,9 @@ func runDryRun(ctx context.Context, webhookURL string, clanGroupIDs, playerMembe
 	logger.Info("DRY_RUN", map[string]any{
 		"webhook_url":       "(valid)",
 		"note":              "no database writes",
-		"require_fresh":     criteria.RequireFresh,
-		"require_completed": criteria.RequireCompleted,
+		"require_fresh":        criteria.RequireFresh,
+		"require_completed":    criteria.RequireCompleted,
+		"activity_raid_bitmap": criteria.ActivityRaidBitmap,
 	})
 
 	for _, gid := range clanGroupIDs {

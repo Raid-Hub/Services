@@ -180,6 +180,10 @@ func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) 
 			DisplayName:  p.DisplayName,
 			IconURL:      p.IconURL,
 			ClassHash:    p.ClassHash,
+			Finished:     p.Finished,
+			Kills:        p.Kills,
+			Deaths:       p.Deaths,
+			Assists:      p.Assists,
 		})
 	}
 	statsMap := make(map[int64]InstancePlayerStats, len(pre.InstanceStats))
@@ -192,5 +196,5 @@ func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) 
 		}
 	}
 	return assembleRaidDiscordEmbed(msg.InstanceId, pre, pre.ActivityName, pre.VersionName, pre.PathSegment, pre.Feats,
-		profiles, statsMap, pre.StatsUnavailable)
+		profiles, statsMap)
 }
