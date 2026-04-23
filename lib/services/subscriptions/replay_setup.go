@@ -95,13 +95,20 @@ func parseDiscordWebhookIDAndToken(raw string) (webhookID, webhookToken string, 
 			continue
 		}
 		rest := strings.TrimPrefix(u, prefix)
-		parts := strings.SplitN(rest, "/", 2)
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		rest = strings.SplitN(rest, "?", 2)[0]
+		rest = strings.SplitN(rest, "#", 2)[0]
+		rest = strings.TrimSuffix(rest, "/")
+		if strings.Contains(rest, "/") {
+			idx := strings.Index(rest, "/")
+			webhookID = rest[:idx]
+			webhookToken = rest[idx+1:]
+		} else {
 			return "", "", fmt.Errorf("invalid Discord webhook URL path")
 		}
-		token := strings.SplitN(parts[1], "?", 2)[0]
-		token = strings.SplitN(token, "#", 2)[0]
-		return parts[0], token, nil
+		if webhookID == "" || webhookToken == "" || strings.Contains(webhookToken, "/") {
+			return "", "", fmt.Errorf("invalid Discord webhook URL path")
+		}
+		return webhookID, webhookToken, nil
 	}
 	return "", "", fmt.Errorf("invalid Discord webhook URL")
 }

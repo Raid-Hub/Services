@@ -173,6 +173,9 @@ func loadActiveDestinationsByIDs(ctx context.Context, destinationIDs []int64) (m
 		if err := rows.Scan(&id, &webhookURL, &d.ChannelType); err != nil {
 			return nil, err
 		}
+		if !webhookURL.Valid {
+			return nil, fmt.Errorf("destination %d has NULL webhook_url for channel type %q (missing config row?)", id, d.ChannelType)
+		}
 		d.WebhookURL = webhookURL.String
 		out[id] = d
 		destinationCache[id] = destinationCacheEntry{row: d, exp: exp}

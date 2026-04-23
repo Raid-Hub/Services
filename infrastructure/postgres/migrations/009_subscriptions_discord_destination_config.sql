@@ -19,11 +19,9 @@ CREATE TABLE "subscriptions"."discord_destination_config" (
         ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX "idx_discord_destination_config_webhook_id"
-    ON "subscriptions"."discord_destination_config" ("webhook_id");
-
 -- Backfill from legacy subscriptions.destination.webhook_url rows.
 -- Parse and store webhook id/token in plaintext for now.
+-- Use a scalar subquery for regexp_match (portable vs. LATERAL on a scalar function).
 INSERT INTO "subscriptions"."discord_destination_config" (
     "destination_id",
     "webhook_id",
@@ -31,19 +29,95 @@ INSERT INTO "subscriptions"."discord_destination_config" (
 )
 SELECT
     d.id,
-    m[1],
-    m[2]
+    match_row.m[1],
+    match_row.m[2]
 FROM "subscriptions"."destination" d
-CROSS JOIN LATERAL regexp_match(
-    d.webhook_url,
-    '^https://discord(?:app)?\.com/api/webhooks/([^/]+)/([^/?#]+)'
-) AS m
+CROSS JOIN LATERAL (
+    SELECT regexp_match(
+        d.webhook_url,
+        '^https://discord(?:app)?\.com/api/webhooks/([^/]+)/([^/?#]+)'
+    ) AS m
+) AS match_row
 WHERE d.channel_type = 'discord_webhook'
+  AND match_row.m IS NOT NULL
 ON CONFLICT ("destination_id")
 DO UPDATE SET
     "webhook_id" = EXCLUDED."webhook_id",
     "webhook_token" = EXCLUDED."webhook_token",
     "updated_at" = NOW();
+
+-- Same webhook_id can appear on multiple legacy destinations (e.g. discord.com vs discordapp.com URLs).
+-- Consolidate onto the lowest destination_id before enforcing unique(webhook_id).
+WITH ranked AS (
+    SELECT
+        destination_id,
+        webhook_id,
+        ROW_NUMBER() OVER (PARTITION BY webhook_id ORDER BY destination_id ASC) AS row_num
+    FROM "subscriptions"."discord_destination_config"
+),
+keeper AS (
+    SELECT webhook_id, destination_id AS keep_id
+    FROM ranked
+    WHERE row_num = 1
+),
+loser AS (
+    SELECT r.destination_id AS loser_id, k.keep_id
+    FROM ranked r
+    INNER JOIN keeper k ON k.webhook_id = r.webhook_id
+    WHERE r.row_num > 1
+)
+DELETE FROM "subscriptions"."rule" r
+USING loser l
+WHERE r.destination_id = l.loser_id
+  AND EXISTS (
+        SELECT 1
+        FROM "subscriptions"."rule" k
+        WHERE k.destination_id = l.keep_id
+          AND k.is_active = r.is_active
+          AND k.scope = r.scope
+          AND (
+              (r.scope = 'player' AND k.membership_id IS NOT DISTINCT FROM r.membership_id)
+              OR (r.scope = 'clan' AND k.group_id IS NOT DISTINCT FROM r.group_id)
+          );
+
+WITH ranked AS (
+    SELECT
+        destination_id,
+        webhook_id,
+        ROW_NUMBER() OVER (PARTITION BY webhook_id ORDER BY destination_id ASC) AS row_num
+    FROM "subscriptions"."discord_destination_config"
+),
+keeper AS (
+    SELECT webhook_id, destination_id AS keep_id
+    FROM ranked
+    WHERE row_num = 1
+),
+loser AS (
+    SELECT r.destination_id AS loser_id, k.keep_id
+    FROM ranked r
+    INNER JOIN keeper k ON k.webhook_id = r.webhook_id
+    WHERE r.row_num > 1
+)
+UPDATE "subscriptions"."rule" r
+SET destination_id = l.keep_id
+FROM loser l
+WHERE r.destination_id = l.loser_id;
+
+DELETE FROM "subscriptions"."destination" d
+WHERE d.id IN (
+    SELECT x.destination_id
+    FROM (
+        SELECT
+            destination_id,
+            webhook_id,
+            ROW_NUMBER() OVER (PARTITION BY webhook_id ORDER BY destination_id ASC) AS row_num
+        FROM "subscriptions"."discord_destination_config"
+    ) x
+    WHERE x.row_num > 1
+);
+
+CREATE UNIQUE INDEX "idx_discord_destination_config_webhook_id"
+    ON "subscriptions"."discord_destination_config" ("webhook_id");
 
 -- Enforce one Discord destination per channel.
 -- Remove duplicate rows that may exist across guilds for the same channel_id.

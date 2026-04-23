@@ -35,7 +35,7 @@ var (
 	dryRunFlag = flag.Bool("dry-run", false,
 		"Print SubscriptionEventMessage JSON and exit without writing rules or publishing to RabbitMQ")
 	applySubscriptionSetupFlag = flag.Bool("apply-subscription-setup", false,
-		"explicit opt-in: with -https-callback-url or -destination-id, create/update destination and player rules before replay")
+		"explicit opt-in: with -https-callback-url, create the destination and player rules; with -destination-id, validate the destination exists and attach player rules; runs before replay")
 	httpsCallbackURLFlag = flag.String("https-callback-url", "",
 		"HTTPS URL for http_callback JSON delivery (only with -apply-subscription-setup; mutually exclusive with -destination-id)")
 	destinationIDFlag = flag.Int64("destination-id", 0,
@@ -80,7 +80,7 @@ func main() {
 	}
 	if nDestFlags != 0 && !*applySubscriptionSetupFlag {
 		logger.Fatal("SUBSCRIPTION_SETUP_OPT_IN_REQUIRED", fmt.Errorf(
-			"pass -apply-subscription-setup to create/update destination and rules when using -https-callback-url or -destination-id"), nil)
+			"pass -apply-subscription-setup when using -https-callback-url or -destination-id (see flag help)"), nil)
 		return
 	}
 	if *applySubscriptionSetupFlag && nDestFlags == 0 {
