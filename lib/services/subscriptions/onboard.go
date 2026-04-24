@@ -63,7 +63,7 @@ func UpsertClanRuleWithInstanceCriteria(ctx context.Context, destinationID, grou
 	}
 	_, err = postgres.DB.ExecContext(ctx, `
 		UPDATE subscriptions.rule
-		SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5
+		SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5, updated_at = NOW()
 		WHERE destination_id = $1 AND scope = 'clan' AND group_id = $2 AND is_active`,
 		destinationID, groupID, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 	return false, err
@@ -92,7 +92,7 @@ func UpsertPlayerRulesWithInstanceCriteria(ctx context.Context, destinationID in
 		}
 		res2, err := postgres.DB.ExecContext(ctx, `
 			UPDATE subscriptions.rule
-			SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5
+			SET require_fresh = $3, require_completed = $4, activity_raid_bitmap = $5, updated_at = NOW()
 			WHERE destination_id = $1 AND scope = 'player' AND membership_id = $2 AND is_active`,
 			destinationID, mid, cr.RequireFresh, cr.RequireCompleted, int64(cr.ActivityRaidBitmap))
 		if err != nil {
