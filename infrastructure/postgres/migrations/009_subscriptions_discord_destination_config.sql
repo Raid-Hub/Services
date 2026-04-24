@@ -7,8 +7,8 @@ WHERE "channel_type" = 'discord_webhook';
 
 CREATE TABLE "subscriptions"."discord_destination_config" (
     "destination_id" BIGINT PRIMARY KEY,
-    "guild_id" TEXT NOT NULL,
-    "channel_id" TEXT NOT NULL,
+    "guild_id" TEXT,
+    "channel_id" TEXT,
     "webhook_id" TEXT NOT NULL,
     "webhook_token" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW(),
@@ -43,6 +43,20 @@ CREATE TABLE "subscriptions"."http_callback_destination_config" (
 CREATE UNIQUE INDEX "idx_http_callback_destination_config_callback_url"
     ON "subscriptions"."http_callback_destination_config" ("callback_url");
 
+INSERT INTO "subscriptions"."http_callback_destination_config" (
+    "destination_id",
+    "callback_url"
+)
+SELECT
+    d.id,
+    d.webhook_url
+FROM "subscriptions"."destination" d
+WHERE d.channel_type = 'http_callback'
+ON CONFLICT ("destination_id")
+DO UPDATE SET
+    "callback_url" = EXCLUDED."callback_url",
+    "updated_at" = NOW();
+
 DROP INDEX IF EXISTS "idx_destination_channel_type_webhook_url";
 ALTER TABLE "subscriptions"."destination" DROP COLUMN IF EXISTS "webhook_url";
 
@@ -50,7 +64,17 @@ ALTER TABLE "subscriptions"."destination" DROP COLUMN IF EXISTS "webhook_url";
 -- Idempotent for databases that already include updated_at from a revised 008 apply.
 
 ALTER TABLE "subscriptions"."rule"
-    ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT NOW();
+    ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ(3);
+
+UPDATE "subscriptions"."rule"
+SET "updated_at" = COALESCE("updated_at", NOW())
+WHERE "updated_at" IS NULL;
+
+ALTER TABLE "subscriptions"."rule"
+    ALTER COLUMN "updated_at" SET DEFAULT NOW();
+
+ALTER TABLE "subscriptions"."rule"
+    ALTER COLUMN "updated_at" SET NOT NULL;
 
 GRANT SELECT ON "subscriptions"."discord_destination_config" TO readonly;
 GRANT SELECT ON "subscriptions"."http_callback_destination_config" TO readonly;
