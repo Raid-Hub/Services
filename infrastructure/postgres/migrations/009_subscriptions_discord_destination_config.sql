@@ -1,9 +1,9 @@
--- Discord-specific metadata for subscriptions.destination rows.
--- Keeps subscriptions.destination generic while allowing Discord config and policy checks.
---
--- This table is canonical for Discord destination details.
+-- Split channel-specific fields out of subscriptions.destination: Discord (guild/channel/webhook
+-- ids) and http_callback (callback URL). Legacy discord_webhook rows cannot be migrated (URL
+-- only), so drop them and their rules (CASCADE).
 
--- Legacy cleanup for environments that still have URL-based destination records.
+DELETE FROM "subscriptions"."destination"
+WHERE "channel_type" = 'discord_webhook';
 
 CREATE TABLE "subscriptions"."discord_destination_config" (
     "destination_id" BIGINT PRIMARY KEY,
@@ -19,62 +19,12 @@ CREATE TABLE "subscriptions"."discord_destination_config" (
         ON DELETE CASCADE
 );
 
--- Backfill from legacy subscriptions.destination.webhook_url rows.
--- Parse and store webhook id/token in plaintext for now.
--- Use a scalar subquery for regexp_match (portable vs. LATERAL on a scalar function).
-INSERT INTO "subscriptions"."discord_destination_config" (
-    "destination_id",
-    "webhook_id",
-    "webhook_token"
-)
-SELECT
-    d.id,
-    match_row.m[1],
-    match_row.m[2]
-FROM "subscriptions"."destination" d
-CROSS JOIN LATERAL (
-    SELECT regexp_match(
-        d.webhook_url,
-        '^https://discord(?:app)?\.com/api/webhooks/([^/]+)/([^/?#]+)'
-    ) AS m
-) AS match_row
-WHERE d.channel_type = 'discord_webhook'
-  AND match_row.m IS NOT NULL
-ON CONFLICT ("destination_id")
-DO UPDATE SET
-    "webhook_id" = EXCLUDED."webhook_id",
-    "webhook_token" = EXCLUDED."webhook_token",
-    "updated_at" = NOW();
-
 CREATE UNIQUE INDEX "idx_discord_destination_config_webhook_id"
     ON "subscriptions"."discord_destination_config" ("webhook_id");
 
--- Enforce one Discord destination per channel.
--- Remove duplicate rows that may exist across guilds for the same channel_id.
--- Keep the most recently updated destination for each channel.
-WITH ranked AS (
-    SELECT
-        destination_id,
-        channel_id,
-        ROW_NUMBER() OVER (
-            PARTITION BY channel_id
-            ORDER BY updated_at DESC, created_at DESC, destination_id DESC
-        ) AS row_num
-    FROM "subscriptions"."discord_destination_config"
-    WHERE channel_id IS NOT NULL
-),
-to_delete AS (
-    SELECT destination_id
-    FROM ranked
-    WHERE row_num > 1
-)
-DELETE FROM "subscriptions"."discord_destination_config" d
-USING to_delete td
-WHERE d.destination_id = td.destination_id;
-
+-- One Discord destination per channel (table is new; legacy discord_webhook rows were dropped above).
 CREATE UNIQUE INDEX "idx_discord_destination_config_channel_id"
-    ON "subscriptions"."discord_destination_config" ("channel_id")
-    WHERE "channel_id" IS NOT NULL;
+    ON "subscriptions"."discord_destination_config" ("channel_id");
 
 -- HTTPS JSON callback URL for subscriptions.destination rows (channel_type = http_callback).
 -- Canonical URL storage; subscriptions.destination no longer carries webhook_url.
@@ -109,6 +59,22 @@ DO UPDATE SET
 
 DROP INDEX IF EXISTS "idx_destination_channel_type_webhook_url";
 ALTER TABLE "subscriptions"."destination" DROP COLUMN IF EXISTS "webhook_url";
+
+-- subscriptions.rule: track last mutation (API / Hermes upserts and deactivations).
+-- Idempotent for databases that already include updated_at from a revised 008 apply.
+
+ALTER TABLE "subscriptions"."rule"
+    ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ(3);
+
+UPDATE "subscriptions"."rule"
+SET "updated_at" = COALESCE("updated_at", NOW())
+WHERE "updated_at" IS NULL;
+
+ALTER TABLE "subscriptions"."rule"
+    ALTER COLUMN "updated_at" SET DEFAULT NOW();
+
+ALTER TABLE "subscriptions"."rule"
+    ALTER COLUMN "updated_at" SET NOT NULL;
 
 GRANT SELECT ON "subscriptions"."discord_destination_config" TO readonly;
 GRANT SELECT ON "subscriptions"."http_callback_destination_config" TO readonly;
