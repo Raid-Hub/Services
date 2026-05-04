@@ -29,6 +29,13 @@ func UpdateActivityHistory(ctx context.Context, membershipId int64) error {
 		})
 		return nil
 	}
+	if p.MembershipType == nil {
+		logger.Warn("PLAYER_MEMBERSHIP_TYPE_UNKNOWN", nil, map[string]any{
+			logging.MEMBERSHIP_ID: membershipId,
+		})
+		return nil
+	}
+	membershipType := *p.MembershipType
 
 	// Get all characters for this player
 	characters, err := GetPlayerCharacters(ctx, membershipId)
@@ -50,7 +57,7 @@ func UpdateActivityHistory(ctx context.Context, membershipId int64) error {
 		go func(characterId int64) {
 			defer wg.Done()
 			// Fetch activity history for this character
-			result := bungie.Client.GetActivityHistoryInChannel(ctx, 2, membershipId, characterId, 5, instanceIds)
+			result := bungie.Client.GetActivityHistoryInChannel(ctx, membershipType, membershipId, characterId, 5, instanceIds)
 
 			if result.Error != nil {
 				logger.Warn("ACTIVITY_HISTORY_FETCH_ERROR", result.Error, map[string]any{
