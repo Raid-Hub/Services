@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"raidhub/lib/env"
+	"raidhub/lib/utils/network"
 	"raidhub/lib/utils/retry"
 
 	"github.com/getsentry/sentry-go"
@@ -123,7 +124,7 @@ func isInitialized() bool {
 
 // shouldReportErrorToSentry returns false for expected shutdown/cancellation noise (no Sentry event).
 func shouldReportErrorToSentry(err error) bool {
-	return err != nil && !IsBenignCancellationOrShutdown(err)
+	return err != nil && !IsBenignCancellationOrShutdown(err) && !network.IsCloudflareError(err)
 }
 
 // IsBenignCancellationOrShutdown reports context cancellation, retry cancel wraps, or process shutdown
