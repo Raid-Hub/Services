@@ -64,7 +64,15 @@ func parseMembershipTypeHint(messageData map[string]any) int {
 		return 0
 	}
 
-	if value, ok := messageData["membershipInfo.membershipType"]; ok {
+	// Bungie may return the membership type hint under different keys depending on the endpoint/error.
+	// "membershipType" is used in InvalidParameters errors (e.g. {membershipType: TigerEgs}).
+	// "membershipInfo.membershipType" may be used in other contexts.
+	for _, key := range []string{"membershipType", "membershipInfo.membershipType"} {
+		value, ok := messageData[key]
+		if !ok {
+			continue
+		}
+
 		switch v := value.(type) {
 		case string:
 			if alias, ok := membershipTypeAliases[v]; ok {
@@ -77,10 +85,12 @@ func parseMembershipTypeHint(messageData map[string]any) int {
 			fmt.Errorf("improper membership type response: %v", messageData),
 			map[string]any{
 				"message_data": messageData,
+				"hint_key":     key,
 			},
 		)
-
+		return 0
 	}
+
 	return 0
 }
 
