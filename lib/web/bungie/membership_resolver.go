@@ -64,7 +64,14 @@ func parseMembershipTypeHint(messageData map[string]any) int {
 		return 0
 	}
 
-	if value, ok := messageData["membershipInfo.membershipType"]; ok {
+	// Bungie may return the membership type hint under different keys depending on the endpoint/error.
+	// Check both "membershipType" (e.g. {membershipType: TigerEgs}) and the dot-notation variant.
+	for _, key := range []string{"membershipType", "membershipInfo.membershipType"} {
+		value, ok := messageData[key]
+		if !ok {
+			continue
+		}
+
 		switch v := value.(type) {
 		case string:
 			if alias, ok := membershipTypeAliases[v]; ok {
@@ -79,8 +86,9 @@ func parseMembershipTypeHint(messageData map[string]any) int {
 				"message_data": messageData,
 			},
 		)
-
+		return 0
 	}
+
 	return 0
 }
 
