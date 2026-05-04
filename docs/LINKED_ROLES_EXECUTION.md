@@ -4,7 +4,7 @@
 
 | Repo | Branch | Base |
 |------|--------|------|
-| [RaidHub-Services](https://github.com/Raid-Hub/RaidHub-Services) | `feat/discord-linked-roles` | `main` |
+| [Services](https://github.com/Raid-Hub/Services) | `feat/discord-linked-roles` | `main` |
 | [RaidHub-Website](https://github.com/Raid-Hub/Web-App) | `feat/discord-linked-roles` | `main` |
 
 **Canonical spec (in each repo):** [`docs/DISCORD_LINKED_ROLES.md`](./DISCORD_LINKED_ROLES.md) (Part VII = implementable checklist). Keep this file and the spec in sync when you edit either; merge **Website PR before** enabling workers in prod (see §Dependency rule).
@@ -26,7 +26,7 @@ Ship in **two PRs** so Website (scopes + refresh) can merge and soak **before** 
 
 **Merge when:** CI green; smoke test link + session on staging Turso.
 
-### PR 2 — Services second (`RaidHub-Services` → `feat/discord-linked-roles`)
+### PR 2 — Services second (`Services` → `feat/discord-linked-roles`)
 
 **Goal:** Post–new-instance, debounced push to Discord using Turso read + Postgres stats.
 
