@@ -4,6 +4,8 @@
 
 RaidHub Services is a microservices architecture built in Go, managing data collection, processing, and analysis for Destiny 2 raid completion tracking. The system is designed to handle high-throughput PGCR (Post-Game Carnage Report) crawling, intelligent queue-based processing, and comprehensive cheat detection.
 
+**See also:** [Discord Linked Roles — PRD, architecture, and v1 ship spec (Option A)](./DISCORD_LINKED_ROLES.md) — spans **RaidHub-Website** (Turso / NextAuth) and **RaidHub-Services** (Hermes, Postgres).
+
 ## Folder Structure
 
 ```
