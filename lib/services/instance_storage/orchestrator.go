@@ -7,6 +7,7 @@ import (
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring/global_metrics"
+	"raidhub/lib/services/discordlinkedroles"
 	"raidhub/lib/services/subscriptions"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
@@ -89,6 +90,10 @@ func StorePGCR(ctx context.Context, inst *dto.Instance, raw *bungie.DestinyPostG
 
 	// 5. Get activity info for metrics and logging
 	activityInfo, err := getActivityInfo(inst.Hash)
+	if err != nil {
+		logger.Warn("ACTIVITY_INFO_LOOKUP_FAILED", err, map[string]any{logging.INSTANCE_ID: inst.InstanceId})
+		activityInfo = ActivityInfo{}
+	}
 
 	// Publish side effects (only if instance was new)
 	if instanceIsNew && sideEffects != nil {
@@ -107,6 +112,7 @@ func StorePGCR(ctx context.Context, inst *dto.Instance, raw *bungie.DestinyPostG
 	if instanceIsNew {
 		// Subscription pipeline entry (stage 1 queue): see lib/services/subscriptions/README.md
 		publishing.PublishJSONMessage(ctx, routing.InstanceParticipantRefresh, subscriptions.NewSubscriptionEvent(inst))
+		discordlinkedroles.PublishAfterNewInstance(ctx, inst)
 	}
 
 	// Track overall storage duration and success

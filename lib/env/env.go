@@ -87,6 +87,12 @@ var (
 	SentryDSN   string
 	Environment string
 	Release     string
+
+	// Discord linked roles (optional; Hermes + instance_storage)
+	DiscordLinkedRolesEnabled      bool
+	DiscordLinkedRolesTursoURL     string
+	DiscordApplicationID           string
+	DiscordLinkedRolesMetadataKey  string
 )
 
 var envIssues []string
@@ -178,6 +184,12 @@ func init() {
 	SentryDSN = getEnv("SENTRY_DSN")
 	Environment = getEnvWithDefault("ENVIRONMENT", "development")
 	Release = getEnv("RELEASE")
+
+	dlr := getEnv("DISCORD_LINKED_ROLES_ENABLED")
+	DiscordLinkedRolesEnabled = dlr == "true" || dlr == "1"
+	DiscordLinkedRolesTursoURL = getEnv("DISCORD_LINKED_ROLES_TURSO_URL")
+	DiscordApplicationID = getEnv("DISCORD_APPLICATION_ID")
+	DiscordLinkedRolesMetadataKey = getEnvWithDefault("DISCORD_LINKED_ROLES_METADATA_KEY", "raidhub_total_clears")
 
 	if len(envIssues) > 0 {
 		panic("required environment variables are not set: " + strings.Join(envIssues, ", "))

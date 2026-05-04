@@ -86,6 +86,7 @@ func main() {
 		qw.InstanceParticipantRefreshTopic(),
 		qw.SubscriptionMatchTopic(),
 		qw.SubscriptionDeliveryTopic(),
+		qw.DiscordRoleMetadataSyncTopic(),
 	}
 
 	var topicManagers []*TopicManager

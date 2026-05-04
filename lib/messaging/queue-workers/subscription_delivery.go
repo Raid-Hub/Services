@@ -5,7 +5,6 @@ package queueworkers
 
 import (
 	"encoding/json"
-	"time"
 
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/messaging/processing"
@@ -15,20 +14,6 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
-
-// subscriptionDeliveryRetryDelay is the delay before the redelivered message is consumed when
-// republishing with x-retry-count=newRetryCount. Counts 1–10: 5s; 11–15: 12s→60s; 16–17: 30m.
-func subscriptionDeliveryRetryDelay(newRetryCount int) time.Duration {
-	switch {
-	case newRetryCount <= 10:
-		return 5 * time.Second
-	case newRetryCount <= 15:
-		step := newRetryCount - 11 // 0..4 → 12s, 24s, 36s, 48s, 60s
-		return time.Duration(12+step*12) * time.Second
-	default:
-		return 30 * time.Minute
-	}
-}
 
 // SubscriptionDeliveryTopic POSTs outbound URLs (Discord webhooks or HTTPS JSON callbacks).
 func SubscriptionDeliveryTopic() processing.Topic {
@@ -45,7 +30,7 @@ func SubscriptionDeliveryTopic() processing.Topic {
 		ScaleDownPercent:   0.1,
 		// 17 failed attempts max: 10×5s delay, then 5 steps ramping to 60s, then 2×30m, then drop.
 		MaxRetryCount: 17,
-		RetryDelay:    subscriptionDeliveryRetryDelay,
+		RetryDelay:    HermesOutboundHTTPRetryDelay,
 	}, processSubscriptionDelivery)
 }
 

@@ -7,6 +7,8 @@ import (
 const (
 	StatusDimension    = "status"
 	OperationDimension = "operation"
+	// DiscordLRResultLabel matches PRD / observability tables (outcome dimension).
+	DiscordLRResultLabel = "result"
 )
 
 var GetPostGameCarnageReportRequest = prometheus.NewHistogramVec(
@@ -63,6 +65,34 @@ var SubscriptionDeliverySends = prometheus.NewCounterVec(
 	[]string{"channel_type", StatusDimension},
 )
 
+// DiscordLRWork counts linked-role metadata sync attempts (Hermes discord_role_metadata_sync worker).
+var DiscordLRWork = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "discord_lr_work_total",
+		Help: "Discord linked-role metadata sync attempts by outcome",
+	},
+	[]string{DiscordLRResultLabel},
+)
+
+// DiscordLRPublishTotal counts Rabbit publishes to discord_role_metadata_sync (Hermes producer; API uses the same name).
+var DiscordLRPublishTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "discord_lr_publish_total",
+		Help: "Publishes to discord_role_metadata_sync queue by result",
+	},
+	[]string{DiscordLRResultLabel},
+)
+
+// DiscordLRWorkDuration is wall time for one HandleMessage run (Turso, Postgres, Discord HTTP).
+var DiscordLRWorkDuration = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "discord_lr_work_duration_seconds",
+		Help:    "Duration of one discord_role_metadata_sync message handler by outcome",
+		Buckets: []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60},
+	},
+	[]string{DiscordLRResultLabel},
+)
+
 // RegisterGlobalMetrics registers all metrics that can be exported by any app
 func RegisterGlobalMetrics() {
 	prometheus.MustRegister(GetPostGameCarnageReportRequest)
@@ -71,4 +101,7 @@ func RegisterGlobalMetrics() {
 	prometheus.MustRegister(InstanceStorageOperationDuration)
 	prometheus.MustRegister(PublishingOperations)
 	prometheus.MustRegister(SubscriptionDeliverySends)
+	prometheus.MustRegister(DiscordLRWork)
+	prometheus.MustRegister(DiscordLRPublishTotal)
+	prometheus.MustRegister(DiscordLRWorkDuration)
 }
