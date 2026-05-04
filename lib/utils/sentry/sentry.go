@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"raidhub/lib/env"
-	"raidhub/lib/utils/network"
 	"raidhub/lib/utils/retry"
 
 	"github.com/getsentry/sentry-go"
@@ -124,7 +123,16 @@ func isInitialized() bool {
 
 // shouldReportErrorToSentry returns false for expected shutdown/cancellation noise (no Sentry event).
 func shouldReportErrorToSentry(err error) bool {
-	return err != nil && !IsBenignCancellationOrShutdown(err) && !network.IsCloudflareError(err)
+	return err != nil && !IsBenignCancellationOrShutdown(err) && !isCloudflareEdgeError(err)
+}
+
+// isCloudflareEdgeError matches network.IsCloudflareError (cloudflare substring in message) without
+// importing raidhub/lib/utils/network, which would cycle: network → logging → sentry.
+func isCloudflareEdgeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "cloudflare")
 }
 
 // IsBenignCancellationOrShutdown reports context cancellation, retry cancel wraps, or process shutdown
