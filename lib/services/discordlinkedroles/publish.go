@@ -23,7 +23,7 @@ func PublishAfterNewInstance(ctx context.Context, inst *dto.Instance) {
 	}
 	if env.DiscordApplicationID == "" || env.DiscordLinkedRolesTursoURL == "" {
 		publishLogger.Debug("DISCORD_ROLE_METADATA_PUBLISH_SKIPPED", map[string]any{
-			"reason": "missing_env",
+			"reason":            "missing_env",
 			logging.INSTANCE_ID: inst.InstanceId,
 		})
 		return

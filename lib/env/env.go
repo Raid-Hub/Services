@@ -89,10 +89,10 @@ var (
 	Release     string
 
 	// Discord linked roles (optional; Hermes + instance_storage)
-	DiscordLinkedRolesEnabled      bool
-	DiscordLinkedRolesTursoURL     string
-	DiscordApplicationID           string
-	DiscordLinkedRolesMetadataKey  string
+	DiscordLinkedRolesEnabled     bool
+	DiscordLinkedRolesTursoURL    string
+	DiscordApplicationID          string
+	DiscordLinkedRolesMetadataKey string
 )
 
 var envIssues []string
