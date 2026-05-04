@@ -171,7 +171,7 @@ func getFirstSeenAndPrivacy(ctx context.Context, membershipType int, membershipI
 	}
 
 	// Fetch activities to determine first_seen and check privacy (single API call)
-	historyResult, err := bungie.Client.GetActivityHistoryPage(ctx, membershipType, membershipId, firstCharacterId, 250, 0, bungie.ModeStory)
+	historyResult, err := bungie.Client.GetActivityHistoryPage(ctx, membershipType, membershipId, firstCharacterId, 250, 0, bungie.ModeRaid)
 	// Check privacy from API response
 	if historyResult.BungieErrorCode == bungie.DestinyPrivacyRestriction {
 		// Privacy restriction error - history is private (not an error, just private)

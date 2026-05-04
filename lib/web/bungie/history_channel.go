@@ -24,7 +24,7 @@ type ActivityHistoryResult struct {
 // Returns an ActivityHistoryResult indicating if a privacy error occurred.
 func (c *BungieClient) GetActivityHistoryInChannel(ctx context.Context, membershipType int, membershipId int64, characterId int64, concurrentPages int, out chan int64) ActivityHistoryResult {
 	// Fetch first page to check for privacy errors
-	result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, 0, 4)
+	result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, 0, ModeRaid)
 	if result.BungieErrorCode == DestinyPrivacyRestriction {
 		return ActivityHistoryResult{PrivacyErrorCode: result.BungieErrorCode}
 	} else if err != nil {
@@ -51,7 +51,7 @@ func (c *BungieClient) GetActivityHistoryInChannel(ctx context.Context, membersh
 			for {
 				select {
 				case page := <-pageChan:
-					result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, page, 4)
+					result, err := c.GetActivityHistoryPage(ctx, membershipType, membershipId, characterId, 250, page, ModeRaid)
 					if err != nil {
 						logger.Warn(API_ERROR, err, map[string]any{
 							logging.OPERATION: "fetch_activity_history",
