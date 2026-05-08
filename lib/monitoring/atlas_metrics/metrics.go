@@ -23,7 +23,7 @@ var PGCRCrawlLag = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name: "pgcr_crawl_summary_lag_seconds",
 		Buckets: []float64{
-			5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60,
+			5, 10, 15, 20, 25, 30, 35, 40, 45, 60,
 			90, 300, 1800,
 			7200, 14400, 21600, 28800, 36000, 43200, 57600, 72000, 86400, 172800, 259200,
 		},
