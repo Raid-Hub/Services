@@ -21,7 +21,7 @@ var PGCRCrawlStatus = prometheus.NewCounterVec(
 
 var PGCRCrawlLag = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
-		Name:    "pgcr_crawl_summary_lag_seconds",
+		Name: "pgcr_crawl_summary_lag_seconds",
 		Buckets: []float64{
 			5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60,
 			90, 300, 1800,
