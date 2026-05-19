@@ -20,4 +20,7 @@ const (
 	InstanceParticipantRefresh = "instance_participant_refresh"
 	SubscriptionMatch          = "subscription_match"
 	SubscriptionDelivery       = "subscription_delivery"
+
+	// Discord linked roles: push application role connection metadata (Hermes worker; see discordlinkedroles).
+	DiscordRoleMetadataSync = "discord_role_metadata_sync"
 )
