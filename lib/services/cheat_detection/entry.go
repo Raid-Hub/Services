@@ -113,6 +113,8 @@ func getActivityHeuristic(instance *Instance) *ActivityHeuristic {
 		return &CrotasEndHeuristic
 	case 101:
 		return &PantheonHeuristic
+	case 102:
+		return &Pantheon2Heuristic
 	case 14:
 		return &SalvationsEdgeHeuristic
 	case 15:

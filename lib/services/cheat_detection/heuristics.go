@@ -219,6 +219,18 @@ var PantheonHeuristic = ActivityHeuristic{
 	MinCheckpointKills: 75,
 }
 
+var Pantheon2Heuristic = ActivityHeuristic{
+	ActivityId:     102,
+	RaidBit:        Pantheon2,
+	RaidName:       "Pantheon",
+	CheckpointName: "a Pantheon checkpoint",
+	SpeedrunCurve: func(_ float64) float64 {
+		return 570
+	},
+	MinFreshKills:      335,
+	MinCheckpointKills: 75,
+}
+
 var CrotasEndHeuristic = ActivityHeuristic{
 	ActivityId:       13,
 	RaidBit:          CrotasEnd,

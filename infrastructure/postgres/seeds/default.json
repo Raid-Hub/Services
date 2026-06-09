@@ -207,6 +207,18 @@
             "week_one_end": null,
             "milestone_hash": null,
             "splash_path": "pantheon"
+          },
+          {
+            "id": 102,
+            "name": "Pantheon",
+            "is_sunset": false,
+            "is_raid": false,
+            "path": "pantheon",
+            "release_date": "2026-06-09T17:00:00Z",
+            "contest_end": null,
+            "week_one_end": null,
+            "milestone_hash": null,
+            "splash_path": "pantheon"
           }
         ]
       }
@@ -302,14 +314,14 @@
           {
             "id": 132,
             "name": "Calus Resplendent",
-            "associated_activity_id": 101,
+            "associated_activity_id": 102,
             "path": "calus",
             "is_challenge_mode": false
           },
           {
             "id": 133,
             "name": "Morgeth Surpassing",
-            "associated_activity_id": 101,
+            "associated_activity_id": 102,
             "path": "morgeth",
             "is_challenge_mode": false
           }
@@ -965,13 +977,13 @@
             "is_world_first": false
           },
           {
-            "activity_id": 101,
+            "activity_id": 102,
             "version_id": 132,
             "hash": 2530656885,
             "is_world_first": false
           },
           {
-            "activity_id": 101,
+            "activity_id": 102,
             "version_id": 133,
             "hash": 1516551982,
             "is_world_first": false

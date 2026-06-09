@@ -37,7 +37,7 @@ const (
 	Raid31
 	Raid32
 	Pantheon
-	Bit34
+	Pantheon2
 	Bit35
 	Bit36
 	Bit37
