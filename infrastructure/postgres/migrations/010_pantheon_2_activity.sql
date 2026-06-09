@@ -1,5 +1,5 @@
 -- Schema only: extend pantheon version leaderboard MV to activity 102.
--- Activity/version/hash data steps: docs/pantheon-2.0-deploy-plan.md
+-- Activity/version/hash data: production steps in PR #46 description
 
 DROP MATERIALIZED VIEW IF EXISTS "leaderboard"."individual_pantheon_version_leaderboard";
 
