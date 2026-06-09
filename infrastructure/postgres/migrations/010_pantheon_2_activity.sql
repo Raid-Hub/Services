@@ -1,5 +1,5 @@
 -- Schema only: extend pantheon version leaderboard MV to activity 102.
--- Activity/version/hash definitions live in seeds (make seed).
+-- Activity/version/hash data steps: docs/pantheon-2.0-deploy-plan.md
 
 DROP MATERIALIZED VIEW IF EXISTS "leaderboard"."individual_pantheon_version_leaderboard";
 
