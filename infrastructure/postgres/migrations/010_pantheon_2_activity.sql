@@ -1,7 +1,7 @@
 -- Permanent Pantheon (activity 102) shares the version leaderboard MV with original The Pantheon (101).
 
 UPDATE "definitions"."activity_definition"
-SET "is_sunset" = true
+SET "is_sunset" = true, "path" = 'thepantheon'
 WHERE "id" = 101;
 
 INSERT INTO "definitions"."activity_definition" (

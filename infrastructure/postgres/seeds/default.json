@@ -201,7 +201,7 @@
             "name": "The Pantheon",
             "is_sunset": true,
             "is_raid": false,
-            "path": "pantheon",
+            "path": "thepantheon",
             "release_date": "2024-04-30T17:00:00Z",
             "contest_end": null,
             "week_one_end": null,
