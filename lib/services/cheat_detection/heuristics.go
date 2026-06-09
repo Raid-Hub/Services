@@ -219,16 +219,12 @@ var PantheonHeuristic = ActivityHeuristic{
 	MinCheckpointKills: 75,
 }
 
+// Pantheon2Heuristic: Calus (132) and Morgeth (133) lack tuned speedrun/kill/lowman data yet.
 var Pantheon2Heuristic = ActivityHeuristic{
 	ActivityId:     102,
 	RaidBit:        Pantheon2,
 	RaidName:       "Pantheon",
 	CheckpointName: "a Pantheon checkpoint",
-	SpeedrunCurve: func(_ float64) float64 {
-		return 570
-	},
-	MinFreshKills:      335,
-	MinCheckpointKills: 75,
 }
 
 var CrotasEndHeuristic = ActivityHeuristic{
