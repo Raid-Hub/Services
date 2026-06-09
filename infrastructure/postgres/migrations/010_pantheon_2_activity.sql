@@ -1,4 +1,44 @@
--- Extend pantheon version leaderboard to include activity 102 (definitions come from seeds).
+-- Permanent Pantheon (activity 102) shares the version leaderboard MV with original The Pantheon (101).
+
+UPDATE "definitions"."activity_definition"
+SET "is_sunset" = true
+WHERE "id" = 101;
+
+INSERT INTO "definitions"."activity_definition" (
+    "id", "name", "is_sunset", "is_raid", "path", "release_date", "contest_end", "week_one_end", "milestone_hash", "splash_path"
+) VALUES (
+    102, 'Pantheon', false, false, 'pantheon', '2026-06-09T17:00:00Z', NULL, NULL, NULL, 'pantheon'
+) ON CONFLICT ("id") DO UPDATE SET
+    "name" = EXCLUDED."name",
+    "path" = EXCLUDED."path",
+    "release_date" = EXCLUDED."release_date",
+    "splash_path" = EXCLUDED."splash_path";
+
+UPDATE "definitions"."version_definition"
+SET "associated_activity_id" = 102
+WHERE "id" IN (132, 133);
+
+INSERT INTO "definitions"."version_definition" (
+    "id", "name", "associated_activity_id", "path", "is_challenge_mode"
+) VALUES (
+    134, 'Pantheon Gauntlet', 102, 'gauntlet', false
+) ON CONFLICT ("id") DO UPDATE SET
+    "name" = EXCLUDED."name",
+    "associated_activity_id" = EXCLUDED."associated_activity_id",
+    "path" = EXCLUDED."path";
+
+UPDATE "definitions"."activity_version"
+SET "activity_id" = 102
+WHERE "hash" IN (2530656885, 1516551982);
+
+-- Placeholder until Bungie gauntlet activity hash is known (update hash when available).
+INSERT INTO "definitions"."activity_version" (
+    "hash", "activity_id", "version_id", "is_world_first"
+) VALUES (
+    0, 102, 134, false
+) ON CONFLICT ("hash") DO UPDATE SET
+    "activity_id" = EXCLUDED."activity_id",
+    "version_id" = EXCLUDED."version_id";
 
 DROP MATERIALIZED VIEW IF EXISTS "leaderboard"."individual_pantheon_version_leaderboard";
 
