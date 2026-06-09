@@ -9,13 +9,15 @@ import (
 )
 
 // subscriptionRaidBitForActivityID returns the raid bitmap bit for definitions.activity_definition.id.
-// Layout matches lib/services/cheat_detection raid iota (1<<n for n = activity id for raids 1–16; Pantheon id 101 → 1<<33).
+// Layout matches lib/services/cheat_detection raid iota (1<<n for n = activity id for raids 1–16; The Pantheon id 101 → 1<<33; Pantheon id 102 → 1<<34).
 func subscriptionRaidBitForActivityID(activityID int64) (uint64, bool) {
 	switch {
 	case activityID >= 1 && activityID <= 32:
 		return uint64(1) << uint(activityID), true
 	case activityID == 101:
 		return uint64(1) << 33, true
+	case activityID == 102:
+		return uint64(1) << 34, true
 	default:
 		return 0, false
 	}

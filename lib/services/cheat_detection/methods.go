@@ -206,38 +206,43 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 	}
 
 	if instance.Completed && isFresh {
-		estimatedWorldRecordAtClearTime := h.SpeedrunCurve(instance.DaysAfterRelease)
-
-		bodies := min(float64(totalTimeForAllPlayers)/float64(instance.DurationSeconds), 6)
-		adjustedExpectedRecordTime := estimatedWorldRecordAtClearTime * math.Pow(6/bodies, 0.2)
-
-		// timeRatio < 1 means the instance was cleared faster than expected
-		completionTimeRatio := float64(instance.DurationSeconds-25) / adjustedExpectedRecordTime
-
-		cheatedTimePrb = completionTimeCurve(completionTimeRatio)
-		cheatedTimeExplanation = fmt.Sprintf(
-			"cleared %s in %02d:%02d, expected %02d:%02d (adjusted for player count: %d:%d)",
-			h.RaidName, instance.DurationSeconds/60, instance.DurationSeconds%60,
-			int(estimatedWorldRecordAtClearTime/60), int(estimatedWorldRecordAtClearTime)%60,
-			int(adjustedExpectedRecordTime/60), int(adjustedExpectedRecordTime)%60,
-		)
-
 		finalExplanations = append(finalExplanations, "fresh completion")
-		ratio := float64(totalInstanceKills+1) / float64(h.MinFreshKills+1)
-		// Instances with a lower min kill count are harder to flag
-		totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinFreshKills+1))
-		totalKillsCheatExplanation = fmt.Sprintf("cleared fresh %s with %d kills, expected at least %d",
-			h.RaidName, totalInstanceKills, h.MinFreshKills)
 
-		// adjust really low kill counts to be more likely to be flagged
-		localMin := (min(h.MinFreshKills, 30))
-		if totalInstanceKills < localMin {
-			totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
+		if h.SpeedrunCurve != nil {
+			estimatedWorldRecordAtClearTime := h.SpeedrunCurve(instance.DaysAfterRelease)
+
+			bodies := min(float64(totalTimeForAllPlayers)/float64(instance.DurationSeconds), 6)
+			adjustedExpectedRecordTime := estimatedWorldRecordAtClearTime * math.Pow(6/bodies, 0.2)
+
+			// timeRatio < 1 means the instance was cleared faster than expected
+			completionTimeRatio := float64(instance.DurationSeconds-25) / adjustedExpectedRecordTime
+
+			cheatedTimePrb = completionTimeCurve(completionTimeRatio)
+			cheatedTimeExplanation = fmt.Sprintf(
+				"cleared %s in %02d:%02d, expected %02d:%02d (adjusted for player count: %d:%d)",
+				h.RaidName, instance.DurationSeconds/60, instance.DurationSeconds%60,
+				int(estimatedWorldRecordAtClearTime/60), int(estimatedWorldRecordAtClearTime)%60,
+				int(adjustedExpectedRecordTime/60), int(adjustedExpectedRecordTime)%60,
+			)
 		}
 
-		if totalKillsCheatPrb > Threshold {
-			finalResult.Reason |= TotalInstanceKills
-			finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
+		if h.MinFreshKills > 0 {
+			ratio := float64(totalInstanceKills+1) / float64(h.MinFreshKills+1)
+			// Instances with a lower min kill count are harder to flag
+			totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinFreshKills+1))
+			totalKillsCheatExplanation = fmt.Sprintf("cleared fresh %s with %d kills, expected at least %d",
+				h.RaidName, totalInstanceKills, h.MinFreshKills)
+
+			// adjust really low kill counts to be more likely to be flagged
+			localMin := (min(h.MinFreshKills, 30))
+			if totalInstanceKills < localMin {
+				totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
+			}
+
+			if totalKillsCheatPrb > Threshold {
+				finalResult.Reason |= TotalInstanceKills
+				finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
+			}
 		}
 
 		if cheatedTimePrb > Threshold {
@@ -253,21 +258,24 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 		finalResult.Probability = cumulativeProbability(totalKillsCheatPrb, cheatedTimePrb, timeDilationPrb)
 	} else if instance.Completed {
 		finalExplanations = append(finalExplanations, "checkpoint completion")
-		ratio := float64(totalInstanceKills+1) / float64(h.MinCheckpointKills+1)
-		// Instances with a lower min kill count are harder to flag
-		totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinCheckpointKills+1))
-		totalKillsCheatExplanation = fmt.Sprintf("cleared %s with %d kills, expected at least %d",
-			h.CheckpointName, totalInstanceKills, h.MinCheckpointKills)
 
-		// adjust really low kill counts to be more likely to be flagged
-		localMin := (min(h.MinFreshKills, 12))
-		if totalInstanceKills < localMin {
-			totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
-		}
+		if h.MinCheckpointKills > 0 {
+			ratio := float64(totalInstanceKills+1) / float64(h.MinCheckpointKills+1)
+			// Instances with a lower min kill count are harder to flag
+			totalKillsCheatPrb = totalInstanceKillsCurve(ratio) * totalInstanceKillsSecondaryCurve(float64(h.MinCheckpointKills+1))
+			totalKillsCheatExplanation = fmt.Sprintf("cleared %s with %d kills, expected at least %d",
+				h.CheckpointName, totalInstanceKills, h.MinCheckpointKills)
 
-		if totalKillsCheatPrb > Threshold {
-			finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
-			finalResult.Reason |= TotalInstanceKills
+			// adjust really low kill counts to be more likely to be flagged
+			localMin := (min(h.MinFreshKills, 12))
+			if totalInstanceKills < localMin {
+				totalKillsCheatPrb = math.Pow(totalKillsCheatPrb, (0.5 + float64(totalInstanceKills)/float64(2*localMin)))
+			}
+
+			if totalKillsCheatPrb > Threshold {
+				finalExplanations = append(finalExplanations, totalKillsCheatExplanation)
+				finalResult.Reason |= TotalInstanceKills
+			}
 		}
 
 		if timeDilationPrb > Threshold {
