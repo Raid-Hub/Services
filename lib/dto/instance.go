@@ -18,7 +18,6 @@ type Instance struct {
 	Score           int              `json:"score"`
 	Players         []InstancePlayer `json:"players"`
 	SkullHashes     []uint32         `json:"skullHashes"`
-	DifficultyTier  *string          `json:"difficultyTier"`
 }
 
 type InstancePlayer struct {
