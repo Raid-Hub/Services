@@ -9,6 +9,7 @@ import (
 
 	"raidhub/lib/messaging/messages"
 	"raidhub/lib/services/player"
+	"raidhub/lib/utils/cdn"
 )
 
 // attachDestinationWebhooks loads webhook URLs for all destinations in one batch so stage 3 does
@@ -154,6 +155,9 @@ func preloadDiscordEmbedData(ctx context.Context, deliveries []messages.Subscrip
 		ep.ActivityName = actName
 		ep.VersionName = verName
 		ep.PathSegment = pathSeg
+		if meta != nil {
+			ep.SplashThumbnailURL = cdn.ActivitySplashThumbnailURL(meta.IsRaid, meta.PathSegment, meta.VersionPath)
+		}
 		ep.FireteamProfiles = ftProf
 		ep.InstanceStats = statsSlice
 		ep.Feats = feats
