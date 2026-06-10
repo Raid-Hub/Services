@@ -324,6 +324,76 @@
             "associated_activity_id": 102,
             "path": "morgeth",
             "is_challenge_mode": false
+          },
+          {
+            "id": 134,
+            "name": "Insurrection Prime Revolutionary",
+            "associated_activity_id": 102,
+            "path": "gauntlet",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 135,
+            "name": "Morgeth Encore",
+            "associated_activity_id": 102,
+            "path": "morgeth-encore",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 136,
+            "name": "Insurrection Prime Encore",
+            "associated_activity_id": 102,
+            "path": "insurrection-encore",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 137,
+            "name": "Warpriest Encore",
+            "associated_activity_id": 102,
+            "path": "warpriest",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 138,
+            "name": "Warpriest Atraks",
+            "associated_activity_id": 102,
+            "path": "warpriest-atraks",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 139,
+            "name": "Consecrated Mind Encore",
+            "associated_activity_id": 102,
+            "path": "consecrated-mind",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 140,
+            "name": "Argos Reprise",
+            "associated_activity_id": 102,
+            "path": "argos",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 141,
+            "name": "Calus Atraks Reprise",
+            "associated_activity_id": 102,
+            "path": "calus-atraks",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 142,
+            "name": "Calus Reprise",
+            "associated_activity_id": 102,
+            "path": "calus-reprise",
+            "is_challenge_mode": false
+          },
+          {
+            "id": 143,
+            "name": "Gahlran Reprise",
+            "associated_activity_id": 102,
+            "path": "gahlran",
+            "is_challenge_mode": false
           }
         ]
       }
@@ -993,6 +1063,66 @@
             "activity_id": 102,
             "version_id": 133,
             "hash": 2530656885,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 134,
+            "hash": 747671496,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 135,
+            "hash": 43862588,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 136,
+            "hash": 206811036,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 137,
+            "hash": 145874766,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 138,
+            "hash": 4147455553,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 139,
+            "hash": 3975235718,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 140,
+            "hash": 796488315,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 141,
+            "hash": 153253948,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 142,
+            "hash": 1566552947,
+            "is_world_first": false
+          },
+          {
+            "activity_id": 102,
+            "version_id": 143,
+            "hash": 1953549041,
             "is_world_first": false
           },
           {
