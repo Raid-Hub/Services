@@ -219,6 +219,18 @@
             "week_one_end": null,
             "milestone_hash": null,
             "splash_path": "pantheon"
+          },
+          {
+            "id": 201,
+            "name": "Pantheon Encounters",
+            "is_sunset": false,
+            "is_raid": false,
+            "path": "encounters",
+            "release_date": "2026-06-09T17:00:00Z",
+            "contest_end": null,
+            "week_one_end": null,
+            "milestone_hash": null,
+            "splash_path": "pantheon"
           }
         ]
       }
@@ -334,64 +346,50 @@
           },
           {
             "id": 135,
-            "name": "Morgeth Encore",
-            "associated_activity_id": 102,
-            "path": "morgeth-encore",
+            "name": "Morgeth",
+            "associated_activity_id": 201,
+            "path": "morgeth",
             "is_challenge_mode": false
           },
           {
             "id": 136,
-            "name": "Insurrection Prime Encore",
-            "associated_activity_id": 102,
-            "path": "insurrection-encore",
+            "name": "Insurrection Prime",
+            "associated_activity_id": 201,
+            "path": "insurrection",
             "is_challenge_mode": false
           },
           {
             "id": 137,
-            "name": "Warpriest Encore",
-            "associated_activity_id": 102,
+            "name": "Warpriest",
+            "associated_activity_id": 201,
             "path": "warpriest",
             "is_challenge_mode": false
           },
           {
             "id": 138,
-            "name": "Atraks Sovereign Encore",
-            "associated_activity_id": 102,
-            "path": "atraks-encore",
-            "is_challenge_mode": false
-          },
-          {
-            "id": 139,
-            "name": "Consecrated Mind Encore",
-            "associated_activity_id": 102,
+            "name": "Consecrated Mind",
+            "associated_activity_id": 201,
             "path": "consecrated-mind",
             "is_challenge_mode": false
           },
           {
-            "id": 140,
-            "name": "Argos Reprise",
-            "associated_activity_id": 102,
+            "id": 139,
+            "name": "Argos",
+            "associated_activity_id": 201,
             "path": "argos",
             "is_challenge_mode": false
           },
           {
+            "id": 140,
+            "name": "Calus",
+            "associated_activity_id": 201,
+            "path": "calus",
+            "is_challenge_mode": false
+          },
+          {
             "id": 141,
-            "name": "Atraks Sovereign Reprise",
-            "associated_activity_id": 102,
-            "path": "atraks-reprise",
-            "is_challenge_mode": false
-          },
-          {
-            "id": 142,
-            "name": "Calus Reprise",
-            "associated_activity_id": 102,
-            "path": "calus-reprise",
-            "is_challenge_mode": false
-          },
-          {
-            "id": 143,
-            "name": "Gahlran Reprise",
-            "associated_activity_id": 102,
+            "name": "Gahlran",
+            "associated_activity_id": 201,
             "path": "gahlran",
             "is_challenge_mode": false
           }
@@ -1072,56 +1070,44 @@
             "is_world_first": false
           },
           {
-            "activity_id": 102,
+            "activity_id": 201,
             "version_id": 135,
             "hash": 43862588,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
+            "activity_id": 201,
             "version_id": 136,
             "hash": 206811036,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
+            "activity_id": 201,
             "version_id": 137,
             "hash": 145874766,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
+            "activity_id": 201,
             "version_id": 138,
-            "hash": 4147455553,
-            "is_world_first": false
-          },
-          {
-            "activity_id": 102,
-            "version_id": 139,
             "hash": 3975235718,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
-            "version_id": 140,
+            "activity_id": 201,
+            "version_id": 139,
             "hash": 796488315,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
-            "version_id": 141,
-            "hash": 153253948,
-            "is_world_first": false
-          },
-          {
-            "activity_id": 102,
-            "version_id": 142,
+            "activity_id": 201,
+            "version_id": 140,
             "hash": 1566552947,
             "is_world_first": false
           },
           {
-            "activity_id": 102,
-            "version_id": 143,
+            "activity_id": 201,
+            "version_id": 141,
             "hash": 1953549041,
             "is_world_first": false
           },
