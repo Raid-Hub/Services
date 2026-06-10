@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"raidhub/lib/dto"
+	difficultytierloader "raidhub/lib/services/difficulty_tier/loader"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"time"
@@ -130,6 +131,7 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 			result.SkullHashes = append(result.SkullHashes, hash)
 		}
 	}
+	result.DifficultyTier = difficultytierloader.Classify(result.SkullHashes)
 
 	players := make(map[int64][]bungie.DestinyPostGameCarnageReportEntry)
 

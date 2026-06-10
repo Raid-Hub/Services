@@ -105,10 +105,11 @@ func insertInstance(tx *sql.Tx, inst *dto.Instance) (bool, error) {
 		"platform_type",
 		"duration",
 		"score",
-		"skull_hashes"
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, inst.InstanceId, inst.Hash,
+		"skull_hashes",
+		"difficulty_tier"
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, inst.InstanceId, inst.Hash,
 		inst.Flawless, inst.Completed, inst.Fresh, inst.PlayerCount,
-		inst.DateStarted, inst.DateCompleted, inst.MembershipType, inst.DurationSeconds, inst.Score, pq.Array(inst.SkullHashes))
+		inst.DateStarted, inst.DateCompleted, inst.MembershipType, inst.DurationSeconds, inst.Score, pq.Array(inst.SkullHashes), inst.DifficultyTier)
 
 	if err != nil {
 		pqErr, ok := err.(*pq.Error)
