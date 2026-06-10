@@ -355,9 +355,9 @@
           },
           {
             "id": 138,
-            "name": "Warpriest: Atraks Sovereign",
+            "name": "Atraks Sovereign Encore",
             "associated_activity_id": 102,
-            "path": "warpriest-atraks-sovereign",
+            "path": "atraks-encore",
             "is_challenge_mode": false
           },
           {
@@ -376,9 +376,9 @@
           },
           {
             "id": 141,
-            "name": "Calus: Atraks Sovereign",
+            "name": "Atraks Sovereign Reprise",
             "associated_activity_id": 102,
-            "path": "calus-atraks-sovereign",
+            "path": "atraks-reprise",
             "is_challenge_mode": false
           },
           {
