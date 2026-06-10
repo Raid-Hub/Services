@@ -109,6 +109,8 @@ type DiscordEmbedPreload struct {
 	ActivityName string `json:"activityName,omitempty"`
 	VersionName  string `json:"versionName,omitempty"`
 	PathSegment  string `json:"pathSegment,omitempty"`
+	// SplashThumbnailURL is a ready-to-use CDN URL for the Discord embed thumbnail.
+	SplashThumbnailURL string `json:"splashThumbnailUrl,omitempty"`
 
 	FireteamProfiles []DiscordFireteamProfile `json:"fireteamProfiles,omitempty"`
 	InstanceStats    []DiscordInstanceStat    `json:"instanceStats,omitempty"`

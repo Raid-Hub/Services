@@ -99,7 +99,7 @@ func featDiscordComponents(feats []messages.DiscordFeat) []discord.MessageCompon
 func assembleRaidDiscordEmbed(
 	instanceId int64,
 	pre *messages.DiscordEmbedPreload,
-	activityName, versionName, pathSegment string,
+	activityName, versionName, splashThumbnailURL string,
 	feats []messages.DiscordFeat,
 	fireteamProfiles []player.PlayerProfileForDelivery,
 	statsMap map[int64]InstancePlayerStats,
@@ -118,12 +118,10 @@ func assembleRaidDiscordEmbed(
 	featBlock := featDiscordComponents(feats)
 
 	var topInner []discord.MessageComponent
-	if pathSegment != "" {
-		slug := strings.Trim(pathSegment, "/")
-		splash := fmt.Sprintf("https://cdn.raidhub.io/content/splash/%s/tiny.jpg", slug)
+	if splashThumbnailURL != "" {
 		thumbDesc := fireteamThumbnailDescription(title)
 		topInner = []discord.MessageComponent{
-			discord.NewSectionTextWithThumbnail(header, splash, thumbDesc),
+			discord.NewSectionTextWithThumbnail(header, splashThumbnailURL, thumbDesc),
 		}
 		topInner = append(topInner, featBlock...)
 	} else {

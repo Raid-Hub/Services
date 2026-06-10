@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"raidhub/lib/env"
+	"raidhub/lib/utils/cdn"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
 	"raidhub/lib/web/discord"
@@ -50,7 +51,7 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 				},
 			},
 			Thumbnail: &discord.Thumbnail{
-				URL: fmt.Sprintf("https://cdn.raidhub.io/content/splash/%s/tiny.jpg", instance.RaidPath),
+				URL: cdn.SplashThumbnailURL(instance.RaidPath),
 			},
 			Timestamp: time.Now().Format(time.RFC3339),
 			Footer: discord.Footer{
@@ -106,7 +107,7 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 					},
 				},
 				Thumbnail: &discord.Thumbnail{
-					URL: fmt.Sprintf("https://cdn.raidhub.io/content/splash/%s/tiny.jpg", instance.RaidPath),
+					URL: cdn.SplashThumbnailURL(instance.RaidPath),
 				},
 				Timestamp: time.Now().Format(time.RFC3339),
 				Footer: discord.Footer{

@@ -305,6 +305,8 @@ type ActivityRaidMeta struct {
 	ActivityName string
 	VersionName  string
 	PathSegment  string // definitions.activity_definition.splash_path — cdn.raidhub.io/content/splash/{slug}/…
+	VersionPath  string // definitions.version_definition.path — pantheon boss splash slug when on CDN
+	IsRaid       bool
 }
 
 func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRaidMeta, error) {
@@ -334,13 +336,13 @@ func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRa
 
 	var meta ActivityRaidMeta
 	err := postgres.DB.QueryRowContext(ctx, `
-		SELECT ad.name, vd.name, ad.splash_path
+		SELECT ad.name, vd.name, ad.splash_path, ad.is_raid, vd.path
 		FROM definitions.activity_version av
 		JOIN definitions.activity_definition ad ON ad.id = av.activity_id
 		JOIN definitions.version_definition vd ON vd.id = av.version_id
 		WHERE av.hash = $1`,
 		int64(activityHash),
-	).Scan(&meta.ActivityName, &meta.VersionName, &meta.PathSegment)
+	).Scan(&meta.ActivityName, &meta.VersionName, &meta.PathSegment, &meta.IsRaid, &meta.VersionPath)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			activityRaidMetaCache[activityHash] = activityRaidMetaCacheEntry{noRows: true}
@@ -349,6 +351,7 @@ func loadActivityRaidMeta(ctx context.Context, activityHash uint32) (*ActivityRa
 		return nil, err
 	}
 	meta.PathSegment = strings.Trim(meta.PathSegment, "/")
+	meta.VersionPath = strings.Trim(meta.VersionPath, "/")
 	stored := new(ActivityRaidMeta)
 	*stored = meta
 	activityRaidMetaCache[activityHash] = activityRaidMetaCacheEntry{meta: stored}

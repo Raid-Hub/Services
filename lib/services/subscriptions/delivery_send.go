@@ -195,6 +195,6 @@ func buildRaidWebhookFromEmbedPreload(msg messages.SubscriptionDeliveryMessage) 
 			TimePlayedSeconds: s.TimePlayedSeconds,
 		}
 	}
-	return assembleRaidDiscordEmbed(msg.InstanceId, pre, pre.ActivityName, pre.VersionName, pre.PathSegment, pre.Feats,
+	return assembleRaidDiscordEmbed(msg.InstanceId, pre, pre.ActivityName, pre.VersionName, pre.SplashThumbnailURL, pre.Feats,
 		profiles, statsMap)
 }
