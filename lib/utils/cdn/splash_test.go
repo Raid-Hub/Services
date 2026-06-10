@@ -21,11 +21,11 @@ func TestSplashThumbnailURL(t *testing.T) {
 
 func TestActivitySplashThumbnailURL(t *testing.T) {
 	tests := []struct {
-		name       string
-		isRaid     bool
-		activity   string
-		version    string
-		want       string
+		name     string
+		isRaid   bool
+		activity string
+		version  string
+		want     string
 	}{
 		{
 			name:     "raid default",
