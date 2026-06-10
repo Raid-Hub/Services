@@ -37,10 +37,10 @@ INSERT INTO "definitions"."version_definition" (
     (135, 'Morgeth Encore', 102, 'morgeth-encore', false),
     (136, 'Insurrection Prime Encore', 102, 'insurrection-encore', false),
     (137, 'Warpriest Encore', 102, 'warpriest', false),
-    (138, 'Warpriest Atraks', 102, 'warpriest-atraks', false),
+    (138, 'Warpriest: Atraks Sovereign', 102, 'warpriest-atraks-sovereign', false),
     (139, 'Consecrated Mind Encore', 102, 'consecrated-mind', false),
     (140, 'Argos Reprise', 102, 'argos', false),
-    (141, 'Calus Atraks Reprise', 102, 'calus-atraks', false),
+    (141, 'Calus: Atraks Sovereign', 102, 'calus-atraks-sovereign', false),
     (142, 'Calus Reprise', 102, 'calus-reprise', false),
     (143, 'Gahlran Reprise', 102, 'gahlran', false)
 ON CONFLICT ("id") DO UPDATE SET
