@@ -58,6 +58,7 @@ views = [
     "individual_raid_leaderboard",
     "world_first_contest_leaderboard",
     "team_activity_version_leaderboard",
+    "team_pantheon_custom_race_leaderboard",
 ]
 for view in views:
     local_resource(
