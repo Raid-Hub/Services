@@ -218,22 +218,7 @@ func fireteamPlayerComponents(profiles []player.PlayerProfileForDelivery, stats 
 	var b strings.Builder
 	b.WriteString("### Fireteam\n\n")
 	for _, p := range ordered {
-		linkLabel := formatFireteamLinkLabel(p, mixedIncomplete)
-		b.WriteString("- [")
-		if em := classEmoji(p.ClassHash); em != "" {
-			b.WriteString(em)
-			b.WriteString(" ")
-		}
-		b.WriteString(linkLabel)
-		b.WriteString("](https://raidhub.io/profile/")
-		b.WriteString(strconv.FormatInt(p.MembershipID, 10))
-		b.WriteString(") // ")
-		kStr, aStr, dStr := fireteamKADStrings(p, stats)
-		b.WriteString(kStr)
-		b.WriteString(" / ")
-		b.WriteString(aStr)
-		b.WriteString(" / ")
-		b.WriteString(dStr)
+		b.WriteString(fireteamPlayerLineMarkdown(p, mixedIncomplete, stats))
 		b.WriteString("\n")
 	}
 	return []discord.MessageComponent{
@@ -318,6 +303,30 @@ func truncateDiscordV2Text(s string) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxRunes-1]) + "…"
+}
+
+// fireteamPlayerLineMarkdown is one fireteam bullet. Class emoji sits outside the masked link so Discord
+// Components V2 renders custom guild emojis (emojis inside [label](url) are not supported).
+func fireteamPlayerLineMarkdown(p player.PlayerProfileForDelivery, mixedIncomplete bool, stats map[int64]InstancePlayerStats) string {
+	linkLabel := formatFireteamLinkLabel(p, mixedIncomplete)
+	var b strings.Builder
+	b.WriteString("- ")
+	if em := classEmoji(p.ClassHash); em != "" {
+		b.WriteString(em)
+		b.WriteString(" ")
+	}
+	b.WriteString("[")
+	b.WriteString(linkLabel)
+	b.WriteString("](https://raidhub.io/profile/")
+	b.WriteString(strconv.FormatInt(p.MembershipID, 10))
+	b.WriteString(") // ")
+	kStr, aStr, dStr := fireteamKADStrings(p, stats)
+	b.WriteString(kStr)
+	b.WriteString(" / ")
+	b.WriteString(aStr)
+	b.WriteString(" / ")
+	b.WriteString(dStr)
+	return b.String()
 }
 
 // formatFireteamPlayerFieldName is the Discord field title (plain text; Discord API max 256 chars on names).
