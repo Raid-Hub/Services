@@ -198,7 +198,7 @@
           },
           {
             "id": 101,
-            "name": "The Pantheon",
+            "name": "Pantheon: Into the Light",
             "is_sunset": true,
             "is_raid": false,
             "path": "pantheon",
@@ -210,7 +210,7 @@
           },
           {
             "id": 102,
-            "name": "The Pantheon",
+            "name": "Pantheon: Monument of Triumph",
             "is_sunset": false,
             "is_raid": false,
             "path": "pantheon",
