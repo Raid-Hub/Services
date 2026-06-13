@@ -4,9 +4,9 @@
 CREATE MATERIALIZED VIEW "leaderboard"."team_pantheon_custom_race_leaderboard" AS
 WITH race_constants AS (
     SELECT
-        '2026-06-09 17:00:00+00'::timestamptz AS race_start,
-        '2026-06-10 17:00:00+00'::timestamptz AS race_end,
-        133::int AS version_id,
+        '2026-06-13 17:00:00+00'::timestamptz AS race_start,
+        '2026-06-14 17:00:00+00'::timestamptz AS race_end,
+        134::int AS version_id,
         790421403::bigint AS skull_empty_feat,
         5::int AS required_feat_count
 ),
