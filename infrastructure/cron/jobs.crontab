@@ -38,10 +38,11 @@ STDERR=/var/log/raidhub/cron.err
 # id: refresh-view-team-activity-version-leaderboard
 0 19 * * * refresh-view team_activity_version_leaderboard
 
-# Pantheon Custom Race Leaderboard - Every 5 minutes during race window (Jun 13 17:00 - Jun 14 17:00 UTC)
+# Pantheon Custom Race Leaderboard - Every 3 minutes during race window (Jun 13 17:00 - Jun 14 17:00 UTC)
 # id: refresh-view-team-pantheon-custom-race-leaderboard
-*/5 17-23 13 6 * refresh-view team_pantheon_custom_race_leaderboard
-*/5 * 14 6 * refresh-view team_pantheon_custom_race_leaderboard
+# TODO: remove these entries after the race ends
+*/3 17-23 13 6 * refresh-view team_pantheon_custom_race_leaderboard
+*/3 * 14 6 * refresh-view team_pantheon_custom_race_leaderboard
 
 # ============================================================================
 # Process Missed PGCRs
