@@ -164,8 +164,7 @@ func assembleRaidDiscordEmbed(
 const raidHubEmoji = "<:RaidHub:1131584991227293717>"
 
 func raidEmbedFooter() *discord.TextDisplay {
-	// Custom emoji must sit outside masked link text — Discord V2 Text Display rejects emojis inside [label](url).
-	return discord.NewTextDisplay("-# " + raidHubEmoji + " Powered by [RaidHub](https://raidhub.io)")
+	return discord.NewTextDisplay("-# Powered by [RaidHub](https://raidhub.io) " + raidHubEmoji)
 }
 
 // Discord limits combined markdown text across all Text Display components in one message (Components V2).
