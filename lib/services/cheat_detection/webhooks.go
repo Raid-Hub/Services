@@ -51,7 +51,7 @@ func SendFlaggedInstanceWebhook(instance *Instance, result ResultTuple, playerRe
 				},
 			},
 			Thumbnail: &discord.Thumbnail{
-				URL: cdn.SplashThumbnailURL(instance.RaidPath),
+				URL: cdn.ActivitySplashThumbnailURL(instance.IsRaid, instance.RaidPath, instance.VersionPath),
 			},
 			Timestamp: time.Now().Format(time.RFC3339),
 			Footer: discord.Footer{
@@ -107,7 +107,7 @@ func SendFlaggedPlayerWebhooks(instance *Instance, playerResults []ResultTuple) 
 					},
 				},
 				Thumbnail: &discord.Thumbnail{
-					URL: cdn.SplashThumbnailURL(instance.RaidPath),
+					URL: cdn.ActivitySplashThumbnailURL(instance.IsRaid, instance.RaidPath, instance.VersionPath),
 				},
 				Timestamp: time.Now().Format(time.RFC3339),
 				Footer: discord.Footer{

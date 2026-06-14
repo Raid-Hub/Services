@@ -80,6 +80,8 @@ type Instance struct {
 	Activity         int       `json:"activity"`
 	Version          int       `json:"version"`
 	RaidPath         string    `json:"raidPath"`
+	VersionPath      string    `json:"versionPath"`
+	IsRaid           bool      `json:"isRaid"`
 	Completed        bool      `json:"completed"`
 	Flawless         *bool     `json:"flawless"`
 	Fresh            *bool     `json:"fresh"`
