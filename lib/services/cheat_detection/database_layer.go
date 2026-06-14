@@ -47,6 +47,8 @@ func getInstance(instanceId int64) (*Instance, error) {
 			'platformType', i."platform_type", 
 			'season', i."season_id",
 			'raidPath', ad."splash_path",
+			'versionPath', vd."path",
+			'isRaid', ad."is_raid",
 			'players', (
 				SELECT 
 					ARRAY_AGG(
@@ -108,6 +110,7 @@ func getInstance(instanceId int64) (*Instance, error) {
 		FROM "instance" i
 		JOIN "activity_version" av ON i."hash" = av."hash"
 		JOIN "activity_definition" ad ON av."activity_id" = ad."id"
+		JOIN "version_definition" vd ON av."version_id" = vd."id"
 		WHERE i."instance_id" = $1;
 		`, instanceId)
 

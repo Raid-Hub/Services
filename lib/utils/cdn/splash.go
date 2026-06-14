@@ -31,11 +31,7 @@ func ActivitySplashThumbnailURL(isRaid bool, activitySplashPath, versionPath str
 	if !isRaid {
 		versionSlug := strings.Trim(versionPath, "/")
 		if versionSlug != "" {
-			if _, ok := thumbnailFileOverrides[versionSlug]; ok {
-				return SplashThumbnailURL(versionSlug)
-			}
-			// Per-boss pantheon assets are not on CDN yet — use generic pantheon splash.
-			return SplashThumbnailURL("pantheon")
+			return SplashThumbnailURL(versionSlug)
 		}
 		activitySlug := strings.Trim(activitySplashPath, "/")
 		if activitySlug != "" {

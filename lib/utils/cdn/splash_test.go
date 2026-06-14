@@ -40,11 +40,11 @@ func TestActivitySplashThumbnailURL(t *testing.T) {
 			want:     SplashBase + "/edp/small.jpg",
 		},
 		{
-			name:     "pantheon boss without cdn asset",
+			name:     "pantheon boss",
 			isRaid:   false,
 			activity: "pantheon",
 			version:  "morgeth-surpassing",
-			want:     SplashBase + "/pantheon/small.png",
+			want:     SplashBase + "/morgeth-surpassing/tiny.jpg",
 		},
 		{
 			name:     "pantheon generic",
