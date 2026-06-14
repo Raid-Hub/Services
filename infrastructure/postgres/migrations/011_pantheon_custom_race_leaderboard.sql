@@ -59,3 +59,11 @@ CREATE UNIQUE INDEX idx_team_pantheon_custom_race_leaderboard_instance
     ON "leaderboard"."team_pantheon_custom_race_leaderboard" (instance_id);
 CREATE INDEX idx_team_pantheon_custom_race_leaderboard_membership_ids
     ON "leaderboard"."team_pantheon_custom_race_leaderboard" USING GIN (membership_ids);
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'raidhub_user') THEN
+        ALTER MATERIALIZED VIEW "leaderboard"."team_pantheon_custom_race_leaderboard" OWNER TO raidhub_user;
+    END IF;
+END
+$$;
