@@ -47,9 +47,10 @@ SELECT
     players.membership_ids
 FROM ranked
 LEFT JOIN LATERAL (
-    SELECT JSONB_AGG(ip.membership_id ORDER BY ip.completed DESC, ip.time_played_seconds DESC) AS membership_ids
+    SELECT JSONB_AGG(ip.membership_id ORDER BY ip.kills DESC) AS membership_ids
     FROM "core"."instance_player" ip
     WHERE ip.instance_id = ranked.instance_id
+      AND ip.completed
     LIMIT 12
 ) AS players ON true;
 
