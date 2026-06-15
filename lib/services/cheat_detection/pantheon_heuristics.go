@@ -3,10 +3,10 @@ package cheat_detection
 import "fmt"
 
 const (
-	pantheonEmptyFeatSkullHash   = int64(790421403)
-	pantheonBattalionsSkullHash  = int64(2392637702)
-	pantheonCutthroatSkullHash   = int64(2673088233)
-	pantheonBattalionsBonusSeconds = 60  // 1m
+	pantheonEmptyFeatSkullHash     = int64(790421403)
+	pantheonBattalionsSkullHash    = int64(2392637702)
+	pantheonCutthroatSkullHash     = int64(2673088233)
+	pantheonBattalionsBonusSeconds = 60     // 1m
 	pantheonCutthroatBonusSeconds  = 2 * 60 // 2m
 )
 

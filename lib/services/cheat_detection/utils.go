@@ -95,7 +95,7 @@ var (
 	timeDilationCurve                     = buildLogisticCurve(12, 0.6)
 	varLowmanCheckpointDurationRatioCurve = buildLogisticCurve(15, 0.82)
 	// Softer than completionTimeCurve; pantheon speedruns can legitimately hug the floor.
-	pantheonCompletionTimeCurve           = buildLogisticCurve(18, 0.72)
+	pantheonCompletionTimeCurve = buildLogisticCurve(18, 0.72)
 )
 
 func participationCurve(playerCount int, playerTotalKills int, totalInstanceKills int, playerTimePlayedSeconds int, totalTimeForAllPlayers int) float64 {
