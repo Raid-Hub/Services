@@ -1055,7 +1055,8 @@
             "activity_id": 102,
             "version_id": 134,
             "hash": 747671496,
-            "is_world_first": false
+            "is_world_first": false,
+            "release_date_override": "2026-06-13T17:00:00Z"
           },
           {
             "activity_id": 102,
