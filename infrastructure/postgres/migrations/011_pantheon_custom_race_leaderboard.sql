@@ -1,11 +1,11 @@
 -- Pantheon community raid race: 5-feat Insurrection Prime Revolutionary
--- Tracks first completions within 24h of launch (2026-06-13 17:00 UTC).
+-- Tracks first completions within 48h of launch (2026-06-13 17:00 UTC).
 
 CREATE MATERIALIZED VIEW "leaderboard"."team_pantheon_custom_race_leaderboard" AS
 WITH race_constants AS (
     SELECT
         '2026-06-13 17:00:00+00'::timestamptz AS race_start,
-        '2026-06-14 17:00:00+00'::timestamptz AS race_end,
+        '2026-06-15 17:00:00+00'::timestamptz AS race_end,
         134::int AS version_id,
         790421403::bigint AS skull_empty_feat,
         5::int AS required_feat_count
