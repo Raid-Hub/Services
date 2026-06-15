@@ -241,28 +241,16 @@ var Pantheon2Heuristic = ActivityHeuristic{
 			{MinPlayers: 4, CheatedChance: 0.15},
 			{MinPlayers: 3, CheatedChance: 0.35},
 		},
-		pantheonVersionMorgethSurpassing: {
-			{
-				MinPlayers: 1,
-				Range: []DateRange{
-					{Start: pantheonBossPushStratStart, End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-				},
-				CheatedChance: 0.25,
-			},
-			{MinPlayers: 4, CheatedChance: 0.65},
-		},
+		pantheonVersionMorgethSurpassing: append(
+			pantheonBossPushLowmanEntries(0.25),
+			LowmanData{MinPlayers: 4, CheatedChance: 0.65},
+		),
 	},
 	CheckpointLowman: map[int][]LowmanData{
-		pantheonVersionMorgethSurpassing: {
-			{
-				MinPlayers: 1,
-				Range: []DateRange{
-					{Start: pantheonBossPushStratStart, End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-				},
-				CheatedChance: 0.25,
-			},
-			{MinPlayers: 4, CheatedChance: 0.50},
-		},
+		pantheonVersionMorgethSurpassing: append(
+			pantheonBossPushLowmanEntries(0.25),
+			LowmanData{MinPlayers: 4, CheatedChance: 0.50},
+		),
 		pantheonVersionCalusResplendent: {
 			{MinPlayers: 2, CheatedChance: 0.15},
 		},
