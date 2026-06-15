@@ -249,10 +249,10 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 	if err != nil {
 		return nil, false, err
 	}
-	result.Fresh = fresh
+	result.Fresh = normalizeFresh(report.ActivityDetails.DirectorActivityHash, fresh)
 
 	if result.Completed && deathless {
-		result.Flawless = fresh
+		result.Flawless = result.Fresh
 	} else {
 		result.Flawless = new(bool) // false
 	}
@@ -312,6 +312,9 @@ var (
 	hauntedStart     = time.Date(2022, time.May, 24, 10, 0, 0, 0, time.FixedZone("PDT", -7*60*60)).Unix()
 )
 
+// Morgeth Surpassing always reports activityWasStartedFromBeginning=false even on fresh runs.
+const morgethSurpassingHash uint32 = 2530656885
+
 var leviHashes = map[uint32]bool{
 	2693136600: true, 2693136601: true, 2693136602: true,
 	2693136603: true, 2693136604: true, 2693136605: true,
@@ -320,6 +323,17 @@ var leviHashes = map[uint32]bool{
 	757116822: true, 771164842: true, 1685065161: true, 1800508819: true,
 	2449714930: true, 3446541099: true, 4206123728: true, 3912437239: true,
 	3879860661: true, 3857338478: true,
+}
+
+// normalizeFresh adjusts unreliable Bungie fresh signals for specific activities.
+func normalizeFresh(activityHash uint32, fresh *bool) *bool {
+	if activityHash != morgethSurpassingHash {
+		return fresh
+	}
+	if fresh != nil && !*fresh {
+		return nil
+	}
+	return fresh
 }
 
 // isFresh checks if a DestinyPostGameCarnageReportData is considered fresh based on the period start time.
