@@ -245,7 +245,7 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 		}
 	}
 
-	fresh, err := freshForInstance(result.Hash, report, deathless)
+	fresh, err := isFresh(report, deathless)
 	if err != nil {
 		return nil, false, err
 	}
@@ -320,20 +320,6 @@ var leviHashes = map[uint32]bool{
 	757116822: true, 771164842: true, 1685065161: true, 1800508819: true,
 	2449714930: true, 3446541099: true, 4206123728: true, 3912437239: true,
 	3879860661: true, 3857338478: true,
-}
-
-// freshUnknownHashes lists director activity hashes where Bungie always reports
-// activityWasStartedFromBeginning=false, even on full clears (startingPhaseIndex=0).
-var freshUnknownHashes = map[uint32]struct{}{
-	2530656885: {}, // Pantheon: Morgeth Surpassing (version_id 133)
-}
-
-func freshForInstance(hash uint32, pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, error) {
-	if _, unknown := freshUnknownHashes[hash]; unknown {
-		return nil, nil
-	}
-
-	return isFresh(pgcr, deathless)
 }
 
 // isFresh checks if a DestinyPostGameCarnageReportData is considered fresh based on the period start time.
