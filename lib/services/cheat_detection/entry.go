@@ -8,7 +8,7 @@ import (
 // Logger is declared in database_layer.go
 
 const (
-	CheatCheckVersion = "beta-2.1.19"
+	CheatCheckVersion = "beta-2.2.0"
 	Threshold         = 0.05
 	PlayerThreshold   = 0.02
 )
@@ -113,14 +113,14 @@ func getActivityHeuristic(instance *Instance) *ActivityHeuristic {
 		return &CrotasEndHeuristic
 	case 101:
 		return &PantheonHeuristic
-	case 102:
-		return &Pantheon2Heuristic
 	case 14:
 		return &SalvationsEdgeHeuristic
 	case 15:
 		return &DesertPerpetualHeuristic
 	case 16:
 		return &EpicDesertPerpetualHeuristic
+	case 102:
+		return &Pantheon2Heuristic
 	default:
 		return &ActivityHeuristic{
 			RaidName:       "Unknown Raid",

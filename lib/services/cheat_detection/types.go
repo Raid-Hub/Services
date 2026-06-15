@@ -93,6 +93,7 @@ type Instance struct {
 	DurationSeconds  int       `json:"duration"`
 	MembershipType   int       `json:"membershipType"`
 	Score            int       `json:"score"`
+	SkullHashes      []int64   `json:"skullHashes"`
 	Players          []Player  `json:"players"`
 }
 
