@@ -1,40 +1,52 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"raidhub/lib/database/postgres"
+	"raidhub/lib/messaging/publishing"
+	"raidhub/lib/messaging/routing"
 	"raidhub/lib/services/cheat_detection"
 	"raidhub/lib/utils/logging"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 // CheatDetection logging constants
 const (
-	PROCESSING_COMPLETE          = "PROCESSING_COMPLETE"
-	BLACKLIST_UPDATE_ERROR       = "BLACKLIST_UPDATE_ERROR"
-	BLACKLIST_UPDATED            = "BLACKLIST_UPDATED"
-	PLAYER_INSTANCES_BLACKLISTED = "PLAYER_INSTANCES_BLACKLISTED"
-	CHEAT_RECHECK_STARTED        = "CHEAT_RECHECK_STARTED"
-	CHEAT_RECHECK_PROGRESS       = "CHEAT_RECHECK_PROGRESS"
-	CHEAT_RECHECK_COMPLETE       = "CHEAT_RECHECK_COMPLETE"
+	PROCESSING_COMPLETE            = "PROCESSING_COMPLETE"
+	BLACKLIST_UPDATE_ERROR         = "BLACKLIST_UPDATE_ERROR"
+	BLACKLIST_UPDATED              = "BLACKLIST_UPDATED"
+	PLAYER_INSTANCES_BLACKLISTED   = "PLAYER_INSTANCES_BLACKLISTED"
+	CHEAT_RECHECK_ENQUEUE_STARTED  = "CHEAT_RECHECK_ENQUEUE_STARTED"
+	CHEAT_RECHECK_ENQUEUE_COMPLETE = "CHEAT_RECHECK_ENQUEUE_COMPLETE"
 )
 
 var logger = logging.NewLogger("cheat-detection")
 
 const (
-	numBungieWorkers        = 15
-	numCheatCheckWorkers    = 25
-	versionPrefix           = "beta-2.2.0"
-	cheatRecheckLogInterval = 30 * time.Second
+	numBungieWorkers = 15
+	versionPrefix    = "beta-2.2.0"
 )
 
-const level3PlusInstanceQuery = `SELECT DISTINCT instance_id 
-		FROM instance_player 
-		JOIN player USING (membership_id)
-		WHERE cheat_level >= 3 AND last_seen > NOW() - INTERVAL '60 days'
-			AND NOT player.is_whitelisted`
+// Instances played by level 3+ accounts that have not yet been checked at the current version.
+// Scoped to instances completed in the last 60 days so clean passes (which write no flag row) are not re-queued every run.
+const level3PlusUncheckInstanceQuery = `
+	SELECT DISTINCT ip.instance_id
+	FROM instance_player ip
+	JOIN player p USING (membership_id)
+	JOIN instance i ON i.instance_id = ip.instance_id
+	WHERE p.cheat_level >= 3
+		AND p.last_seen > NOW() - INTERVAL '60 days'
+		AND i.date_completed > NOW() - INTERVAL '60 days'
+		AND NOT p.is_whitelisted
+		AND NOT i.is_whitelisted
+		AND NOT EXISTS (
+			SELECT 1
+			FROM flagging.flag_instance fi
+			WHERE fi.instance_id = ip.instance_id
+				AND fi.cheat_check_version = $1
+		)`
 
 type LevelsDTO struct {
 	Flag                      cheat_detection.PlayerInstanceFlagStats
@@ -52,8 +64,8 @@ func main() {
 		logging.VERSION: versionPrefix,
 	})
 
-	// postgres.DB is initialized in init()
 	postgres.Wait()
+	publishing.Wait()
 
 	// step 1: get all player instance flags and check their cheat levels
 	flags := make(chan cheat_detection.PlayerInstanceFlagStats)
@@ -118,95 +130,63 @@ func main() {
 		"level_4":       levelCounts[4],
 	})
 
-	// step 2: re-cheat check all level 3+ player instances. can remove this step later.
+	// step 2: enqueue level 3+ instance rechecks for Hermes (instance_cheat_check queue).
+	// Step 3 below uses flags already in DB; newly queued checks are picked up on the next run.
+	ctx := context.Background()
+	enqueueStart := time.Now()
 	var totalInstances int64
-	err := postgres.DB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM (%s) AS instances`, level3PlusInstanceQuery)).Scan(&totalInstances)
+	err := postgres.DB.QueryRow(
+		fmt.Sprintf(`SELECT COUNT(*) FROM (%s) AS instances`, level3PlusUncheckInstanceQuery),
+		cheat_detection.CheatCheckVersion,
+	).Scan(&totalInstances)
 	if err != nil {
 		logger.Warn("CHEAT_RECHECK_COUNT_ERROR", err, map[string]any{
 			logging.OPERATION: "count_level3_instances",
 		})
 	}
 
-	logger.Info(CHEAT_RECHECK_STARTED, map[string]any{
+	logger.Info(CHEAT_RECHECK_ENQUEUE_STARTED, map[string]any{
 		"total_instances": totalInstances,
-		"workers":         numCheatCheckWorkers,
+		"cheat_version":   cheat_detection.CheatCheckVersion,
+		"queue":           routing.InstanceCheatCheck,
 	})
 
-	instanceIds := make(chan int64)
-	var processedCount int32
-	var failedCount int32
-	recheckStart := time.Now()
-	recheckDone := make(chan struct{})
-
-	wg.Add(numCheatCheckWorkers)
-	for i := 0; i < numCheatCheckWorkers; i++ {
-		go func() {
-			defer wg.Done()
-			for instanceId := range instanceIds {
-				_, _, _, _, err := cheat_detection.CheckForCheats(instanceId)
-				if err != nil {
-					atomic.AddInt32(&failedCount, 1)
-					logger.Warn("CHEAT_CHECK_FAILED", err, map[string]any{
+	var publishedCount int
+	var publishFailedCount int
+	if totalInstances > 0 {
+		rows, err := postgres.DB.QueryContext(ctx, level3PlusUncheckInstanceQuery, cheat_detection.CheatCheckVersion)
+		if err != nil {
+			logger.Warn("CHEAT_RECHECK_QUERY_ERROR", err, map[string]any{
+				logging.OPERATION: "query_level3_instances",
+			})
+		} else {
+			defer rows.Close()
+			for rows.Next() {
+				var instanceId int64
+				if err := rows.Scan(&instanceId); err != nil {
+					logger.Warn("INSTANCE_ID_SCAN_ERROR", err, nil)
+					continue
+				}
+				if err := publishing.PublishInt64Message(ctx, routing.InstanceCheatCheck, instanceId); err != nil {
+					publishFailedCount++
+					logger.Warn("CHEAT_RECHECK_PUBLISH_FAILED", err, map[string]any{
 						logging.INSTANCE_ID: instanceId,
 					})
+					continue
 				}
-				atomic.AddInt32(&processedCount, 1)
+				publishedCount++
 			}
-		}()
-	}
-
-	go func() {
-		ticker := time.NewTicker(cheatRecheckLogInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				logCheatRecheckProgress(
-					atomic.LoadInt32(&processedCount),
-					atomic.LoadInt32(&failedCount),
-					totalInstances,
-					recheckStart,
-				)
-			case <-recheckDone:
-				return
+			if err := rows.Err(); err != nil {
+				logger.Warn("INSTANCE_ID_ROWS_ERROR", err, nil)
 			}
 		}
-	}()
-
-	rows, err = postgres.DB.Query(level3PlusInstanceQuery)
-	if err != nil {
-		logger.Warn("BLACKLIST_QUERY_ERROR", err, map[string]any{
-			logging.OPERATION: "query_blacklisted_instances",
-		})
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var instanceId int64
-		if err := rows.Scan(&instanceId); err != nil {
-			logger.Warn("INSTANCE_ID_SCAN_ERROR", err, nil)
-			continue
-		}
-		instanceIds <- instanceId
-	}
-	if err := rows.Err(); err != nil {
-		logger.Warn("INSTANCE_ID_ROWS_ERROR", err, nil)
-	}
-	close(instanceIds)
-	wg.Wait()
-	close(recheckDone)
-
-	logCheatRecheckProgress(
-		atomic.LoadInt32(&processedCount),
-		atomic.LoadInt32(&failedCount),
-		totalInstances,
-		recheckStart,
-	)
-	logger.Info(CHEAT_RECHECK_COMPLETE, map[string]any{
-		"processed":       atomic.LoadInt32(&processedCount),
-		"failed":          atomic.LoadInt32(&failedCount),
+	logger.Info(CHEAT_RECHECK_ENQUEUE_COMPLETE, map[string]any{
+		"published":       publishedCount,
+		"failed":          publishFailedCount,
 		"total_instances": totalInstances,
-		"elapsed":         time.Since(recheckStart).String(),
+		"elapsed":         time.Since(enqueueStart).String(),
 	})
 
 	// step 3: upgrade high flagged instances to blacklisted
@@ -251,17 +231,4 @@ func main() {
 		logging.SERVICE: "cheat-detection",
 		logging.STATUS:  "complete",
 	})
-}
-
-func logCheatRecheckProgress(processed int32, failed int32, totalInstances int64, start time.Time) {
-	fields := map[string]any{
-		"processed": processed,
-		"failed":    failed,
-		"elapsed":   time.Since(start).String(),
-	}
-	if totalInstances > 0 {
-		fields["total"] = totalInstances
-		fields["percent"] = fmt.Sprintf("%.1f%%", float64(processed)/float64(totalInstances)*100)
-	}
-	logger.Info(CHEAT_RECHECK_PROGRESS, fields)
 }
