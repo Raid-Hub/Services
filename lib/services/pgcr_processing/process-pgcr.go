@@ -326,7 +326,6 @@ var leviHashes = map[uint32]bool{
 // activityWasStartedFromBeginning=false, even on full clears (startingPhaseIndex=0).
 var freshUnknownHashes = map[uint32]struct{}{
 	2530656885: {}, // Pantheon: Morgeth Surpassing (version_id 133)
-	206811036:  {}, // Pantheon: Insurrection Prime (version_id 141)
 }
 
 func freshForInstance(hash uint32, pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, error) {

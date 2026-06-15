@@ -15,7 +15,6 @@ const (
 	pantheonVersionCalusResplendent               = 132
 	pantheonVersionMorgethSurpassing              = 133
 	pantheonVersionInsurrectionPrimeRevolutionary = 134
-	pantheonVersionInsurrectionPrime              = 141
 )
 
 func pantheonFeatCount(skullHashes []int64) int {
