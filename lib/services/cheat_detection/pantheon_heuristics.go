@@ -1,6 +1,12 @@
 package cheat_detection
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+// Boss push-off strat (solo) discovered by Spite during Pantheon 2 weekend.
+var pantheonBossPushStratStart = time.Date(2026, 6, 14, 17, 0, 0, 0, time.UTC)
 
 const (
 	pantheonEmptyFeatSkullHash     = int64(790421403)
