@@ -1,6 +1,13 @@
 package cheat_detection
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+// Boss push-off strat (solo Morgeth + IP Rev) discovered by Spite#2562 on 2026-06-15 ~08:33 UTC.
+// Window starts 2h earlier to cover clears immediately after the strat spread.
+var pantheonBossPushStratStart = time.Date(2026, 6, 15, 6, 33, 0, 0, time.UTC)
 
 const (
 	pantheonEmptyFeatSkullHash     = int64(790421403)
