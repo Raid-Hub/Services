@@ -219,12 +219,36 @@ var PantheonHeuristic = ActivityHeuristic{
 	MinCheckpointKills: 75,
 }
 
-// Pantheon2Heuristic: Calus (132) and Morgeth (133) lack tuned speedrun/kill/lowman data yet.
+// Pantheon2Heuristic uses feat-aware minimum durations in pantheon_heuristics.go.
 var Pantheon2Heuristic = ActivityHeuristic{
 	ActivityId:     102,
 	RaidBit:        Pantheon2,
 	RaidName:       "Pantheon",
 	CheckpointName: "a Pantheon checkpoint",
+	FreshLowman: map[int][]LowmanData{
+		pantheonVersionCalusResplendent: {
+			{MinPlayers: 2, CheatedChance: 0.15},
+			{MinPlayers: 3, CheatedChance: 0.10},
+		},
+		pantheonVersionInsurrectionPrimeRevolutionary: {
+			{MinPlayers: 4, CheatedChance: 0.15},
+			{MinPlayers: 3, CheatedChance: 0.35},
+		},
+		pantheonVersionMorgethSurpassing: {
+			{MinPlayers: 4, CheatedChance: 0.65},
+		},
+	},
+	CheckpointLowman: map[int][]LowmanData{
+		pantheonVersionMorgethSurpassing: {
+			{MinPlayers: 4, CheatedChance: 0.50},
+		},
+		pantheonVersionCalusResplendent: {
+			{MinPlayers: 2, CheatedChance: 0.15},
+		},
+		pantheonVersionInsurrectionPrimeRevolutionary: {
+			{MinPlayers: 3, CheatedChance: 0.35},
+		},
+	},
 }
 
 var CrotasEndHeuristic = ActivityHeuristic{

@@ -22,7 +22,7 @@ var logger = logging.NewLogger("cheat-detection")
 const (
 	numBungieWorkers     = 15
 	numCheatCheckWorkers = 25
-	versionPrefix        = "beta-2.1"
+	versionPrefix        = "beta-2.2.0"
 )
 
 type LevelsDTO struct {

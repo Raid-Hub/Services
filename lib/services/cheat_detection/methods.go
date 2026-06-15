@@ -226,6 +226,8 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 			)
 		}
 
+		cheatedTimePrb, cheatedTimeExplanation = mergePantheonDurationCheck(h, instance, cheatedTimePrb, cheatedTimeExplanation)
+
 		if h.MinFreshKills > 0 {
 			ratio := float64(totalInstanceKills+1) / float64(h.MinFreshKills+1)
 			// Instances with a lower min kill count are harder to flag
@@ -259,6 +261,8 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 	} else if instance.Completed {
 		finalExplanations = append(finalExplanations, "checkpoint completion")
 
+		cheatedTimePrb, cheatedTimeExplanation = mergePantheonDurationCheck(h, instance, cheatedTimePrb, cheatedTimeExplanation)
+
 		if h.MinCheckpointKills > 0 {
 			ratio := float64(totalInstanceKills+1) / float64(h.MinCheckpointKills+1)
 			// Instances with a lower min kill count are harder to flag
@@ -278,12 +282,17 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 			}
 		}
 
+		if cheatedTimePrb > Threshold {
+			finalResult.Reason |= TooFast
+			finalExplanations = append(finalExplanations, cheatedTimeExplanation)
+		}
+
 		if timeDilationPrb > Threshold {
 			finalExplanations = append(finalExplanations, timeDilationExplanation)
 			finalResult.Reason |= TimeDilation
 		}
 
-		finalResult.Probability = cumulativeProbability(totalKillsCheatPrb, timeDilationPrb)
+		finalResult.Probability = cumulativeProbability(totalKillsCheatPrb, cheatedTimePrb, timeDilationPrb)
 	} else {
 		finalExplanations = append(finalExplanations, "incomplete")
 		// If the instance is not completed, we can still check for time dilation
