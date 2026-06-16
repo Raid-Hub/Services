@@ -112,6 +112,13 @@ var DesertPerpetualHeuristic = ActivityHeuristic{
 	CheckpointLowman: map[int][]LowmanData{
 		Any: {
 			{
+				MinPlayers: 1,
+				Range: []DateRange{
+					{Start: time.Date(2026, time.June, 14, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
+				},
+				CheatedChance: 0.10,
+			},
+			{
 				MinPlayers:    2,
 				CheatedChance: 0.10,
 			},

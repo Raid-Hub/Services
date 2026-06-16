@@ -26,7 +26,7 @@ var logger = logging.NewLogger("cheat-detection")
 
 const (
 	numBungieWorkers = 15
-	versionPrefix    = "beta-2.2.2"
+	versionPrefix    = "beta-2.2.3"
 )
 
 // Instances played by level 3+ accounts that have not yet been checked at the current version.
