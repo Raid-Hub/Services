@@ -112,13 +112,6 @@ var DesertPerpetualHeuristic = ActivityHeuristic{
 	CheckpointLowman: map[int][]LowmanData{
 		Any: {
 			{
-				MinPlayers: 1,
-				Range: []DateRange{
-					{Start: time.Date(2026, time.June, 14, 0, 0, 0, 0, time.UTC), End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-				},
-				CheatedChance: 0.10,
-			},
-			{
 				MinPlayers:    2,
 				CheatedChance: 0.10,
 			},
@@ -238,37 +231,21 @@ var Pantheon2Heuristic = ActivityHeuristic{
 			{MinPlayers: 3, CheatedChance: 0.10},
 		},
 		pantheonVersionInsurrectionPrimeRevolutionary: {
-			{
-				MinPlayers: 1,
-				Range: []DateRange{
-					{Start: pantheonBossPushStratStart, End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-				},
-				CheatedChance: 0.25,
-			},
 			{MinPlayers: 4, CheatedChance: 0.15},
 			{MinPlayers: 3, CheatedChance: 0.35},
 		},
-		pantheonVersionMorgethSurpassing: append(
-			pantheonBossPushLowmanEntries(0.25),
-			LowmanData{MinPlayers: 4, CheatedChance: 0.65},
-		),
+		pantheonVersionMorgethSurpassing: {
+			{MinPlayers: 4, CheatedChance: 0.65},
+		},
 	},
 	CheckpointLowman: map[int][]LowmanData{
-		pantheonVersionMorgethSurpassing: append(
-			pantheonBossPushLowmanEntries(0.25),
-			LowmanData{MinPlayers: 4, CheatedChance: 0.50},
-		),
+		pantheonVersionMorgethSurpassing: {
+			{MinPlayers: 4, CheatedChance: 0.50},
+		},
 		pantheonVersionCalusResplendent: {
 			{MinPlayers: 2, CheatedChance: 0.15},
 		},
 		pantheonVersionInsurrectionPrimeRevolutionary: {
-			{
-				MinPlayers: 1,
-				Range: []DateRange{
-					{Start: pantheonBossPushStratStart, End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-				},
-				CheatedChance: 0.25,
-			},
 			{MinPlayers: 2, CheatedChance: 0.15},
 		},
 	},
