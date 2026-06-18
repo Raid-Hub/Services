@@ -1,25 +1,6 @@
 package cheat_detection
 
-import (
-	"fmt"
-	"time"
-)
-
-// Boss push-off strat (1–3 player Morgeth + solo IP Rev) discovered by Spite#2562 on 2026-06-15 ~08:33 UTC.
-// Window starts 2h earlier to cover clears immediately after the strat spread.
-var pantheonBossPushStratStart = time.Date(2026, 6, 15, 6, 33, 0, 0, time.UTC)
-
-var pantheonBossPushStratRange = []DateRange{
-	{Start: pantheonBossPushStratStart, End: time.Date(2999, time.January, 1, 0, 0, 0, 0, time.UTC)},
-}
-
-func pantheonBossPushLowmanEntries(cheatedChance float64) []LowmanData {
-	return []LowmanData{
-		{MinPlayers: 1, Range: pantheonBossPushStratRange, CheatedChance: cheatedChance},
-		{MinPlayers: 2, Range: pantheonBossPushStratRange, CheatedChance: cheatedChance},
-		{MinPlayers: 3, Range: pantheonBossPushStratRange, CheatedChance: cheatedChance},
-	}
-}
+import "fmt"
 
 const (
 	pantheonEmptyFeatSkullHash     = int64(790421403)

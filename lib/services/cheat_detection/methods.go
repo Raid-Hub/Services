@@ -10,6 +10,9 @@ import (
 var crafteningStart = time.Date(2023, 9, 15, 13, 54, 00, 0, time.UTC)
 var crafteningEnd = time.Date(2023, 9, 18, 4, 00, 9, 0, time.UTC)
 
+// Bubble push-off glitch spread ~2026-06-14 (checkpoint lowmans + Pantheon boss push).
+var bubblePushOffGlitchStart = time.Date(2026, time.June, 14, 0, 0, 0, 0, time.UTC)
+
 // Skip window for the bad flagging period (prevent recurrence for Sept 16-23, 2025)
 var quickfangStart = time.Date(2025, 9, 16, 17, 0, 0, 0, time.UTC)
 var quickfangEnd = time.Date(2025, 9, 23, 17, 0, 0, 0, time.UTC)
@@ -17,6 +20,23 @@ var quickfangEnd = time.Date(2025, 9, 23, 17, 0, 0, 0, time.UTC)
 // Skip
 var bowModStart = time.Date(2026, 1, 27, 17, 0, 0, 0, time.UTC)
 var bowModEnd = time.Date(2026, 2, 3, 17, 0, 0, 0, time.UTC)
+
+func skipLowmanForKnownStrat(instance *Instance) bool {
+	if !instance.Completed || !instance.DateCompleted.After(bubblePushOffGlitchStart) {
+		return false
+	}
+
+	switch instance.Activity {
+	case 15: // Desert Perpetual — fresh + checkpoint
+		return true
+	case 7, 9, 10, 12: // Garden / VoG / Vow / RoN — final boss checkpoint only
+		return instance.Fresh != nil && !*instance.Fresh
+	case 102: // Pantheon 2 — Morgeth + Insurrection Prime Rev
+		return instance.Version == pantheonVersionMorgethSurpassing ||
+			instance.Version == pantheonVersionInsurrectionPrimeRevolutionary
+	}
+	return false
+}
 
 func (h ActivityHeuristic) apply(instance *Instance) (ResultTuple, map[int64]ResultTuple) {
 	// Instances overlapping known problematic windows should be skipped
@@ -37,7 +57,9 @@ func (h ActivityHeuristic) apply(instance *Instance) (ResultTuple, map[int64]Res
 	var lowmanExplanation string
 
 	if instance.Completed {
-		if instance.Fresh != nil && *instance.Fresh {
+		if skipLowmanForKnownStrat(instance) {
+			lowmanPrb, lowmanReasonBit, lowmanExplanation = nilResult()
+		} else if instance.Fresh != nil && *instance.Fresh {
 			lowmanPrb, lowmanReasonBit, lowmanExplanation = h.applyFreshLowman(instance)
 		} else {
 			lowmanPrb, lowmanReasonBit, lowmanExplanation = h.applyCheckpointLowman(instance)
