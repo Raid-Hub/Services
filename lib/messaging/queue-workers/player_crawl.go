@@ -23,16 +23,18 @@ func PlayerCrawlTopic() processing.Topic {
 		KeepInReady:           true,
 		PrefetchCount:         1,
 		ScaleUpThreshold:      100,
-		ScaleDownThreshold:    10,
-		ScaleUpPercent:        0.5, // Add 50% more workers (more aggressive)
+		LargeBacklogThreshold: 1000,
+		ScaleDownThreshold:    50,
+		ScaleUpPercent:        0.5,
 		ScaleDownPercent:      0.1,
+		ScaleCheckInterval:    30 * time.Second,
+		ScaleCooldown:         15 * time.Second,
 		MinWorkersPerStep:     3,
-		MaxWorkersPerStep:     25,               // Can add up to 25 workers at once (more aggressive)
-		ConsecutiveChecksUp:   1,                // Scale up after just 1 check (immediate)
-		ConsecutiveChecksDown: 3,                // More conservative for scale-down
-		ScaleCooldown:         30 * time.Second, // Shorter cooldown for faster scaling
+		MaxWorkersPerStep:     25,
+		ConsecutiveChecksUp:   1,
+		ConsecutiveChecksDown: 3,
 		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
-		MaxRetryCount:         5, // Reduced from 12 to prevent exponential retry amplification
+		MaxRetryCount:         5,
 		RetryDelay:            processing.ExponentialRetryDelay(5 * time.Minute),
 	}, processPlayerCrawl)
 }

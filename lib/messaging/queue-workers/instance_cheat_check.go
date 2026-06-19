@@ -14,18 +14,25 @@ import (
 // InstanceCheatCheckTopic creates a new instance cheat check topic
 func InstanceCheatCheckTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:          routing.InstanceCheatCheck,
-		MinWorkers:         1,
-		MaxWorkers:         4,
-		DesiredWorkers:     1,
-		KeepInReady:        true,
-		PrefetchCount:      1,
-		ScaleUpThreshold:   100,
-		ScaleDownThreshold: 10,
-		ScaleUpPercent:     0.2,
-		ScaleDownPercent:   0.1,
-		MaxRetryCount:      5,
-		RetryDelay:         processing.ExponentialRetryDelay(time.Second),
+		QueueName:             routing.InstanceCheatCheck,
+		MinWorkers:            2,
+		MaxWorkers:            16,
+		DesiredWorkers:        4,
+		KeepInReady:           true,
+		PrefetchCount:         1,
+		ScaleUpThreshold:      100,
+		LargeBacklogThreshold: 1000,
+		ScaleDownThreshold:    50,
+		ScaleUpPercent:        2,
+		ScaleDownPercent:      0.5,
+		ScaleCheckInterval:    30 * time.Second,
+		ScaleCooldown:         15 * time.Second,
+		MinWorkersPerStep:     2,
+		MaxWorkersPerStep:     6,
+		ConsecutiveChecksUp:   1,
+		ConsecutiveChecksDown: 3,
+		MaxRetryCount:         5,
+		RetryDelay:            processing.ExponentialRetryDelay(time.Second),
 	}, processInstanceCheatCheck)
 }
 

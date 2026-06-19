@@ -118,6 +118,7 @@ type TopicConfig struct {
 	PrefetchCount         int
 	ScaleUpThreshold      int
 	ScaleDownThreshold    int
+	LargeBacklogThreshold int // When queue depth >= this, scale up immediately (skips consecutive-check wait)
 	ScaleUpPercent        float64
 	ScaleDownPercent      float64
 	ScaleCheckInterval    time.Duration
