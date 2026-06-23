@@ -329,9 +329,9 @@ var leviHashes = map[uint32]bool{
 
 // resolveInstanceActivityHash returns the activity hash to store on the instance row.
 // Pantheon featured-reprise playlists report the playlist wrapper in directorActivityHash
-// and the actual encounter in referenceId.
+// and the actual encounter in referenceId. For typical raids both fields match.
 func resolveInstanceActivityHash(ad bungie.DestinyHistoricalStatsActivity) uint32 {
-	if ad.ReferenceId != 0 {
+	if ad.ReferenceId != 0 && ad.ReferenceId != ad.DirectorActivityHash {
 		return ad.ReferenceId
 	}
 	return ad.DirectorActivityHash
