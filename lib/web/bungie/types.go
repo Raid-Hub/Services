@@ -47,6 +47,7 @@ type DestinyHistoricalStatsActivity struct {
 	Mode                 int    `json:"mode"`
 	Modes                []int  `json:"modes"`
 	MembershipType       int    `json:"membershipType"`
+	ReferenceId          uint32 `json:"referenceId"`
 	DirectorActivityHash uint32 `json:"directorActivityHash"`
 }
 

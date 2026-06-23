@@ -37,6 +37,10 @@ func GetMetricsForScaling(elapsedTime time.Duration) (*AtlasMetrics, error) {
 
 // GetMetrics fetches all metrics for the given interval
 func GetMetrics(intervalMinutes int) (*AtlasMetrics, error) {
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1
+	}
+
 	metrics := &AtlasMetrics{}
 
 	// Fetch all metrics in parallel would be ideal, but for now we'll do sequentially
