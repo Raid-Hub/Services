@@ -108,9 +108,11 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 
 	completionReason := getStat(report.Entries[0].Values, "completionReason")
 
+	activityHash := resolveInstanceActivityHash(report.ActivityDetails)
+
 	result := dto.Instance{
 		InstanceId: report.ActivityDetails.InstanceId,
-		Hash:       report.ActivityDetails.DirectorActivityHash,
+		Hash:       activityHash,
 		// assigned later
 		Fresh:           nil,
 		DateStarted:     startDate,
@@ -249,7 +251,7 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 	if err != nil {
 		return nil, false, err
 	}
-	result.Fresh = normalizeFresh(report.ActivityDetails.DirectorActivityHash, fresh)
+	result.Fresh = normalizeFresh(activityHash, fresh)
 
 	if result.Completed && deathless {
 		result.Flawless = result.Fresh
@@ -325,6 +327,16 @@ var leviHashes = map[uint32]bool{
 	3879860661: true, 3857338478: true,
 }
 
+// resolveInstanceActivityHash returns the activity hash to store on the instance row.
+// Pantheon featured-reprise playlists report the playlist wrapper in directorActivityHash
+// and the actual encounter in referenceId. For typical raids both fields match.
+func resolveInstanceActivityHash(ad bungie.DestinyHistoricalStatsActivity) uint32 {
+	if ad.ReferenceId != 0 && ad.ReferenceId != ad.DirectorActivityHash {
+		return ad.ReferenceId
+	}
+	return ad.DirectorActivityHash
+}
+
 // normalizeFresh adjusts unreliable Bungie fresh signals for specific activities.
 func normalizeFresh(activityHash uint32, fresh *bool) *bool {
 	if activityHash != morgethSurpassingHash {
@@ -355,11 +367,12 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 		// Pre beyond light, using StartingPhaseIndex
 		result = new(bool)
 		startingPhaseIndex := *pgcr.StartingPhaseIndex
+		activityHash := resolveInstanceActivityHash(pgcr.ActivityDetails)
 		// sotp
-		if pgcr.ActivityDetails.DirectorActivityHash == 548750096 || pgcr.ActivityDetails.DirectorActivityHash == 2812525063 {
+		if activityHash == 548750096 || activityHash == 2812525063 {
 			*result = (startingPhaseIndex <= 1)
 			// levi
-		} else if leviHashes[pgcr.ActivityDetails.DirectorActivityHash] {
+		} else if leviHashes[activityHash] {
 			*result = (startingPhaseIndex == 0 || startingPhaseIndex == 2)
 		} else {
 			*result = (startingPhaseIndex == 0)
