@@ -14,19 +14,26 @@ import (
 // CharacterFillTopic creates a new character fill topic
 func CharacterFillTopic() processing.Topic {
 	return processing.NewTopic(processing.TopicConfig{
-		QueueName:          routing.CharacterFill,
-		MinWorkers:         2,
-		MaxWorkers:         15,
-		DesiredWorkers:     3,
-		KeepInReady:        true,
-		PrefetchCount:      1,
-		ScaleUpThreshold:   100,
-		ScaleDownThreshold: 10,
-		ScaleUpPercent:     0.2,
-		ScaleDownPercent:   0.1,
-		BungieSystemDeps:   []string{"Destiny2", "D2Characters"},
-		MaxRetryCount:      4, // Character data is useful but not critical
-		RetryDelay:         processing.ExponentialRetryDelay(5 * time.Minute),
+		QueueName:             routing.CharacterFill,
+		MinWorkers:            2,
+		MaxWorkers:            15,
+		DesiredWorkers:        4,
+		KeepInReady:           true,
+		PrefetchCount:         1,
+		ScaleUpThreshold:      100,
+		LargeBacklogThreshold: 1000,
+		ScaleDownThreshold:    50,
+		ScaleUpPercent:        0.5,
+		ScaleDownPercent:      0.1,
+		ScaleCheckInterval:    30 * time.Second,
+		ScaleCooldown:         15 * time.Second,
+		MinWorkersPerStep:     2,
+		MaxWorkersPerStep:     4,
+		ConsecutiveChecksUp:   1,
+		ConsecutiveChecksDown: 3,
+		BungieSystemDeps:      []string{"Destiny2", "D2Characters"},
+		MaxRetryCount:         4,
+		RetryDelay:            processing.ExponentialRetryDelay(5 * time.Minute),
 	}, processCharacterFill)
 }
 

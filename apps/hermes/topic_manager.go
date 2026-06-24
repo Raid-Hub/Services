@@ -547,6 +547,19 @@ func (tm *TopicManager) shouldScaleWorkers(queueDepth, currentWorkers int) (bool
 		return false, "none", currentWorkers
 	}
 
+	// Large backlog fast path: react on the first depth check, add MaxWorkersPerStep per cooldown
+	if tm.config.LargeBacklogThreshold > 0 &&
+		queueDepth >= tm.config.LargeBacklogThreshold &&
+		currentWorkers < tm.config.MaxWorkers {
+		workersToAdd := min(tm.config.MaxWorkers-currentWorkers, tm.config.MaxWorkersPerStep)
+		targetWorkers := currentWorkers + workersToAdd
+		tm.scalingState.lastQueueDepth = queueDepth
+		tm.scalingState.lastScaleDirection = "up"
+		tm.scalingState.consecutiveChecksUp = 0
+		tm.scalingState.consecutiveChecksDown = 0
+		return true, "up", targetWorkers
+	}
+
 	// Check if we should scale up (using hysteresis)
 	if queueDepth > tm.config.ScaleUpThreshold && currentWorkers < tm.config.MaxWorkers {
 		// Require consecutive checks above threshold
