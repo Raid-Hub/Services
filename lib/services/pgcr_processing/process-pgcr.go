@@ -108,7 +108,7 @@ func parsePGCRToInstance(report *bungie.DestinyPostGameCarnageReport) (*dto.Inst
 
 	completionReason := getStat(report.Entries[0].Values, "completionReason")
 
-	activityHash := resolveInstanceActivityHash(report.ActivityDetails)
+	activityHash := ResolveInstanceActivityHash(report.ActivityDetails)
 
 	result := dto.Instance{
 		InstanceId: report.ActivityDetails.InstanceId,
@@ -327,10 +327,10 @@ var leviHashes = map[uint32]bool{
 	3879860661: true, 3857338478: true,
 }
 
-// resolveInstanceActivityHash returns the activity hash to store on the instance row.
+// ResolveInstanceActivityHash returns the activity hash to store on the instance row.
 // Pantheon featured-reprise playlists report the playlist wrapper in directorActivityHash
 // and the actual encounter in referenceId. For typical raids both fields match.
-func resolveInstanceActivityHash(ad bungie.DestinyHistoricalStatsActivity) uint32 {
+func ResolveInstanceActivityHash(ad bungie.DestinyHistoricalStatsActivity) uint32 {
 	if ad.ReferenceId != 0 && ad.ReferenceId != ad.DirectorActivityHash {
 		return ad.ReferenceId
 	}
@@ -367,7 +367,7 @@ func isFresh(pgcr *bungie.DestinyPostGameCarnageReport, deathless bool) (*bool, 
 		// Pre beyond light, using StartingPhaseIndex
 		result = new(bool)
 		startingPhaseIndex := *pgcr.StartingPhaseIndex
-		activityHash := resolveInstanceActivityHash(pgcr.ActivityDetails)
+		activityHash := ResolveInstanceActivityHash(pgcr.ActivityDetails)
 		// sotp
 		if activityHash == 548750096 || activityHash == 2812525063 {
 			*result = (startingPhaseIndex <= 1)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -265,6 +266,13 @@ func ProcessMissedPGCRs() {
 	postResults(hadesAlerting, len(numbers), len(failed), len(found), minFailed, maxFailed, gaps)
 }
 
+func isBenignMissedPgcrStoreError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "activity not found for hash")
+}
+
 func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -288,11 +296,16 @@ func worker(ch chan int64, successes chan int64, failures chan int64, wg *sync.W
 				_, committed, err := instance_storage.StorePGCR(context.Background(), instance, pgcr)
 				if err != nil {
 					attempt := errors + 1
+					fields := map[string]any{logging.INSTANCE_ID: instanceID, logging.ATTEMPT: attempt}
 					if attempt > workerMaxRetries {
-						logger.Error(instance_storage.FAILED_TO_STORE_INSTANCE, err, map[string]any{logging.INSTANCE_ID: instanceID,
-							logging.ATTEMPT: attempt})
+						if isBenignMissedPgcrStoreError(err) {
+							logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, err, fields)
+						} else {
+							logger.Error(instance_storage.FAILED_TO_STORE_INSTANCE, err, fields)
+						}
 					} else {
-						logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, err, map[string]any{logging.INSTANCE_ID: instanceID, logging.ATTEMPT: attempt, logging.RETRIES: workerMaxRetries})
+						fields[logging.RETRIES] = workerMaxRetries
+						logger.Warn(instance_storage.FAILED_TO_STORE_INSTANCE, err, fields)
 					}
 					time.Sleep(3 * time.Second)
 					errors++

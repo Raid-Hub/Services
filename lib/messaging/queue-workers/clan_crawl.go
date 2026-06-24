@@ -45,7 +45,7 @@ func processClanCrawl(worker processing.WorkerInterface, message amqp.Delivery) 
 	// Call clan crawl logic
 	err = clan.Crawl(worker.Context(), groupId)
 	if err != nil {
-		worker.Error("CLAN_CRAWL_FAILED", err, fields)
+		worker.Warn("CLAN_CRAWL_FAILED", err, fields)
 		return err
 	}
 
