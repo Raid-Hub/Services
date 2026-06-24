@@ -45,8 +45,7 @@ func processActivityHistory(worker processing.WorkerInterface, message amqp.Deli
 	err = player.UpdateActivityHistory(worker.Context(), membershipId)
 
 	if err != nil {
-		// Worker logs MESSAGE_PROCESSING_ERROR at Warn and handles retries; avoid duplicate Sentry Error.
-		worker.Warn("ACTIVITY_HISTORY_PROCESSING_ERROR", err, map[string]any{
+		worker.Error("ACTIVITY_HISTORY_PROCESSING_ERROR", err, map[string]any{
 			logging.MEMBERSHIP_ID: membershipId,
 		})
 		return err

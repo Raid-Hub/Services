@@ -7,6 +7,7 @@ import (
 	"raidhub/lib/messaging/publishing"
 	"raidhub/lib/messaging/routing"
 	"raidhub/lib/monitoring/global_metrics"
+	"raidhub/lib/services/pgcr_processing"
 	"raidhub/lib/services/subscriptions"
 	"raidhub/lib/utils/logging"
 	"raidhub/lib/web/bungie"
@@ -22,6 +23,10 @@ var logger = logging.NewLogger("INSTANCE_STORAGE_SERVICE")
 // 3. ClickHouse publishing (external, non-transactional)
 func StorePGCR(ctx context.Context, inst *dto.Instance, raw *bungie.DestinyPostGameCarnageReport) (*time.Duration, bool, error) {
 	startTime := time.Now()
+
+	if raw != nil {
+		inst.Hash = pgcr_processing.ResolveInstanceActivityHash(raw.ActivityDetails)
+	}
 
 	// Start transaction for atomic storage of pgcr + instance data
 	tx, err := postgres.DB.Begin()

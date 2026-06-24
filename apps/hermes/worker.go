@@ -10,9 +10,6 @@ import (
 	"raidhub/lib/monitoring/hermes_metrics"
 	"raidhub/lib/utils"
 	"raidhub/lib/utils/logging"
-	"raidhub/lib/utils/network"
-	"raidhub/lib/utils/retry"
-	"raidhub/lib/web/discord"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -61,20 +58,17 @@ func (w *Worker) Run() {
 			return
 		case msg, ok := <-w.channel:
 			if !ok {
-				cause := context.Cause(w.ctx)
-				if cause != nil && cause.Error() == AUTOSCALE_IN {
-					w.Debug(WORKER_STOPPING, map[string]any{
-						logging.REASON: AUTOSCALE_IN,
-					})
-				} else if w.ctx.Err() != nil {
+				// Check if this is a natural shutdown (context cancelled) or unexpected channel closure
+				select {
+				case <-w.ctx.Done():
+					// Natural shutdown - context was cancelled (e.g., autoscale, app shutdown)
 					w.Debug(WORKER_STOPPING, map[string]any{
 						logging.REASON: "channel_closed",
 					})
-				} else {
-					// Delivery channel can close during scale-in before cancel is selected.
-					w.Warn(WORKER_STOPPING, fmt.Errorf("channel_closed"), map[string]any{
-						logging.REASON: "delivery_channel_closed",
-					})
+				default:
+					// Unexpected channel closure - report as error
+					err := fmt.Errorf("channel_closed")
+					w.Error(WORKER_STOPPING, err, nil)
 				}
 				return
 			}
@@ -245,7 +239,7 @@ func (w *Worker) dropMessage(msg amqp.Delivery, retryCount int, maxRetries int, 
 	if msg.Exchange != "" {
 		fields["exchange"] = msg.Exchange
 	}
-	w.logMessageFailure("MESSAGE_EXCEEDED_MAX_RETRIES", processingErr, fields)
+	w.Error("MESSAGE_EXCEEDED_MAX_RETRIES", processingErr, fields)
 
 	// Nack with requeue=false to permanently drop the message
 	// This prevents infinite retry loops
@@ -318,35 +312,5 @@ func (w *Worker) logUnretryableMessage(msg amqp.Delivery, err error) {
 	if originalErr := errors.Unwrap(err); originalErr != nil {
 		fields["original_error"] = originalErr.Error()
 	}
-	w.logMessageFailure("MESSAGE_UNRETRYABLE", err, fields)
-}
-
-func (w *Worker) logMessageFailure(key string, err error, fields map[string]any) {
-	if isOperationalMessageFailure(err) {
-		w.Warn(key, err, fields)
-		return
-	}
-	w.Error(key, err, fields)
-}
-
-func isOperationalMessageFailure(err error) bool {
-	if processing.IsUnretryableError(err) {
-		return true
-	}
-	if discord.IsPermanentDeliveryError(err) {
-		return true
-	}
-	var maxRetriesErr *retry.MaxRetriesExceededError
-	if errors.As(err, &maxRetriesErr) {
-		if network.IsCloudflareError(maxRetriesErr) ||
-			network.IsTimeout(maxRetriesErr) ||
-			network.IsConnectionError(maxRetriesErr) {
-			return true
-		}
-		if netErr := network.CategorizeNetworkError(maxRetriesErr); netErr != nil &&
-			netErr.Type == network.ErrorTypeServerError {
-			return true
-		}
-	}
-	return false
+	w.Error("MESSAGE_UNRETRYABLE", err, fields)
 }
