@@ -1,0 +1,54 @@
+name: Manually Deploy Services to Prod
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if user is a repo admin
+        run: |
+          if [[ $(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" | jq -r '.permission') != "admin" ]]; then
+            echo "Only repo admins can run this action."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify build
+        run: |
+          go build -o /dev/null ./apps/atlas/
+          go build -o /dev/null ./apps/hermes/
+          go build -o /dev/null ./apps/zeus/
+
+      - name: Determine deploy targets
+        run: bash ./.github/scripts/determine-deploy-targets.sh --force-apps
+
+      - name: Install cloudflared
+        run: ./.github/scripts/install-cloudflared.sh
+
+      - name: Load SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          known_hosts: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+
+      - name: Deploy Services
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_GHA_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_GHA_CLIENT_SECRET }}
+        run: |
+          branch_ref="${{ github.ref }}"
+          branch_name="${branch_ref#refs/heads/}"
+          ssh -o ProxyCommand="cloudflared access ssh --hostname %h" root@ssh.raidhub.io \
+          "cd /RaidHub/Services && DEPLOY_FORCE_APPS=1 bash ./.github/scripts/deploy-services.sh \"$branch_name\""
