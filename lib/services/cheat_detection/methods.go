@@ -11,7 +11,9 @@ var crafteningStart = time.Date(2023, 9, 15, 13, 54, 00, 0, time.UTC)
 var crafteningEnd = time.Date(2023, 9, 18, 4, 00, 9, 0, time.UTC)
 
 // Bubble push-off glitch spread ~2026-06-14 (checkpoint lowmans + Pantheon boss push).
+// Patched 2026-06-23 weekly reset (17:00 UTC).
 var bubblePushOffGlitchStart = time.Date(2026, time.June, 14, 0, 0, 0, 0, time.UTC)
+var bubblePushOffGlitchEnd = time.Date(2026, time.June, 23, 17, 0, 0, 0, time.UTC)
 
 // Skip window for the bad flagging period (prevent recurrence for Sept 16-23, 2025)
 var quickfangStart = time.Date(2025, 9, 16, 17, 0, 0, 0, time.UTC)
@@ -22,7 +24,9 @@ var bowModStart = time.Date(2026, 1, 27, 17, 0, 0, 0, time.UTC)
 var bowModEnd = time.Date(2026, 2, 3, 17, 0, 0, 0, time.UTC)
 
 func skipLowmanForKnownStrat(instance *Instance) bool {
-	if !instance.Completed || !instance.DateCompleted.After(bubblePushOffGlitchStart) {
+	if !instance.Completed ||
+		!instance.DateCompleted.After(bubblePushOffGlitchStart) ||
+		!instance.DateCompleted.Before(bubblePushOffGlitchEnd) {
 		return false
 	}
 
