@@ -393,6 +393,13 @@ func (h ActivityHeuristic) applyGeneral(instance *Instance, lowmanPrb float64, l
 			prb = math.Pow(prb, 0.8)
 		}
 
+		emblemPrb, emblemExplanation := emblemCheatProbability(player, prb)
+		if emblemPrb > 0 {
+			reason |= SuspiciousEmblem
+			explanations = append(explanations, emblemExplanation)
+			prb = cumulativeProbability(prb, emblemPrb)
+		}
+
 		playerResults[player.MembershipId] = ResultTuple{
 			MembershipId: player.MembershipId,
 			Probability:  prb,
