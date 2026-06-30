@@ -636,6 +636,39 @@ func ResetPlayerCheatLevel(membershipIds []int64) (int64, error) {
 	return rowsAffected, err
 }
 
+// ClearCascadeBlacklistsForPlayers removes standing and cascade blacklists for players
+// whose cheat_level was reset after a false-positive flag clear.
+func ClearCascadeBlacklistsForPlayers(membershipIds []int64) (int64, int64, error) {
+	if len(membershipIds) == 0 {
+		return 0, 0, nil
+	}
+
+	result, err := postgres.DB.Exec(`
+		DELETE FROM blacklist_instance_player
+		WHERE membership_id = ANY($1)
+	`, pq.Array(membershipIds))
+	if err != nil {
+		return 0, 0, err
+	}
+	playerBlacklistsDeleted, _ := result.RowsAffected()
+
+	result, err = postgres.DB.Exec(`
+		DELETE FROM blacklist_instance bi
+		WHERE report_source = 'BlacklistedPlayerCascade'
+			AND EXISTS (
+				SELECT 1
+				FROM unnest($1::bigint[]) AS mid(membership_id)
+				WHERE bi.reason = 'Blacklisted player ' || mid.membership_id::text || ' has played in this instance'
+			)
+	`, pq.Array(membershipIds))
+	if err != nil {
+		return 0, 0, err
+	}
+	cascadeBlacklistsDeleted, _ := result.RowsAffected()
+
+	return playerBlacklistsDeleted, cascadeBlacklistsDeleted, nil
+}
+
 // SetPlayerWhitelisted marks players as whitelisted for cheat detection (excluded from automated flag aggregation).
 func SetPlayerWhitelisted(membershipIds []int64) (int64, error) {
 	if len(membershipIds) == 0 {
