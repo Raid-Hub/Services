@@ -59,8 +59,8 @@ func (e *BungieResponseParseError) Error() string {
 	return fmt.Sprintf("%s: unexpected bungie %d %s response: '%s'", e.Operation, e.StatusCode, e.ContentType, e.Title)
 }
 
-// isKnownHTMLErrorPage checks if the error is a known HTML error page that should not be sent to Sentry
-// These are expected/recoverable conditions that are handled by retry logic
+// isKnownHTMLErrorPage checks if the error is a known HTML error page that should not be sent to Sentry.
+// Cloudflare pages get one quick in-process retry; longer blocks use Hermes queue backoff.
 func (e *BungieResponseParseError) isKnownHTMLErrorPage() bool {
 	if e.ContentType == "" || e.Title == "" {
 		return false
@@ -97,12 +97,9 @@ func (e *BungieResponseParseError) isKnownHTMLErrorPage() bool {
 }
 
 func get[T any](ctx context.Context, c *BungieClient, url netUrl.URL, operation string, params map[string]any) (BungieHttpResult[T], error) {
-	// Wraps the get in 2 layers of retry:
-	// Inner layer retries timeout and connection errors (excludes BungieError instances)
-	// Outer layer retries Cloudflare errors
+	// Outer: one ~2s Cloudflare retry. Inner: up to two quick transient retries. Queue handles the rest.
 	return retry.WithRetryForResult(ctx, network.CloudflareRetryConfig(clientLogger, params), func(attempt int) (BungieHttpResult[T], error) {
 		if attempt > 1 {
-			// add a query parameter to the url to indicate the retry attempt
 			queryValues := url.Query()
 			queryValues.Add("retry", fmt.Sprintf("%d", attempt))
 			url.RawQuery = queryValues.Encode()
@@ -289,17 +286,16 @@ func IsTransientError(bungieErrorCode int, httpStatusCode int) bool {
 	return true
 }
 
-// BungieRetryConfig retries transient network errors for Bungie API calls
-// It specifically excludes BungieError instances (application-level errors) from retries
-// such as timeout, connection errors, and server errors (5xx)
+// BungieRetryConfig retries transient network errors for Bungie API calls (timeout, connection, 5xx).
+// At most two quick retries; Cloudflare and longer outages are handled by Hermes queue backoff.
 func BungieRetryConfig() retry.RetryConfig {
 	transientRetryConfig := network.TransientNetworkErrorRetryConfig()
 	return retry.RetryConfig{
-		MaxAttempts:  3,
+		MaxAttempts:  2,
 		InitialDelay: 50 * time.Millisecond,
-		MaxDelay:     5 * time.Second,
+		MaxDelay:     2 * time.Second,
 		Multiplier:   2.0,
-		Jitter:       0.1, // 10% jitter
+		Jitter:       0.1,
 		OnRetry:      nil,
 		ShouldRetry: func(err error) bool {
 			// Check if this is a Bungie error (application-level error, not a network error)
