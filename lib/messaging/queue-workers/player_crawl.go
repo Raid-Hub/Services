@@ -32,7 +32,7 @@ func PlayerCrawlTopic() processing.Topic {
 		ConsecutiveChecksDown: 3,                // More conservative for scale-down
 		ScaleCooldown:         30 * time.Second, // Shorter cooldown for faster scaling
 		BungieSystemDeps:      []string{"Destiny2", "D2Profiles", "Activities"},
-		MaxRetryCount:         5, // Reduced from 12 to prevent exponential retry amplification
+		MaxRetryCount:         0, // Unlimited queue backoff (30m cap); CF blocks retry via delayed exchange
 		RetryDelay:            processing.ExponentialRetryDelay(5 * time.Minute),
 	}, processPlayerCrawl)
 }

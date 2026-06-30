@@ -30,16 +30,15 @@ func TransientNetworkErrorRetryConfig() retry.RetryConfig {
 	}
 }
 
-// Uses more attempts and longer delays to handle Cloudflare's rate limiting and blocking pages
-// Only retries if the error is a Cloudflare error
-// Params: logger: logger to use for logging, loggingFields: fields to add to the logging
+// CloudflareRetryConfig performs one quick retry after ~2s for Cloudflare challenge pages.
+// Longer outages are handled by Hermes queue backoff.
 func CloudflareRetryConfig(logger logging.Logger, loggingFields map[string]any) retry.RetryConfig {
 	return retry.RetryConfig{
-		MaxAttempts:  3,
-		InitialDelay: 1 * time.Second,
-		MaxDelay:     10 * time.Second,
-		Multiplier:   4,   // Back off fast
-		Jitter:       0.2, // 20% jitter for better distribution of retries
+		MaxAttempts:  1,
+		InitialDelay: 2 * time.Second,
+		MaxDelay:     2 * time.Second,
+		Multiplier:   1.0,
+		Jitter:       0.2,
 		OnRetry: func(attempt int, err error) {
 			fields := map[string]any{
 				logging.ATTEMPTS: attempt,
