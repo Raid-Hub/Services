@@ -177,6 +177,7 @@ func main() {
 			"sample_instance_ids":  sampleInstanceIds,
 			"would_clear_flags":    true,
 			"would_remove_bl":      true,
+			"would_clear_cascade":  true,
 			"would_reset_cheat_lv": true,
 		})
 		return
@@ -213,6 +214,11 @@ func main() {
 		logger.Fatal("RESET_CHEAT_LEVEL_ERROR", err, map[string]any{})
 	}
 
+	playerBlacklistsDeleted, cascadeBlacklistsDeleted, err := cheat_detection.ClearCascadeBlacklistsForPlayers(membershipIds)
+	if err != nil {
+		logger.Fatal("CLEAR_CASCADE_BLACKLISTS_ERROR", err, map[string]any{})
+	}
+
 	// Get player names for final output
 	playerNames, err := cheat_detection.GetPlayerNames(membershipIds)
 	if err != nil {
@@ -227,12 +233,14 @@ func main() {
 
 	// Note: blacklist deletions are handled inside ClearFlagsByBitmap
 	logger.Info("CLEAR_FLAGS_COMPLETE", map[string]any{
-		"instance_flags_deleted": instanceFlagsDeleted,
-		"player_flags_deleted":   playerFlagsDeleted,
-		"players_reset":          playersReset,
-		"instances_affected":     len(instanceIds),
-		"players_affected":       len(membershipIds),
-		"player_names":           playerNames,
-		"sample_instance_ids":    sampleInstanceIds,
+		"instance_flags_deleted":     instanceFlagsDeleted,
+		"player_flags_deleted":       playerFlagsDeleted,
+		"players_reset":              playersReset,
+		"player_blacklists_deleted":  playerBlacklistsDeleted,
+		"cascade_blacklists_deleted": cascadeBlacklistsDeleted,
+		"instances_affected":         len(instanceIds),
+		"players_affected":           len(membershipIds),
+		"player_names":               playerNames,
+		"sample_instance_ids":        sampleInstanceIds,
 	})
 }

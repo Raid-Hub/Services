@@ -24,8 +24,16 @@ var bowModStart = time.Date(2026, 1, 27, 17, 0, 0, 0, time.UTC)
 var bowModEnd = time.Date(2026, 2, 3, 17, 0, 0, 0, time.UTC)
 
 func skipLowmanForKnownStrat(instance *Instance) bool {
-	if !instance.Completed ||
-		!instance.DateCompleted.After(bubblePushOffGlitchStart) ||
+	if !instance.Completed {
+		return false
+	}
+
+	// Finisher knock-off (like Crota checkpoint) — any player count can clear.
+	if instance.Activity == 102 && instance.Version == pantheonVersionMorgethSurpassing {
+		return true
+	}
+
+	if !instance.DateCompleted.After(bubblePushOffGlitchStart) ||
 		!instance.DateCompleted.Before(bubblePushOffGlitchEnd) {
 		return false
 	}
@@ -35,9 +43,8 @@ func skipLowmanForKnownStrat(instance *Instance) bool {
 		return true
 	case 7, 9, 10, 12: // Garden / VoG / Vow / RoN — final boss checkpoint only
 		return instance.Fresh != nil && !*instance.Fresh
-	case 102: // Pantheon 2 — Morgeth + Insurrection Prime Rev
-		return instance.Version == pantheonVersionMorgethSurpassing ||
-			instance.Version == pantheonVersionInsurrectionPrimeRevolutionary
+	case 102: // Pantheon 2 — Insurrection Prime Rev (bubble push-off only)
+		return instance.Version == pantheonVersionInsurrectionPrimeRevolutionary
 	}
 	return false
 }

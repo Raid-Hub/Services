@@ -220,6 +220,7 @@ var PantheonHeuristic = ActivityHeuristic{
 }
 
 // Pantheon2Heuristic uses feat-aware minimum durations in pantheon_heuristics.go.
+// Morgeth Surpassing has no lowman rules — finisher knock-off allows any player count.
 var Pantheon2Heuristic = ActivityHeuristic{
 	ActivityId:     102,
 	RaidBit:        Pantheon2,
@@ -234,14 +235,8 @@ var Pantheon2Heuristic = ActivityHeuristic{
 			{MinPlayers: 4, CheatedChance: 0.15},
 			{MinPlayers: 3, CheatedChance: 0.35},
 		},
-		pantheonVersionMorgethSurpassing: {
-			{MinPlayers: 4, CheatedChance: 0.65},
-		},
 	},
 	CheckpointLowman: map[int][]LowmanData{
-		pantheonVersionMorgethSurpassing: {
-			{MinPlayers: 4, CheatedChance: 0.50},
-		},
 		pantheonVersionCalusResplendent: {
 			{MinPlayers: 2, CheatedChance: 0.15},
 		},
