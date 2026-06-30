@@ -262,7 +262,7 @@ func BlacklistRecentInstances(blacklistedPlayer BlacklistedPlayerDTO) (int64, in
         LEFT JOIN flag_instance_player fip USING (instance_id, membership_id)
 		LEFT JOIN team_activity_version_leaderboard avl USING (instance_id)
 		LEFT JOIN world_first_contest_leaderboard wfc USING (instance_id)
-		LEFT JOIN team_pantheon_custom_race_leaderboard pcr USING (instance_id)
+		LEFT JOIN pantheon_custom_race_snapshot pcr USING (instance_id)
         WHERE ip.membership_id = $1
             AND (
 				fi.cheat_probability >= 0.75 
