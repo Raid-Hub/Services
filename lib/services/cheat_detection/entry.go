@@ -8,7 +8,7 @@ import (
 // Logger is declared in database_layer.go
 
 const (
-	CheatCheckVersion = "beta-2.2.6"
+	CheatCheckVersion = "beta-2.2.7"
 	Threshold         = 0.05
 	PlayerThreshold   = 0.02
 )

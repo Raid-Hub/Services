@@ -38,7 +38,7 @@ const (
 	Raid32
 	Pantheon
 	Pantheon2
-	Bit35
+	SuspiciousEmblem
 	Bit36
 	Bit37
 	Bit38
