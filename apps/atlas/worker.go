@@ -41,7 +41,11 @@ func (w *AtlasWorker) Run(wg *sync.WaitGroup, ch chan int64) {
 		i := 0
 
 		for {
-			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(context.Background(), instanceID, malformedRetryCount)
+			// Create a context with timeout to prevent indefinite retries when the API is slow
+			// 3 minutes allows for multiple retry attempts while preventing endless loops
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			result, instance, pgcr := pgcr_processing.FetchAndProcessPGCR(ctx, instanceID, malformedRetryCount)
+			cancel() // Clean up the context
 
 			statusStr := fmt.Sprintf("%d", result)
 			attemptsStr := fmt.Sprintf("%d", i+1)
