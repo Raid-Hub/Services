@@ -34,6 +34,12 @@ jobs:
             exit 1
           fi
 
+      - name: Test deploy target detection
+        run: |
+          git fetch origin main
+          bash .github/scripts/determine-deploy-targets.sh origin/main HEAD
+          bash .github/scripts/determine-deploy-targets.sh --force-apps origin/main HEAD
+
       - name: Build apps and tools
         run: |
           go build -o /dev/null ./apps/...
